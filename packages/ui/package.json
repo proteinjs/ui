@@ -1,0 +1,51 @@
+{
+    "name": "@proteinjs/ui",
+    "version": "1.0.0",
+    "description": "UI libs",
+    "publishConfig": {
+        "access": "public"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/proteinjs/ui.git"
+    },
+    "bugs": {
+        "url": "https://github.com/proteinjs/ui/issues"
+    },
+    "homepage": "https://github.com/proteinjs/ui#readme",
+    "author": "Brent Bahry",
+    "license": "MIT",
+    "scripts": {
+        "clean": "rm -rf dist/ generated/ node_modules/ package-lock.json",
+        "build": "reflection-build && tsc",
+        "watch": "reflection-watch"
+    },
+    "dependencies": {
+        "@proteinjs/reflection": "1.0.2",
+        "@proteinjs/util": "1.0.18",
+        "@emotion/react": "11.11.1",
+        "@emotion/styled": "11.11.0",
+        "@mui/icons-material": "5.14.11",
+        "@mui/material": "5.14.11",
+        "history": "5.0.0",
+        "moment": "2.29.4",
+        "query-string": "6.13.2",
+        "react": "18.2.0",
+        "react-dom": "18.2.0",
+        "react-router": "6.16.0",
+        "react-router-dom": "6.16.0",
+        "string": "3.3.3"
+    },
+    "devDependencies": {
+        "@proteinjs/reflection-build": "1.0.5",
+        "@types/node": "14.0.13",
+        "@types/react": "18.2.23",
+        "@types/react-dom": "18.2.8",
+        "@types/react-router": "5.1.20",
+        "@types/react-router-dom": "5.3.3",
+        "@types/string": "0.0.30",
+        "typescript": "5.2.2"
+    },
+    "main": "./dist/generated/index.js",
+    "types": "./dist/generated/index.d.ts"
+}
