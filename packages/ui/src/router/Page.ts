@@ -1,5 +1,5 @@
 import React from 'react';
-import { SxProps } from '@mui/material';
+import { SxProps, Theme } from '@mui/material';
 import { Loadable, SourceRepository } from '@proteinjs/reflection';
 import { NavigateFunction } from 'react-router-dom';
 
@@ -24,5 +24,5 @@ export interface Page extends Loadable {
         /** The user must be logged in and have these roles to access this page. If blank, defaults to requiring the 'admin' role. */
         roles?: string[];
     };
-    pageContainerSxProps?: SxProps;
+    pageContainerSxProps?: (theme: Theme) => SxProps;
 }

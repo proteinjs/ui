@@ -62,11 +62,7 @@ export function PageContainer(props: PageContainerProps) {
             if (!page.pageContainerSxProps)
                 return defaultStyles;
 
-            let resolvedStyles;
-            if (typeof page.pageContainerSxProps === 'function')
-                resolvedStyles = Object.assign(defaultStyles, page.pageContainerSxProps(theme));
-            else
-                resolvedStyles = Object.assign(defaultStyles, page.pageContainerSxProps);
+            let resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme));
 
             return resolvedStyles;
         }}>
