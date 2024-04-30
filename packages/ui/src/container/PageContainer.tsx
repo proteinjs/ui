@@ -23,11 +23,11 @@ export type PageContainerProps = {
         logout: () => Promise<string>
     },
     appName?: string,
-    toolbarChildren?: React.ReactNode
+    toolbarChildren?: React.ReactNode,
     profileMenuItems?: { menuItemChildren: React.ReactNode, action: string | (() => void) }[],
     navMenuItems?: NavMenuItem[],
-    appBarProps?: AppBarProps;
-    toolbarProps?: ToolbarProps;
+    appBarProps?: AppBarProps,
+    toolbarProps?: ToolbarProps,
 }
 
 const Page = React.memo(({ auth, page, navigate, loginClicked, setLoginClicked }: { auth: PageContainerProps['auth'], page: PageContainerProps['page'], navigate: NavigateFunction, loginClicked: boolean, setLoginClicked: (loginClicked: boolean) => void }) => {
