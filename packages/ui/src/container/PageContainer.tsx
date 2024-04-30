@@ -24,7 +24,7 @@ export type PageContainerProps = {
     },
     appName?: string,
     toolbarChildren?: React.ReactNode,
-    profileMenuItems?: { menuItemChildren: React.ReactNode, action: string | (() => void) }[],
+    profileMenuItems?: { menuItemChildren: React.ReactNode, action: LinkOrDialog | (() => void) }[],
     navMenuItems?: NavMenuItem[],
     appBarProps?: AppBarProps,
     toolbarProps?: ToolbarProps,
