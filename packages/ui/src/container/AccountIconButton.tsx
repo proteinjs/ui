@@ -112,7 +112,7 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
     if (typeof menuItem.action === 'string')
         return null;
   
-    if (isComponentWithOnClose(menuItem.action)) {
+    if (isDialog(menuItem.action)) {
         return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
     }
 
@@ -134,7 +134,7 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
   }
 }
 
-function isComponentWithOnClose(prop: any): prop is React.ComponentType<{ onClose: () => void }> {
+function isDialog(prop: any): prop is React.ComponentType<{ onClose: () => void }> {
     return typeof prop === 'function' && 'onClose' in prop.prototype;
 }
 
