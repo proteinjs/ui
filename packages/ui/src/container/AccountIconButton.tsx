@@ -1,9 +1,10 @@
 import React from 'react';
-import { Button, IconButton, Menu, MenuItem } from '@mui/material';
+import { Button, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import { useNavigate } from 'react-router-dom';
 import { LinkOrDialog } from './NavMenu';
 import { Page } from '../router/Page';
+import LogoutIcon from '@mui/icons-material/Logout';
 
 export type AccountIconButtonProps = {
   loginClicked: boolean,
@@ -15,7 +16,7 @@ export type AccountIconButtonProps = {
     login: LinkOrDialog,
     logout: () => Promise<string>
   },
-  profileMenuItems?: { name: string, action: LinkOrDialog }[],
+  profileMenuItems?: { menuItemChildren: React.ReactNode, action: LinkOrDialog | (() => void) }[],
 }
 
 export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profileMenuItems }: AccountIconButtonProps) => {
@@ -57,11 +58,19 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
                                       navigate(qualifiedPath(profileMenuItem.action));
                                       return;
                                   }
-                                  setSelectedIndex(index);
+
+                                  else if (isFunction(profileMenuItem.action)) {
+                                    setAccountMenuAnchorEl(null);
+                                    profileMenuItem.action();
+                                  }
+
+                                  else {
+                                    setSelectedIndex(index);
+                                  }
                               }}
                               selected={selectedIndex === index}
                           >
-                              {profileMenuItem.name}
+                              {profileMenuItem.menuItemChildren}
                           </MenuItem>
                       ))
                   }
@@ -71,7 +80,11 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
                           navigate(qualifiedPath(redirectPath));
                       }}
                   >
-                      Logout
+                    
+                    <ListItemIcon>
+                        <LogoutIcon />
+                    </ListItemIcon>
+                    <Typography>Logout</Typography>
                   </MenuItem>
               </Menu>
               <ProfileMenuItemAction />
@@ -99,7 +112,11 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
     if (typeof menuItem.action === 'string')
         return null;
   
-    return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
+    if (isDialog(menuItem.action)) {
+        return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
+    }
+
+    return null;
   }
   
   function Login() {
@@ -115,4 +132,12 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
   
     return `/${path}`;
   }
+}
+
+function isDialog(prop: any): prop is React.ComponentType<{ onClose: () => void }> {
+    return typeof prop === 'function' && 'onClose' in prop.prototype;
+}
+
+function isFunction(prop: any): prop is () => void {
+    return typeof prop === 'function';
 }
