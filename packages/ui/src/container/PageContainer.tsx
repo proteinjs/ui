@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Toolbar, Box, IconButton, Typography } from '@mui/material';
+import { AppBar, Toolbar, Box, IconButton, Typography, Theme, SxProps, AppBarProps, ToolbarProps } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
 import { Page } from '../router/Page';
@@ -7,19 +7,27 @@ import { createUrlParams } from '../router/createUrlParams';
 import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
 import { AccountIconButton } from './AccountIconButton';
 
+function qualifiedPath(path: string) {
+    if (path.startsWith('/'))
+        return path;
+
+    return `/${path}`;
+}
+
 export type PageContainerProps = {
-    appName: string,
     page: Page,
-    toolbarChildren?: React.ReactNode,
     auth?: {
         isLoggedIn: boolean,
         canViewPage: (page: Page) => boolean,
-        /** Either a dialog component, or a path to be redirected to */
         login: LinkOrDialog,
         logout: () => Promise<string>
     },
-    profileMenuItems?: { name: string, action: LinkOrDialog }[],
+    appName?: string,
+    toolbarChildren?: React.ReactNode
+    profileMenuItems?: { menuItemChildren: React.ReactNode, action: string | (() => void) }[],
     navMenuItems?: NavMenuItem[],
+    appBarProps?: AppBarProps;
+    toolbarProps?: ToolbarProps;
 }
 
 const Page = React.memo(({ auth, page, navigate, loginClicked, setLoginClicked }: { auth: PageContainerProps['auth'], page: PageContainerProps['page'], navigate: NavigateFunction, loginClicked: boolean, setLoginClicked: (loginClicked: boolean) => void }) => {
@@ -39,7 +47,7 @@ const Page = React.memo(({ auth, page, navigate, loginClicked, setLoginClicked }
 
 export function PageContainer(props: PageContainerProps) {
     const navigate = useNavigate();
-    const { appName, page, toolbarChildren, auth, profileMenuItems, navMenuItems } = props;
+    const { page, auth, navMenuItems, appName, toolbarChildren, profileMenuItems, appBarProps, toolbarProps } = props;
     const [loginClicked, setLoginClicked] = React.useState(false);
     const [navMenuOpen, setNavMenuOpen] = React.useState(false);
     
@@ -66,39 +74,33 @@ export function PageContainer(props: PageContainerProps) {
 
             return resolvedStyles;
         }}>
-            <AppBar position='static'>
-                <Toolbar>
-                    { navMenuItems && 
+            <AppBar position='static' {...appBarProps}>
+                <Toolbar {...toolbarProps}>
+                    {navMenuItems && (
                         <IconButton
                             aria-label='menu'
-                            onClick={event => setNavMenuOpen(!navMenuOpen)} 
+                            onClick={() => setNavMenuOpen(!navMenuOpen)}
                             sx={(theme) => ({
                                 marginRight: theme.spacing(2),
                                 '&:hover': {
                                     color: '#fff',
                                 },
-                            })} 
+                            })}
                             style={{ backgroundColor: 'transparent' }}
                         >
                             <MenuIcon />
                         </IconButton>
-                    }
-                    <Typography variant='h5' sx={{ flexGrow: 1, color: 'common.white', }}>
+                    )}
+                    {appName && <Typography variant='h5' sx={{ flexGrow: 1, color: 'common.white' }}>
                         {appName}
-                    </Typography>
+                    </Typography>}
                     {toolbarChildren}
-                    <AccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} profileMenuItems={profileMenuItems} />
+                    <div style={{ flexGrow: 1 }}></div>
+                    <AccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} {...(profileMenuItems ? { profileMenuItems } : {})} />
                 </Toolbar>
             </AppBar>
-            <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />
+            {navMenuItems && <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />}
             <Page auth={auth} page={page} navigate={navigate} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
         </Box>
     );
-
-    function qualifiedPath(path: string) {
-        if (path.startsWith('/'))
-            return path;
-
-        return `/${path}`;
-    }
 }
