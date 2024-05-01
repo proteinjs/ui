@@ -24,6 +24,7 @@ export type PageContainerProps = {
     },
     appName?: string,
     toolbarChildren?: React.ReactNode,
+    /** An array of menu items, each containing a React node and an action triggered when selected, either a string, dialog component, or a function. */
     profileMenuItems?: { menuItemChildren: React.ReactNode, action: LinkOrDialog | (() => void) }[],
     navMenuItems?: NavMenuItem[],
     appBarProps?: AppBarProps,
