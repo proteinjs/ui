@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@1.0.8...@proteinjs/ui@2.0.0) (2024-05-01)
+
+
+* comment (#2) ([fb5b779](https://github.com/proteinjs/ui/commit/fb5b77988ba8fe38c222166b55036a547ec2b722)), closes [#2](https://github.com/proteinjs/ui/issues/2)
+
+
+### BREAKING CHANGES
+
+* comment added
+
+
+
+
+
 ## [1.0.8](https://github.com/proteinjs/ui/compare/@proteinjs/ui@1.0.7...@proteinjs/ui@1.0.8) (2024-04-30)
 
 **Note:** Version bump only for package @proteinjs/ui
