@@ -52,33 +52,35 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
               >
                   {profileMenuItems &&
                       profileMenuItems.map((profileMenuItem, index) => (
-                          <MenuItem 
-                              onClick={event => {
-                                  if (typeof profileMenuItem.action === 'string') {
-                                      navigate(qualifiedPath(profileMenuItem.action));
-                                      return;
-                                  }
+                          <MenuItem
+                            key={index}
+                            onClick={event => {
+                                if (typeof profileMenuItem.action === 'string') {
+                                    navigate(qualifiedPath(profileMenuItem.action));
+                                    return;
+                                }
 
-                                  else if (isFunction(profileMenuItem.action)) {
-                                    setAccountMenuAnchorEl(null);
-                                    profileMenuItem.action();
-                                  }
+                                else if (isFunction(profileMenuItem.action)) {
+                                setAccountMenuAnchorEl(null);
+                                profileMenuItem.action();
+                                }
 
-                                  else {
-                                    setSelectedIndex(index);
-                                  }
-                              }}
-                              selected={selectedIndex === index}
+                                else {
+                                setSelectedIndex(index);
+                                }
+                            }}
+                            selected={selectedIndex === index}
                           >
                               {profileMenuItem.menuItemChildren}
                           </MenuItem>
                       ))
                   }
                   <MenuItem 
-                      onClick={async (event) => {
-                          const redirectPath = await auth.logout();
-                          navigate(qualifiedPath(redirectPath));
-                      }}
+                    key='logout'
+                    onClick={async (event) => {
+                        const redirectPath = await auth.logout();
+                        navigate(qualifiedPath(redirectPath));
+                    }}
                   >
                     
                     <ListItemIcon>
