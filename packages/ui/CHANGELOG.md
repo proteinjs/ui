@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.0...@proteinjs/ui@2.0.1) (2024-05-03)
+
+
+### Bug Fixes
+
+* update key for AccountIconButton to remove console errors ([baa3b47](https://github.com/proteinjs/ui/commit/baa3b47f2fb7def11a8e9d371b4d7330ed862d03))
+
+
+
+
+
 # [2.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@1.0.8...@proteinjs/ui@2.0.0) (2024-05-01)
 
 
