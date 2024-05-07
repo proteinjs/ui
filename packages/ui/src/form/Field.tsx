@@ -35,17 +35,17 @@ export type FieldComponent<T, F extends Fields> = {
 export abstract class Fields { [name: string]: FieldComponent<any, any> }
 
 export function fieldLabel(field: Field<any, any>) {
-	return field.label ? field.label : S(field.name).humanize().capitalize().s;
+  return field.label ? field.label : S(field.name).humanize().capitalize().s;
 }
 
 export function fieldDisplayValue(field: Field<any, any>) {
-	let value = '';
-	if (field.value) {
-		if (field.displayValue)
-			value = field.displayValue(field.value);
-		else
-			value = field.value;
-	}
+  let value = '';
+  if (field.value) {
+    if (field.displayValue)
+      value = field.displayValue(field.value);
+    else
+      value = field.value;
+  }
 
-	return value;
+  return value;
 }

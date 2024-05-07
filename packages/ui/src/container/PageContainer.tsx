@@ -8,10 +8,10 @@ import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
 import { AccountIconButton } from './AccountIconButton';
 
 function qualifiedPath(path: string) {
-    if (path.startsWith('/'))
-        return path;
+  if (path.startsWith('/'))
+    return path;
 
-    return `/${path}`;
+  return `/${path}`;
 }
 
 export type PageContainerProps = {
@@ -32,76 +32,76 @@ export type PageContainerProps = {
 }
 
 const Page = React.memo(({ auth, page, navigate, loginClicked, setLoginClicked }: { auth: PageContainerProps['auth'], page: PageContainerProps['page'], navigate: NavigateFunction, loginClicked: boolean, setLoginClicked: (loginClicked: boolean) => void }) => {
-    if (auth?.canViewPage(page))
-        return <page.component urlParams={createUrlParams()} navigate={navigate} />;
+  if (auth?.canViewPage(page))
+    return <page.component urlParams={createUrlParams()} navigate={navigate} />;
 
-    if (!auth?.isLoggedIn) {
-        if (!loginClicked)
-            setLoginClicked(true);
+  if (!auth?.isLoggedIn) {
+    if (!loginClicked)
+      setLoginClicked(true);
         
-        return null;
-    }
-
-    navigate('/');
     return null;
+  }
+
+  navigate('/');
+  return null;
 });
 
 export function PageContainer(props: PageContainerProps) {
-    const navigate = useNavigate();
-    const { page, auth, navMenuItems, appName, toolbarChildren, profileMenuItems, appBarProps, toolbarProps } = props;
-    const [loginClicked, setLoginClicked] = React.useState(false);
-    const [navMenuOpen, setNavMenuOpen] = React.useState(false);
+  const navigate = useNavigate();
+  const { page, auth, navMenuItems, appName, toolbarChildren, profileMenuItems, appBarProps, toolbarProps } = props;
+  const [loginClicked, setLoginClicked] = React.useState(false);
+  const [navMenuOpen, setNavMenuOpen] = React.useState(false);
     
-    React.useEffect(() => {
-        if (auth?.canViewPage(page))
-            return;
+  React.useEffect(() => {
+    if (auth?.canViewPage(page))
+      return;
 
-        if (!auth?.isLoggedIn) {
-            console.log(`User not logged in, redirecting to login`);
-            if (typeof auth?.login === 'string') {
-                const p = qualifiedPath(auth.login);
-                navigate(p);
-            }
-        }
-    }, [page]);
+    if (!auth?.isLoggedIn) {
+      console.log('User not logged in, redirecting to login');
+      if (typeof auth?.login === 'string') {
+        const p = qualifiedPath(auth.login);
+        navigate(p);
+      }
+    }
+  }, [page]);
 
-    return (
-        <Box sx={(theme) => {
-            const defaultStyles = {};
-            if (!page.pageContainerSxProps)
-                return defaultStyles;
+  return (
+    <Box sx={(theme) => {
+      const defaultStyles = {};
+      if (!page.pageContainerSxProps)
+        return defaultStyles;
 
-            let resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme));
+      const resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme));
 
-            return resolvedStyles;
-        }}>
-            <AppBar position='static' {...appBarProps}>
-                <Toolbar {...toolbarProps}>
-                    {navMenuItems && (
-                        <IconButton
-                            aria-label='menu'
-                            onClick={() => setNavMenuOpen(!navMenuOpen)}
-                            sx={(theme) => ({
-                                marginRight: theme.spacing(2),
-                                '&:hover': {
-                                    color: '#fff',
-                                },
-                            })}
-                            style={{ backgroundColor: 'transparent' }}
-                        >
-                            <MenuIcon />
-                        </IconButton>
-                    )}
-                    {appName && <Typography variant='h5' sx={{ flexGrow: 1, color: 'common.white' }}>
-                        {appName}
-                    </Typography>}
-                    {toolbarChildren}
-                    <div style={{ flexGrow: 1 }}></div>
-                    <AccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} {...(profileMenuItems ? { profileMenuItems } : {})} />
-                </Toolbar>
-            </AppBar>
-            {navMenuItems && <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />}
-            <Page auth={auth} page={page} navigate={navigate} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
-        </Box>
-    );
+      return resolvedStyles;
+    }}>
+      <AppBar position='static' {...appBarProps}>
+        <Toolbar {...toolbarProps}>
+          {navMenuItems && (
+            <IconButton
+              aria-label='menu'
+              onClick={() => setNavMenuOpen(!navMenuOpen)}
+              sx={(theme) => ({
+                marginRight: theme.spacing(2),
+                '&:hover': {
+                  color: '#fff',
+                },
+              })}
+              style={{ backgroundColor: 'transparent' }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          {appName && <Typography variant='h5' sx={{ flexGrow: 1, color: 'common.white' }}>
+            {appName}
+          </Typography>}
+          {toolbarChildren}
+          <div style={{ flexGrow: 1 }}></div>
+          <AccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} {...(profileMenuItems ? { profileMenuItems } : {})} />
+        </Toolbar>
+      </AppBar>
+      {navMenuItems && <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />}
+      <Page auth={auth} page={page} navigate={navigate} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
+    </Box>
+  );
 }

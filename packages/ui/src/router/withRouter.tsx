@@ -11,9 +11,9 @@ export const withRouter = (Component: typeof React.Component) => {
     
     return (
       <Component
-          navigate={navigate}
-          {...props}
-        />
+        navigate={navigate}
+        {...props}
+      />
     );
   };
   

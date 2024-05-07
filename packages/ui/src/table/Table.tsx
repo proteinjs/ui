@@ -28,16 +28,16 @@ export function Table<T>({ title, description, columns, tableLoader, rowOnClickR
   const navigate = useNavigate();
 
   React.useEffect(() => {
-		const fetchData = async () => {
-			const startIndex = page * rowsPerPage;
-			const endIndex = startIndex + rowsPerPage;
-			const rowWindow = await tableLoader.load(startIndex, endIndex);
-			setRows(rowWindow.rows);
+    const fetchData = async () => {
+      const startIndex = page * rowsPerPage;
+      const endIndex = startIndex + rowsPerPage;
+      const rowWindow = await tableLoader.load(startIndex, endIndex);
+      setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
-		};
+    };
 
-		fetchData();
-	}, [page, rowsPerPage, tableLoader]);
+    fetchData();
+  }, [page, rowsPerPage, tableLoader]);
 
   async function handleRowOnClick(row: T) {
     if (!rowOnClickRedirectUrl)
@@ -106,12 +106,12 @@ export function Table<T>({ title, description, columns, tableLoader, rowOnClickR
     <div style={{ overflow: 'auto', width: '100%' }}>
       { (title || description || buttons && buttons.length > 0) && 
 				<TableToolbar 
-					title={title}
-					description={description}
-					selectedRows={Object.values(selectedRows)}
-					buttons={buttons}
+				  title={title}
+				  description={description}
+				  selectedRows={Object.values(selectedRows)}
+				  buttons={buttons}
 				/>
-			}
+      }
       <TableContainer>
         <MuiTable stickyHeader>
           <TableHead>

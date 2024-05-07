@@ -21,10 +21,10 @@ export type FormButton<F extends Fields> = {
 export abstract class FormButtons<F extends Fields> { [name: string]: FormButton<F> }
 
 export const clearButton: FormButton<any> = {
-	name: 'Clear',
-	style: {
-		color: 'primary',
-		variant: 'text',
-	},
-	clearFormOnClick: true
+  name: 'Clear',
+  style: {
+    color: 'primary',
+    variant: 'text',
+  },
+  clearFormOnClick: true
 };

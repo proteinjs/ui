@@ -18,14 +18,14 @@ export const TableToolbar = (props : TableToolbarProps) => {
       sx={(theme) => {
         if (selectedRows.length > 0) {
           return theme.palette.mode === 'light'
-          ? {
-            color: theme.palette.info.main,
-            backgroundColor: lighten(theme.palette.info.light, 0.85),
-          }
-          : {
-            color: theme.palette.info.light,
-            backgroundColor: theme.palette.info.dark,
-          };
+            ? {
+              color: theme.palette.info.main,
+              backgroundColor: lighten(theme.palette.info.light, 0.85),
+            }
+            : {
+              color: theme.palette.info.light,
+              backgroundColor: theme.palette.info.dark,
+            };
         }
 
         return {
@@ -40,31 +40,31 @@ export const TableToolbar = (props : TableToolbarProps) => {
           flex: '0 0 auto',
         }}
       >
-				{ selectedRows.length > 0 ? (
-					<Typography variant='subtitle1' color='inherit'>
-						{selectedRows.length} rows selected
-					</Typography>
-				) : (
-					<div>
+        { selectedRows.length > 0 ? (
+          <Typography variant='subtitle1' color='inherit'>
+            {selectedRows.length} rows selected
+          </Typography>
+        ) : (
+          <div>
             { typeof title !== 'undefined' && 
               <Typography variant='h5'>
                 {title}
               </Typography>
             }
-						{ typeof props.description !== 'undefined' && 
+            { typeof props.description !== 'undefined' && 
 							<props.description />
-						}
-					</div>
-				)}
-			</div>
-			<div
+            }
+          </div>
+        )}
+      </div>
+      <div
         style={{
           flex: '1 1 100%',
         }}
       />
-			<div>
-				<Buttons />
-			</div>
+      <div>
+        <Buttons />
+      </div>
     </Toolbar>
   );
 

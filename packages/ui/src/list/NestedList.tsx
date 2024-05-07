@@ -17,7 +17,7 @@ export const NestedList = ({ items, level, levelColors }: NestedListProps) => {
 
   function flattenItems(items: NestedListItem[]): (NestedListItem|NestedListItem[])[] {
     const flattened = [];
-    for (let item of items) {
+    for (const item of items) {
       flattened.push(item);
       if (item.children && (item.renderChildren || typeof item.renderChildren === 'undefined'))
         flattened.push(item.children);

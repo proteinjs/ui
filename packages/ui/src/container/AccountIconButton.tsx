@@ -27,95 +27,91 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
   const open = Boolean(anchorEl);
 
   if (!auth)
-      return null;
+    return null;
 
   if (auth.isLoggedIn) {
-      return (
-          <div>
-              <IconButton
-                  sx={{
-                      '&:hover': {
-                          color: '#fff',
-                          backgroundColor: 'transparent',
-                      },
-                      backgroundColor: 'transparent',
-                  }}
-                  onClick={event => setAccountMenuAnchorEl(event.currentTarget)}
-              >
-                  <AccountCircle />
-              </IconButton>
-              <Menu
-                  anchorEl={anchorEl}
-                  keepMounted
-                  open={open}
-                  onClose={() => setAccountMenuAnchorEl(null)}
-              >
-                  {profileMenuItems &&
+    return (
+      <div>
+        <IconButton
+          sx={{
+            '&:hover': {
+              color: '#fff',
+              backgroundColor: 'transparent',
+            },
+            backgroundColor: 'transparent',
+          }}
+          onClick={event => setAccountMenuAnchorEl(event.currentTarget)}
+        >
+          <AccountCircle />
+        </IconButton>
+        <Menu
+          anchorEl={anchorEl}
+          keepMounted
+          open={open}
+          onClose={() => setAccountMenuAnchorEl(null)}
+        >
+          {profileMenuItems &&
                       profileMenuItems.map((profileMenuItem, index) => (
-                          <MenuItem
-                            key={index}
-                            onClick={event => {
-                                if (typeof profileMenuItem.action === 'string') {
-                                    navigate(qualifiedPath(profileMenuItem.action));
-                                    return;
-                                }
-
-                                else if (isFunction(profileMenuItem.action)) {
-                                setAccountMenuAnchorEl(null);
-                                profileMenuItem.action();
-                                }
-
-                                else {
-                                setSelectedIndex(index);
-                                }
-                            }}
-                            selected={selectedIndex === index}
-                          >
-                              {profileMenuItem.menuItemChildren}
-                          </MenuItem>
+                        <MenuItem
+                          key={index}
+                          onClick={event => {
+                            if (typeof profileMenuItem.action === 'string') {
+                              navigate(qualifiedPath(profileMenuItem.action));
+                              return;
+                            } else if (isFunction(profileMenuItem.action)) {
+                              setAccountMenuAnchorEl(null);
+                              profileMenuItem.action();
+                            } else {
+                              setSelectedIndex(index);
+                            }
+                          }}
+                          selected={selectedIndex === index}
+                        >
+                          {profileMenuItem.menuItemChildren}
+                        </MenuItem>
                       ))
-                  }
-                  <MenuItem 
-                    key='logout'
-                    onClick={async (event) => {
-                        const redirectPath = await auth.logout();
-                        navigate(qualifiedPath(redirectPath));
-                    }}
-                  >
+          }
+          <MenuItem 
+            key='logout'
+            onClick={async (event) => {
+              const redirectPath = await auth.logout();
+              navigate(qualifiedPath(redirectPath));
+            }}
+          >
                     
-                    <ListItemIcon>
-                        <LogoutIcon />
-                    </ListItemIcon>
-                    <Typography>Logout</Typography>
-                  </MenuItem>
-              </Menu>
-              <ProfileMenuItemAction />
-          </div>
-      );
+            <ListItemIcon>
+              <LogoutIcon />
+            </ListItemIcon>
+            <Typography>Logout</Typography>
+          </MenuItem>
+        </Menu>
+        <ProfileMenuItemAction />
+      </div>
+    );
   }
 
   return (
-      <div>
-          <Button
-            color='inherit'
-            onClick={event => auth && typeof auth.login === 'string' ? navigate(qualifiedPath(auth.login)) : setLoginClicked(!loginClicked)}
-          >
+    <div>
+      <Button
+        color='inherit'
+        onClick={event => auth && typeof auth.login === 'string' ? navigate(qualifiedPath(auth.login)) : setLoginClicked(!loginClicked)}
+      >
               Login
-          </Button>
-          <Login />
-      </div>
+      </Button>
+      <Login />
+    </div>
   );
 
   function ProfileMenuItemAction() {
     if (selectedProfileMenuItem == -1 || !auth || !profileMenuItems)
-        return null;
+      return null;
   
     const menuItem = profileMenuItems[selectedProfileMenuItem];
     if (typeof menuItem.action === 'string')
-        return null;
+      return null;
   
     if (isDialog(menuItem.action)) {
-        return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
+      return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
     }
 
     return null;
@@ -123,23 +119,23 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
   
   function Login() {
     if (!loginClicked || !auth || typeof auth.login === 'string')
-        return null;
+      return null;
   
     return <auth.login onClose={() => setLoginClicked(false)} />;
   }
   
   function qualifiedPath(path: string) {
     if (path.startsWith('/'))
-        return path;
+      return path;
   
     return `/${path}`;
   }
 }
 
 function isDialog(prop: any): prop is React.ComponentType<{ onClose: () => void }> {
-    return typeof prop === 'function' && 'onClose' in prop.prototype;
+  return typeof prop === 'function' && 'onClose' in prop.prototype;
 }
 
 function isFunction(prop: any): prop is () => void {
-    return typeof prop === 'function';
+  return typeof prop === 'function';
 }
