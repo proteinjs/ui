@@ -32,7 +32,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   componentDidMount() {
-    if (this.state.onLoadExecuted) return;
+    if (this.state.onLoadExecuted) {
+      return;
+    }
 
     this.onLoad();
   }
@@ -43,14 +45,22 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     try {
       for (const fieldPropertyName in newFields) {
         const field = newFields[fieldPropertyName].field;
-        if (!field) continue;
+        if (!field) {
+          continue;
+        }
 
-        if (field.onLoad) await field.onLoad(newFields);
+        if (field.onLoad) {
+          await field.onLoad(newFields);
+        }
 
-        if (!field.accessibility) field.accessibility = {};
+        if (!field.accessibility) {
+          field.accessibility = {};
+        }
       }
 
-      if (this.props.onLoad) await this.props.onLoad(newFields, this.props.buttons);
+      if (this.props.onLoad) {
+        await this.props.onLoad(newFields, this.props.buttons);
+      }
     } catch (error) {
       console.error('Failed while running onLoad functions', error);
     }
@@ -90,7 +100,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
       });
       try {
         const successMessage = await button.onClick(this.state.fields, this.props.buttons);
-        if (successMessage) this.setState({ status: { message: successMessage, isError: false } });
+        if (successMessage) {
+          this.setState({ status: { message: successMessage, isError: false } });
+        }
       } catch (error: any) {
         this.setState({ status: { message: error.message, isError: true } });
         console.error(`Error when clicking button: ${button.name}`, error);
@@ -101,14 +113,20 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     if (button.redirect) {
       const redirect = await button.redirect(this.state.fields, this.props.buttons);
       let path = redirect.path;
-      if (redirect.props) path += `?${queryString.stringify(redirect.props)}`;
+      if (redirect.props) {
+        path += `?${queryString.stringify(redirect.props)}`;
+      }
 
-      if (this.props.navigate) this.props.navigate(path);
+      if (this.props.navigate) {
+        this.props.navigate(path);
+      }
 
       return;
     }
 
-    if (button.clearFormOnClick) await this.onLoad();
+    if (button.clearFormOnClick) {
+      await this.onLoad();
+    }
   }
 
   render() {
@@ -131,18 +149,30 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   private getContainerMaxWidth(): 'xs' | 'sm' {
     if (this.props.fieldLayout) {
       // TODO validate that fields are not hidden
-      if (this.props.fieldLayout.length < 2) return 'xs';
+      if (this.props.fieldLayout.length < 2) {
+        return 'xs';
+      }
 
-      for (const row of this.props.fieldLayout) if ((row as string[]).length > 1) return 'sm';
+      for (const row of this.props.fieldLayout) {
+        if ((row as string[]).length > 1) {
+          return 'sm';
+        }
+      }
     } else {
       const rows: boolean[] = [];
       for (const fieldPropertyName in this.state.fields) {
         const field = this.state.fields[fieldPropertyName].field;
-        if (field.accessibility?.hidden) continue;
+        if (field.accessibility?.hidden) {
+          continue;
+        }
 
-        if (!field.layout) continue;
+        if (!field.layout) {
+          continue;
+        }
 
-        if (rows[field.layout.row]) return 'sm';
+        if (rows[field.layout.row]) {
+          return 'sm';
+        }
 
         rows[field.layout.row] = true;
       }
@@ -152,7 +182,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private Title() {
-    if (!this.props.name) return null;
+    if (!this.props.name) {
+      return null;
+    }
 
     return (
       <Grid
@@ -171,7 +203,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private Documentation() {
-    if (!this.props.documentation) return null;
+    if (!this.props.documentation) {
+      return null;
+    }
 
     return (
       <Grid container xs={12} justifyContent='flex-start' alignItems='flex-start'>
@@ -183,7 +217,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private Status() {
-    if (!this.state.status || !this.state.status.message) return null;
+    if (!this.state.status || !this.state.status.message) {
+      return null;
+    }
 
     return (
       <Grid container xs={12}>
@@ -204,7 +240,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     return (
       <Grid container direction='column' xs={12}>
         {this.getFieldRows().map((fieldComponents, index) => {
-          if (!this.isFieldRowVisible(fieldComponents)) return null;
+          if (!this.isFieldRowVisible(fieldComponents)) {
+            return null;
+          }
 
           return (
             <Grid
@@ -219,7 +257,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
             >
               {fieldComponents
                 .filter((fieldComponent) => {
-                  if (fieldComponent.field.accessibility?.hidden) return false;
+                  if (fieldComponent.field.accessibility?.hidden) {
+                    return false;
+                  }
 
                   return true;
                 })
@@ -237,7 +277,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 
   private getFieldRows(): FieldComponent<any, any>[][] {
     const rows: FieldComponent<any, any>[][] = [];
-    if (!this.state.fields) return rows;
+    if (!this.state.fields) {
+      return rows;
+    }
 
     if (this.props.fieldLayout) {
       if (typeof this.props.fieldLayout[0] === 'string') {
@@ -276,11 +318,15 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
           );
         }
 
-        if (typeof rows[field.layout.row] === 'undefined') rows[field.layout.row] = [];
+        if (typeof rows[field.layout.row] === 'undefined') {
+          rows[field.layout.row] = [];
+        }
 
-        if (field.layout.column && rows[field.layout.row].length >= field.layout.column)
+        if (field.layout.column && rows[field.layout.row].length >= field.layout.column) {
           rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
-        else rows[field.layout.row].push(fieldComponent);
+        } else {
+          rows[field.layout.row].push(fieldComponent);
+        }
 
         const rowWidth = rows[field.layout.row]
           .map((fieldComponent) =>
@@ -299,14 +345,19 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private isFieldRowVisible(fieldComponents: FieldComponent<any, any>[]): boolean {
-    for (const fieldComponent of fieldComponents)
-      if (!fieldComponent.field.accessibility || !fieldComponent.field.accessibility?.hidden) return true;
+    for (const fieldComponent of fieldComponents) {
+      if (!fieldComponent.field.accessibility || !fieldComponent.field.accessibility?.hidden) {
+        return true;
+      }
+    }
 
     return false;
   }
 
   private Progress() {
-    if (!this.state.progress || !this.state.progress.visible) return null;
+    if (!this.state.progress || !this.state.progress.visible) {
+      return null;
+    }
 
     return (
       <Grid container xs={12} justifyContent='center' alignItems='center' spacing={2}>
@@ -333,7 +384,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
         {Object.keys(this.props.buttons)
           .map((buttonPropertyName) => this.props.buttons[buttonPropertyName])
           .filter((button) => {
-            if (button.accessibility?.hidden) return false;
+            if (button.accessibility?.hidden) {
+              return false;
+            }
 
             return true;
           })

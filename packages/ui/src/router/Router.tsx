@@ -65,21 +65,26 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   }
 
   function ContainerizedComponent(props: { options: AppOptions; page: Page; navigate: NavigateFunction }) {
-    if (props.options.pageContainer && !props.page.noPageContainer)
+    if (props.options.pageContainer && !props.page.noPageContainer) {
       return <props.options.pageContainer page={props.page} />;
+    }
 
     return <props.page.component urlParams={createUrlParams()} navigate={props.navigate} />;
   }
 
   function PageNotFound(props: { pageNotFound: AppOptions['pageNotFound'] }) {
-    if (props.pageNotFound) return <props.pageNotFound />;
+    if (props.pageNotFound) {
+      return <props.pageNotFound />;
+    }
 
     return <h1>404: Page not found</h1>;
   }
 }
 
 function getPath(path: string) {
-  if (path.startsWith('/')) return path;
+  if (path.startsWith('/')) {
+    return path;
+  }
 
   return `/${path}`;
 }

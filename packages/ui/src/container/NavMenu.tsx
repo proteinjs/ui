@@ -31,7 +31,9 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
   };
 
   const NavMenuItemAction = () => {
-    if (selectedNavMenuItem == -1 || !navMenuItems) return null;
+    if (selectedNavMenuItem == -1 || !navMenuItems) {
+      return null;
+    }
 
     const menuItem = navMenuItems[selectedNavMenuItem];
 
@@ -39,13 +41,17 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
       setSelectedNavMenuItem(-1);
     }, [selectedNavMenuItem]);
 
-    if (typeof menuItem.action === 'string') return <Navigate to={qualifiedPath(menuItem.action)} />;
+    if (typeof menuItem.action === 'string') {
+      return <Navigate to={qualifiedPath(menuItem.action)} />;
+    }
 
     return <menuItem.action onClose={() => setSelectedNavMenuItem(-1)} />;
   };
 
   const qualifiedPath = (path: string) => {
-    if (path.startsWith('/')) return path;
+    if (path.startsWith('/')) {
+      return path;
+    }
 
     return `/${path}`;
   };

@@ -47,8 +47,11 @@ export function fieldLabel(field: Field<any, any>) {
 export function fieldDisplayValue(field: Field<any, any>) {
   let value = '';
   if (field.value) {
-    if (field.displayValue) value = field.displayValue(field.value);
-    else value = field.value;
+    if (field.displayValue) {
+      value = field.displayValue(field.value);
+    } else {
+      value = field.value;
+    }
   }
 
   return value;

@@ -57,10 +57,14 @@ export function Table<T>({
   }, [page, rowsPerPage, tableLoader]);
 
   async function handleRowOnClick(row: T) {
-    if (!rowOnClickRedirectUrl) return;
+    if (!rowOnClickRedirectUrl) {
+      return;
+    }
 
     let redirectUrl = await rowOnClickRedirectUrl(row);
-    if (!redirectUrl.startsWith('/')) redirectUrl = `/${redirectUrl}`;
+    if (!redirectUrl.startsWith('/')) {
+      redirectUrl = `/${redirectUrl}`;
+    }
 
     navigate(redirectUrl);
   }
@@ -72,13 +76,19 @@ export function Table<T>({
 
   function toggleSelectRow(rowIndex: number, row: T) {
     const newSelectedRows = Object.assign({}, selectedRows);
-    if (newSelectedRows[rowIndex]) delete newSelectedRows[rowIndex];
-    else newSelectedRows[rowIndex] = row;
+    if (newSelectedRows[rowIndex]) {
+      delete newSelectedRows[rowIndex];
+    } else {
+      newSelectedRows[rowIndex] = row;
+    }
 
     setSelectedRows(newSelectedRows);
 
-    if (selectAll && Object.keys(selectedRows).length != rows.length) setSelectAll(false);
-    else if (!selectAll && Object.keys(selectedRows).length == rows.length) setSelectAll(true);
+    if (selectAll && Object.keys(selectedRows).length != rows.length) {
+      setSelectAll(false);
+    } else if (!selectAll && Object.keys(selectedRows).length == rows.length) {
+      setSelectAll(true);
+    }
   }
 
   function toggleSelectAll(selected: boolean) {
@@ -86,22 +96,34 @@ export function Table<T>({
       const newSelectedRows = Object.assign({}, selectedRows);
       for (let i = 0; i < rows.length; i++) {
         const index = rowsPerPage * page + i;
-        if (!newSelectedRows[index]) newSelectedRows[index] = rows[i];
+        if (!newSelectedRows[index]) {
+          newSelectedRows[index] = rows[i];
+        }
       }
       setSelectedRows(newSelectedRows);
-    } else setSelectedRows({});
+    } else {
+      setSelectedRows({});
+    }
 
     setSelectAll(selected);
   }
 
   function formatCellValue(value: any): string {
-    if (value == null) return '';
+    if (value == null) {
+      return '';
+    }
 
-    if (typeof value === 'boolean') return value ? 'True' : 'False';
+    if (typeof value === 'boolean') {
+      return value ? 'True' : 'False';
+    }
 
-    if (moment.isMoment(value)) return value.format('ddd, MMM Do YY, h:mm:ss a');
+    if (moment.isMoment(value)) {
+      return value.format('ddd, MMM Do YY, h:mm:ss a');
+    }
 
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
 
     return value.toString();
   }

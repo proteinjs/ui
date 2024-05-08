@@ -31,7 +31,9 @@ export const AccountIconButton = ({
   const [anchorEl, setAccountMenuAnchorEl] = React.useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
 
-  if (!auth) return null;
+  if (!auth) {
+    return null;
+  }
 
   if (auth.isLoggedIn) {
     return (
@@ -60,7 +62,9 @@ export const AccountIconButton = ({
                   } else if (isFunction(profileMenuItem.action)) {
                     setAccountMenuAnchorEl(null);
                     profileMenuItem.action();
-                  } else setSelectedIndex(index);
+                  } else {
+                    setSelectedIndex(index);
+                  }
                 }}
                 selected={selectedIndex === index}
               >
@@ -100,24 +104,34 @@ export const AccountIconButton = ({
   );
 
   function ProfileMenuItemAction() {
-    if (selectedProfileMenuItem == -1 || !auth || !profileMenuItems) return null;
+    if (selectedProfileMenuItem == -1 || !auth || !profileMenuItems) {
+      return null;
+    }
 
     const menuItem = profileMenuItems[selectedProfileMenuItem];
-    if (typeof menuItem.action === 'string') return null;
+    if (typeof menuItem.action === 'string') {
+      return null;
+    }
 
-    if (isDialog(menuItem.action)) return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
+    if (isDialog(menuItem.action)) {
+      return <menuItem.action onClose={() => setSelectedProfileMenuItem(-1)} />;
+    }
 
     return null;
   }
 
   function Login() {
-    if (!loginClicked || !auth || typeof auth.login === 'string') return null;
+    if (!loginClicked || !auth || typeof auth.login === 'string') {
+      return null;
+    }
 
     return <auth.login onClose={() => setLoginClicked(false)} />;
   }
 
   function qualifiedPath(path: string) {
-    if (path.startsWith('/')) return path;
+    if (path.startsWith('/')) {
+      return path;
+    }
 
     return `/${path}`;
   }

@@ -45,9 +45,13 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
             messageReceived = message;
           }).then(() => {
             // setFieldStatus may not be called in Field.onChange, but we still want to run after Form.onChange
-            if (!errorReceived) setError(false);
+            if (!errorReceived) {
+              setError(false);
+            }
 
-            if (!messageReceived) setStatusMessage(undefined);
+            if (!messageReceived) {
+              setStatusMessage(undefined);
+            }
           });
         }}
         InputProps={{

@@ -8,7 +8,9 @@ import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
 import { AccountIconButton } from './AccountIconButton';
 
 function qualifiedPath(path: string) {
-  if (path.startsWith('/')) return path;
+  if (path.startsWith('/')) {
+    return path;
+  }
 
   return `/${path}`;
 }
@@ -44,10 +46,14 @@ const Page = React.memo(
     loginClicked: boolean;
     setLoginClicked: (loginClicked: boolean) => void;
   }) => {
-    if (auth?.canViewPage(page)) return <page.component urlParams={createUrlParams()} navigate={navigate} />;
+    if (auth?.canViewPage(page)) {
+      return <page.component urlParams={createUrlParams()} navigate={navigate} />;
+    }
 
     if (!auth?.isLoggedIn) {
-      if (!loginClicked) setLoginClicked(true);
+      if (!loginClicked) {
+        setLoginClicked(true);
+      }
 
       return null;
     }
@@ -64,7 +70,9 @@ export function PageContainer(props: PageContainerProps) {
   const [navMenuOpen, setNavMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
-    if (auth?.canViewPage(page)) return;
+    if (auth?.canViewPage(page)) {
+      return;
+    }
 
     if (!auth?.isLoggedIn) {
       console.log('User not logged in, redirecting to login');
@@ -79,7 +87,9 @@ export function PageContainer(props: PageContainerProps) {
     <Box
       sx={(theme) => {
         const defaultStyles = {};
-        if (!page.pageContainerSxProps) return defaultStyles;
+        if (!page.pageContainerSxProps) {
+          return defaultStyles;
+        }
 
         const resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme));
 

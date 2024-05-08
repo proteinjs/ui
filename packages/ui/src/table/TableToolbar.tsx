@@ -63,7 +63,9 @@ export const TableToolbar = (props: TableToolbarProps) => {
   );
 
   function Buttons() {
-    if (!buttons) return null;
+    if (!buttons) {
+      return null;
+    }
 
     if (selectedRows.length > 0) {
       return buttons
