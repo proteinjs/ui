@@ -22,7 +22,10 @@ export type FormState<F extends Fields> = {
   onLoadExecuted?: boolean;
 };
 
-export class FormComponent<F extends Fields, B extends FormButtons<F>> extends React.Component<FormProps<F, B>, FormState<F>> {
+export class FormComponent<F extends Fields, B extends FormButtons<F>> extends React.Component<
+  FormProps<F, B>,
+  FormState<F>
+> {
   constructor(props: FormProps<F, B>) {
     super(props);
     this.state = { fields: props.createFields() };
@@ -60,7 +63,11 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     });
   }
 
-  private async onChange(field: Field<any, any>, value: any, setFieldStatus: (message: string, isError: boolean) => void) {
+  private async onChange(
+    field: Field<any, any>,
+    value: any,
+    setFieldStatus: (message: string, isError: boolean) => void
+  ) {
     field.value = value;
     if (field.onChange) {
       try {
@@ -75,7 +82,12 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 
   private async onClick(button: FormButton<any>) {
     if (button.onClick) {
-      this.setState({ progress: { visible: true, message: button.progressMessage ? button.progressMessage(this.state.fields) : undefined } });
+      this.setState({
+        progress: {
+          visible: true,
+          message: button.progressMessage ? button.progressMessage(this.state.fields) : undefined,
+        },
+      });
       try {
         const successMessage = await button.onClick(this.state.fields, this.props.buttons);
         if (successMessage) this.setState({ status: { message: successMessage, isError: false } });
@@ -239,7 +251,11 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
         for (let i = 0; i < this.props.fieldLayout.length; i++) {
           const row = this.props.fieldLayout[i] as string[];
           const columns = row.length;
-          if (columns > 6) throw new Error(`When using FormProps.fieldLayout, the maximum number of fields per row is 6, provided: ${columns}. For more granular layout control use Field.layout`);
+          if (columns > 6) {
+            throw new Error(
+              `When using FormProps.fieldLayout, the maximum number of fields per row is 6, provided: ${columns}. For more granular layout control use Field.layout`
+            );
+          }
 
           const currentRow: FieldComponent<any, any>[] = [];
           for (const fieldPropertyName of row) {
@@ -254,17 +270,28 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
       for (const fieldPropertyName in this.state.fields) {
         const fieldComponent: FieldComponent<any, any> = this.state.fields[fieldPropertyName];
         const field = fieldComponent.field;
-        if (!field.layout) throw new Error(`Unless using FormProps.fieldLayout, Field.layout must be provided; layout not provided for field: ${field.name}`);
+        if (!field.layout) {
+          throw new Error(
+            `Unless using FormProps.fieldLayout, Field.layout must be provided; layout not provided for field: ${field.name}`
+          );
+        }
 
         if (typeof rows[field.layout.row] === 'undefined') rows[field.layout.row] = [];
 
-        if (field.layout.column && rows[field.layout.row].length >= field.layout.column) rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
+        if (field.layout.column && rows[field.layout.row].length >= field.layout.column)
+          rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
         else rows[field.layout.row].push(fieldComponent);
 
         const rowWidth = rows[field.layout.row]
-          .map((fieldComponent) => (fieldComponent.field.layout?.width ? (fieldComponent.field.layout.width as number) : 0))
+          .map((fieldComponent) =>
+            fieldComponent.field.layout?.width ? (fieldComponent.field.layout.width as number) : 0
+          )
           .reduce((accumulator, currentWidth) => accumulator + currentWidth);
-        if (rowWidth > 12) throw new Error(`Width of row exceeds maximum width (12), row width: ${rowWidth}, row index: ${field.layout.row}`);
+        if (rowWidth > 12) {
+          throw new Error(
+            `Width of row exceeds maximum width (12), row width: ${rowWidth}, row index: ${field.layout.row}`
+          );
+        }
       }
     }
 
@@ -272,7 +299,8 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private isFieldRowVisible(fieldComponents: FieldComponent<any, any>[]): boolean {
-    for (const fieldComponent of fieldComponents) if (!fieldComponent.field.accessibility || !fieldComponent.field.accessibility?.hidden) return true;
+    for (const fieldComponent of fieldComponents)
+      if (!fieldComponent.field.accessibility || !fieldComponent.field.accessibility?.hidden) return true;
 
     return false;
   }

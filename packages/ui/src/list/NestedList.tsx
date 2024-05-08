@@ -19,7 +19,8 @@ export const NestedList = ({ items, level, levelColors }: NestedListProps) => {
     const flattened = [];
     for (const item of items) {
       flattened.push(item);
-      if (item.children && (item.renderChildren || typeof item.renderChildren === 'undefined')) flattened.push(item.children);
+      if (item.children && (item.renderChildren || typeof item.renderChildren === 'undefined'))
+        flattened.push(item.children);
     }
 
     return flattened;

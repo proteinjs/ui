@@ -1,6 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TableContainer, Table as MuiTable, TableBody, TableCell, TableHead, TablePagination, TableRow, Typography, Checkbox } from '@mui/material';
+import {
+  TableContainer,
+  Table as MuiTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TablePagination,
+  TableRow,
+  Typography,
+  Checkbox,
+} from '@mui/material';
 import moment from 'moment';
 import { StringUtil } from '@proteinjs/util';
 import { TableLoader } from './TableLoader';
@@ -17,7 +27,15 @@ export type TableProps<T> = {
   buttons?: TableButton<T>[];
 };
 
-export function Table<T>({ title, description, columns, tableLoader, rowOnClickRedirectUrl, defaultRowsPerPage = 10, buttons }: TableProps<T>) {
+export function Table<T>({
+  title,
+  description,
+  columns,
+  tableLoader,
+  rowOnClickRedirectUrl,
+  defaultRowsPerPage = 10,
+  buttons,
+}: TableProps<T>) {
   const [rowsPerPage, setRowsPerPage] = React.useState(defaultRowsPerPage);
   const [page, setPage] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
@@ -90,7 +108,14 @@ export function Table<T>({ title, description, columns, tableLoader, rowOnClickR
 
   return (
     <div style={{ overflow: 'auto', width: '100%' }}>
-      {(title || description || (buttons && buttons.length > 0)) && <TableToolbar title={title} description={description} selectedRows={Object.values(selectedRows)} buttons={buttons} />}
+      {(title || description || (buttons && buttons.length > 0)) && (
+        <TableToolbar
+          title={title}
+          description={description}
+          selectedRows={Object.values(selectedRows)}
+          buttons={buttons}
+        />
+      )}
       <TableContainer>
         <MuiTable stickyHeader>
           <TableHead>
@@ -117,7 +142,13 @@ export function Table<T>({ title, description, columns, tableLoader, rowOnClickR
             {rows.map((row, index) => {
               index = rowsPerPage * page + index;
               return (
-                <TableRow hover role='checkbox' tabIndex={-1} key={index} selected={typeof selectedRows[index] !== 'undefined'}>
+                <TableRow
+                  hover
+                  role='checkbox'
+                  tabIndex={-1}
+                  key={index}
+                  selected={typeof selectedRows[index] !== 'undefined'}
+                >
                   {buttons && buttons.length > 0 && (
                     <TableCell padding='checkbox'>
                       <Checkbox

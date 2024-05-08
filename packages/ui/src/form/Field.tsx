@@ -23,7 +23,11 @@ export type Field<T, F extends Fields> = {
 
 export type FieldComponentProps<T, F extends Fields> = {
   field: Field<T, F>;
-  onChange: (field: Field<T, F>, value: T, setFieldStatus: (message: string, isError: boolean) => void) => Promise<void>;
+  onChange: (
+    field: Field<T, F>,
+    value: T,
+    setFieldStatus: (message: string, isError: boolean) => void
+  ) => Promise<void>;
   // focused: boolean
 };
 

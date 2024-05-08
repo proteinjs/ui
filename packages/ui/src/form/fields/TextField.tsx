@@ -53,7 +53,10 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
         InputProps={{
           endAdornment: isPassword && (
             <InputAdornment position='end'>
-              <IconButton aria-label='Toggle password visibility' onClick={(event) => setPasswordVisible(!passwordVisible)}>
+              <IconButton
+                aria-label='Toggle password visibility'
+                onClick={(event) => setPasswordVisible(!passwordVisible)}
+              >
                 {passwordVisible ? <VisibilityOff /> : <Visibility />}
               </IconButton>
             </InputAdornment>

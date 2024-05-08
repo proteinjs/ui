@@ -110,10 +110,17 @@ export function PageContainer(props: PageContainerProps) {
           )}
           {toolbarChildren}
           <div style={{ flexGrow: 1 }}></div>
-          <AccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} {...(profileMenuItems ? { profileMenuItems } : {})} />
+          <AccountIconButton
+            loginClicked={loginClicked}
+            setLoginClicked={setLoginClicked}
+            auth={auth}
+            {...(profileMenuItems ? { profileMenuItems } : {})}
+          />
         </Toolbar>
       </AppBar>
-      {navMenuItems && <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />}
+      {navMenuItems && (
+        <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />
+      )}
       <Page auth={auth} page={page} navigate={navigate} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
     </Box>
   );

@@ -36,10 +36,25 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
           const routes = [];
           let key = 0;
           for (const page of pages) {
-            if (typeof page.path === 'string') routes.push(<Route key={key++} path={getPath(page.path)} element={<ContainerizedComponent options={options} page={page} navigate={navigate} />} />);
-            else {
+            if (typeof page.path === 'string') {
+              routes.push(
+                <Route
+                  key={key++}
+                  path={getPath(page.path)}
+                  element={<ContainerizedComponent options={options} page={page} navigate={navigate} />}
+                />
+              );
+            } else {
               const paths = page.path as string[];
-              for (const path of paths) routes.push(<Route key={key++} path={getPath(path)} element={<ContainerizedComponent options={options} page={page} navigate={navigate} />} />);
+              for (const path of paths) {
+                routes.push(
+                  <Route
+                    key={key++}
+                    path={getPath(path)}
+                    element={<ContainerizedComponent options={options} page={page} navigate={navigate} />}
+                  />
+                );
+              }
             }
           }
           return routes;
@@ -50,7 +65,8 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   }
 
   function ContainerizedComponent(props: { options: AppOptions; page: Page; navigate: NavigateFunction }) {
-    if (props.options.pageContainer && !props.page.noPageContainer) return <props.options.pageContainer page={props.page} />;
+    if (props.options.pageContainer && !props.page.noPageContainer)
+      return <props.options.pageContainer page={props.page} />;
 
     return <props.page.component urlParams={createUrlParams()} navigate={props.navigate} />;
   }

@@ -19,7 +19,12 @@ export type AccountIconButtonProps = {
   profileMenuItems?: { menuItemChildren: React.ReactNode; action: LinkOrDialog | (() => void) }[];
 };
 
-export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profileMenuItems }: AccountIconButtonProps) => {
+export const AccountIconButton = ({
+  loginClicked,
+  setLoginClicked,
+  auth,
+  profileMenuItems,
+}: AccountIconButtonProps) => {
   const navigate = useNavigate();
   const [selectedProfileMenuItem, setSelectedProfileMenuItem] = React.useState<number>(-1);
   const [selectedIndex, setSelectedIndex] = React.useState<number>(1);
@@ -82,7 +87,12 @@ export const AccountIconButton = ({ loginClicked, setLoginClicked, auth, profile
 
   return (
     <div>
-      <Button color='inherit' onClick={(event) => (auth && typeof auth.login === 'string' ? navigate(qualifiedPath(auth.login)) : setLoginClicked(!loginClicked))}>
+      <Button
+        color='inherit'
+        onClick={(event) =>
+          auth && typeof auth.login === 'string' ? navigate(qualifiedPath(auth.login)) : setLoginClicked(!loginClicked)
+        }
+      >
         Login
       </Button>
       <Login />
