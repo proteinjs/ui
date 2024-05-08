@@ -8,15 +8,13 @@ export function FormPage(props: PaperProps) {
       container
       sx={(theme) => ({
         marginTop: theme.spacing(4),
-      })} 
+      })}
       direction='row'
       justifyContent='center'
       alignItems='center'
     >
       <Grid item>
-        <FormPaper {...props}>
-          {props.children}
-        </FormPaper>
+        <FormPaper {...props}>{props.children}</FormPaper>
       </Grid>
     </Grid>
   );
