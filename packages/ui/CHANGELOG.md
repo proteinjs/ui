@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.4](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.3...@proteinjs/ui@2.0.4) (2024-05-10)
+
+
+### Bug Fixes
+
+* add .md to lint ignore files ([b796982](https://github.com/proteinjs/ui/commit/b7969823d8dbd34e13d22cbd5d3eecb77a2a140b))
+
+
+
+
+
 ## [2.0.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.2...@proteinjs/ui@2.0.3) (2024-05-10)
 
 
