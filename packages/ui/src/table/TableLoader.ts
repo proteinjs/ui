@@ -1,11 +1,11 @@
 export type RowWindow<T> = {
-  rows: T[],
-  totalCount: number,
-}
+  rows: T[];
+  totalCount: number;
+};
 
 export type TableLoader<T> = {
-  load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>,
-}
+  load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>;
+};
 
 export class StaticTableLoader<T> implements TableLoader<T> {
   constructor(private list: T[]) {}

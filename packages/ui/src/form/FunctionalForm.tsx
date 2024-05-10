@@ -188,7 +188,7 @@
 //             </Grid>
 // 		);
 //     }
-    
+
 //     function Status() {
 //         if (!status || !status.message)
 //             return null;
@@ -206,7 +206,7 @@
 // 			</Grid>
 //         );
 //     }
-    
+
 //     function Fields() {
 //         return (
 //             <Grid container spacing={8}>
@@ -214,7 +214,7 @@
 //                     getFieldRows().map((fieldComponents, index) => {
 //                         if (!fieldRowVisible(fieldComponents))
 //                             return null;
-            
+
 //                         return (
 //                             <Grid item xs={12} key={index}>
 //                                 <Grid container spacing={8}>
@@ -222,7 +222,7 @@
 //                                         fieldComponents.filter((fieldComponent) => {
 //                                             if (fieldComponent.field.accessibility?.hidden)
 //                                                 return false;
-                                    
+
 //                                             return true;
 //                                         }).map((fieldComponent, key) => {
 //                                             const fieldKey = fieldRenderKeys[fieldComponent.field.name] ? `${fieldComponent.field.name}_${fieldRenderKeys[fieldComponent.field.name]}` : `${fieldComponent.field.name}`;
@@ -245,7 +245,7 @@
 //             </Grid>
 //         );
 //     }
-    
+
 //     function getFieldRows(): FieldComponent<any, any>[][] {
 //         const rows: FieldComponent<any, any>[][] = [];
 //         if (!fields)
@@ -281,33 +281,33 @@
 //                 const field = fieldComponent.field;
 //                 if (!field.layout)
 //                     throw new Error(`Unless using FormProps.fieldLayout, Field.layout must be provided; layout not provided for field: ${field.name}`);
-    
+
 //                 if (typeof rows[field.layout.row] === 'undefined')
 //                     rows[field.layout.row] = [];
-        
+
 //                 if (field.layout.column && rows[field.layout.row].length >= field.layout.column) {
 //                     rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
 //                 } else
 //                     rows[field.layout.row].push(fieldComponent);
-    
+
 //                 const rowWidth = rows[field.layout.row].map((fieldComponent) => fieldComponent.field.layout?.width ? fieldComponent.field.layout.width as number : 0).reduce((accumulator, currentWidth) => accumulator + currentWidth);
 //                 if (rowWidth > 12)
 //                     throw new Error(`Width of row exceeds maximum width (12), row width: ${rowWidth}, row index: ${field.layout.row}`);
 //             }
 //         }
-	
+
 // 		return rows;
 //     }
-    
+
 //     function fieldRowVisible(fieldComponents: FieldComponent<any, any>[]): boolean {
 // 		for (const fieldComponent of fieldComponents) {
 // 			if (!fieldComponent.field.accessibility || !fieldComponent.field.accessibility?.hidden)
 // 				return true;
 // 		}
-	
+
 // 		return false;
 //     }
-    
+
 //     function Progress() {
 //         if (!progress || !progress.visible)
 //             return null;
@@ -320,7 +320,7 @@
 //             </Grid>
 //         );
 //     }
-    
+
 //     function Buttons() {
 //         return (
 //             <Grid container justify='flex-end' alignItems='flex-end' spacing={2}>
@@ -328,7 +328,7 @@
 //                     Object.keys(props.buttons).map((buttonPropertyName) => props.buttons[buttonPropertyName]).filter((button) => {
 //                         if (button.accessibility?.hidden)
 //                             return false;
-            
+
 //                         return true;
 //                     }).map((button, key) => {
 //                         return (

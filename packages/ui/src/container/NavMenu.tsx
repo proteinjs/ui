@@ -1,6 +1,6 @@
-import React from 'react'
-import { Drawer, Toolbar, List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material'
-import { Navigate } from 'react-router-dom'
+import React from 'react';
+import { Drawer, Toolbar, List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
+import { Navigate } from 'react-router-dom';
 
 export type LinkOrDialog = string | React.ComponentType<{ onClose: () => void }>;
 
@@ -9,15 +9,15 @@ export type NavMenuItem = {
   action: LinkOrDialog;
   icon?: React.ComponentType;
   /** Use to make this item a divider */
-  // isDivider?: boolean, 
+  // isDivider?: boolean,
   /** Use to make this item a nested menu */
-  // children?: NavMenuItems 
+  // children?: NavMenuItems
 };
 
 export type NavMenuProps = {
-  navMenuItems?: NavMenuItem[],
-  navMenuOpen: boolean,
-  setNavMenuOpen: (open: boolean) => void,
+  navMenuItems?: NavMenuItem[];
+  navMenuOpen: boolean;
+  setNavMenuOpen: (open: boolean) => void;
 };
 
 const drawerWidth = 240;
@@ -31,8 +31,9 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
   };
 
   const NavMenuItemAction = () => {
-    if (selectedNavMenuItem == -1 || !navMenuItems)
+    if (selectedNavMenuItem == -1 || !navMenuItems) {
       return null;
+    }
 
     const menuItem = navMenuItems[selectedNavMenuItem];
 
@@ -40,16 +41,18 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
       setSelectedNavMenuItem(-1);
     }, [selectedNavMenuItem]);
 
-    if (typeof menuItem.action === 'string')
+    if (typeof menuItem.action === 'string') {
       return <Navigate to={qualifiedPath(menuItem.action)} />;
+    }
 
     return <menuItem.action onClose={() => setSelectedNavMenuItem(-1)} />;
   };
 
   const qualifiedPath = (path: string) => {
-    if (path.startsWith('/'))
+    if (path.startsWith('/')) {
       return path;
-    
+    }
+
     return `/${path}`;
   };
 
@@ -63,22 +66,18 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
         variant='temporary'
         anchor='left'
         open={navMenuOpen}
-        onClose={(_, reason) =>
-          reason === 'backdropClick' && setNavMenuOpen(false)
-        }
+        onClose={(_, reason) => reason === 'backdropClick' && setNavMenuOpen(false)}
       >
         <Toolbar />
         <List>
           {navMenuItems?.map((navMenuItem, index) => (
             <ListItem key={index}>
-              <ListItemButton
-                onClick={() => handleNavMenuItemClick(index)}
-              >
-                {navMenuItem.icon && 
+              <ListItemButton onClick={() => handleNavMenuItemClick(index)}>
+                {navMenuItem.icon && (
                   <ListItemIcon>
                     <navMenuItem.icon />
                   </ListItemIcon>
-                }
+                )}
                 <ListItemText primary={navMenuItem.name} />
               </ListItemButton>
             </ListItem>
@@ -88,4 +87,4 @@ export const NavMenu: React.FC<NavMenuProps> = ({ navMenuItems, navMenuOpen, set
       <NavMenuItemAction />
     </div>
   );
-}
+};
