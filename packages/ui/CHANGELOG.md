@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.2...@proteinjs/ui@2.0.3) (2024-05-10)
+
+
+### Bug Fixes
+
+* add linting and lint all files ([333d130](https://github.com/proteinjs/ui/commit/333d130ae81392a250f131fac041aee8d3303757))
+
+
+
+
+
 ## [2.0.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.0...@proteinjs/ui@2.0.1) (2024-05-03)
 
 ### Bug Fixes
