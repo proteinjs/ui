@@ -1,11 +1,12 @@
 import React from 'react';
-import { AppBar, Toolbar, Box, IconButton, Typography, Theme, SxProps, AppBarProps, ToolbarProps } from '@mui/material';
+import { AppBar, Toolbar, Box, IconButton, Typography, AppBarProps, ToolbarProps, MenuProps } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
 import { Page } from '../router/Page';
 import { createUrlParams } from '../router/createUrlParams';
 import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
-import { AccountIconButton } from './AccountIconButton';
+import { AccountIconButton, AccountIconButtonProps } from './AccountIconButton';
+import { AccountAuth } from './AccountAuth';
 
 function qualifiedPath(path: string) {
   if (path.startsWith('/')) {
@@ -17,19 +18,15 @@ function qualifiedPath(path: string) {
 
 export type PageContainerProps = {
   page: Page;
-  auth?: {
-    isLoggedIn: boolean;
-    canViewPage: (page: Page) => boolean;
-    login: LinkOrDialog;
-    logout: () => Promise<string>;
-  };
+  auth?: AccountAuth;
   appName?: string;
   toolbarChildren?: React.ReactNode;
   /** An array of menu items, each containing a React node and an action triggered when selected, either a string, dialog component, or a function. */
-  profileMenuItems?: { menuItemChildren: React.ReactNode; action: LinkOrDialog | (() => void) }[];
+  profileMenuItems?: { menuItemChildren: React.ReactNode; action?: LinkOrDialog }[];
   navMenuItems?: NavMenuItem[];
   appBarProps?: AppBarProps;
   toolbarProps?: ToolbarProps;
+  CustomAccountIconButton?: React.ComponentType<AccountIconButtonProps>;
 };
 
 const Page = React.memo(
@@ -65,7 +62,17 @@ const Page = React.memo(
 
 export function PageContainer(props: PageContainerProps) {
   const navigate = useNavigate();
-  const { page, auth, navMenuItems, appName, toolbarChildren, profileMenuItems, appBarProps, toolbarProps } = props;
+  const {
+    page,
+    auth,
+    navMenuItems,
+    appName,
+    toolbarChildren,
+    profileMenuItems,
+    appBarProps,
+    toolbarProps,
+    CustomAccountIconButton,
+  } = props;
   const [loginClicked, setLoginClicked] = React.useState(false);
   const [navMenuOpen, setNavMenuOpen] = React.useState(false);
 
@@ -120,12 +127,16 @@ export function PageContainer(props: PageContainerProps) {
           )}
           {toolbarChildren}
           <div style={{ flexGrow: 1 }}></div>
-          <AccountIconButton
-            loginClicked={loginClicked}
-            setLoginClicked={setLoginClicked}
-            auth={auth}
-            {...(profileMenuItems ? { profileMenuItems } : {})}
-          />
+          {CustomAccountIconButton ? (
+            <CustomAccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} />
+          ) : (
+            <AccountIconButton
+              loginClicked={loginClicked}
+              setLoginClicked={setLoginClicked}
+              auth={auth}
+              {...(profileMenuItems ? { profileMenuItems } : {})}
+            />
+          )}
         </Toolbar>
       </AppBar>
       {navMenuItems && (

@@ -11,6 +11,7 @@ export * from './src/form/container/FormPaper';
 export * from './src/form/container/FormPage';
 
 export * from './src/container/PageContainer';
+export * from './src/container/AccountAuth';
 export * from './src/container/NavMenu';
 
 export * from './src/list/NestedList';

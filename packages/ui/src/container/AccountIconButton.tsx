@@ -3,20 +3,14 @@ import { Button, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@m
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import { useNavigate } from 'react-router-dom';
 import { LinkOrDialog } from './NavMenu';
-import { Page } from '../router/Page';
 import LogoutIcon from '@mui/icons-material/Logout';
+import { AccountAuth, LoginComponent, qualifiedPath, useAuthActions } from './AccountAuth';
 
 export type AccountIconButtonProps = {
   loginClicked: boolean;
   setLoginClicked: React.Dispatch<React.SetStateAction<boolean>>;
-  auth?: {
-    isLoggedIn: boolean;
-    canViewPage: (page: Page) => boolean;
-    /** Either a dialog component, or a path to be redirected to */
-    login: LinkOrDialog;
-    logout: () => Promise<string>;
-  };
-  profileMenuItems?: { menuItemChildren: React.ReactNode; action: LinkOrDialog | (() => void) }[];
+  auth?: AccountAuth;
+  profileMenuItems?: { menuItemChildren: React.ReactNode; action?: LinkOrDialog }[];
 };
 
 export const AccountIconButton = ({
@@ -26,6 +20,7 @@ export const AccountIconButton = ({
   profileMenuItems,
 }: AccountIconButtonProps) => {
   const navigate = useNavigate();
+  const { logout, login } = useAuthActions(auth, loginClicked, setLoginClicked);
   const [selectedProfileMenuItem, setSelectedProfileMenuItem] = React.useState<number>(-1);
   const [selectedIndex, setSelectedIndex] = React.useState<number>(1);
   const [anchorEl, setAccountMenuAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -71,13 +66,7 @@ export const AccountIconButton = ({
                 {profileMenuItem.menuItemChildren}
               </MenuItem>
             ))}
-          <MenuItem
-            key='logout'
-            onClick={async (event) => {
-              const redirectPath = await auth.logout();
-              navigate(qualifiedPath(redirectPath));
-            }}
-          >
+          <MenuItem key='logout' onClick={logout}>
             <ListItemIcon>
               <LogoutIcon />
             </ListItemIcon>
@@ -91,15 +80,10 @@ export const AccountIconButton = ({
 
   return (
     <div>
-      <Button
-        color='inherit'
-        onClick={(event) =>
-          auth && typeof auth.login === 'string' ? navigate(qualifiedPath(auth.login)) : setLoginClicked(!loginClicked)
-        }
-      >
+      <Button color='inherit' onClick={login}>
         Login
       </Button>
-      <Login />
+      <LoginComponent auth={auth} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
     </div>
   );
 
@@ -118,22 +102,6 @@ export const AccountIconButton = ({
     }
 
     return null;
-  }
-
-  function Login() {
-    if (!loginClicked || !auth || typeof auth.login === 'string') {
-      return null;
-    }
-
-    return <auth.login onClose={() => setLoginClicked(false)} />;
-  }
-
-  function qualifiedPath(path: string) {
-    if (path.startsWith('/')) {
-      return path;
-    }
-
-    return `/${path}`;
   }
 };
 
