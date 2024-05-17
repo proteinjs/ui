@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.6](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.5...@proteinjs/ui@2.0.6) (2024-05-17)
+
+
+### Bug Fixes
+
+* allow custom account menu in page container ([9fdb291](https://github.com/proteinjs/ui/commit/9fdb291e8595d9ec8a05b395a413e4bc05ead59b))
+
+
+
+
+
 ## [2.0.4](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.3...@proteinjs/ui@2.0.4) (2024-05-10)
 
 
