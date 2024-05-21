@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.0.7](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.6...@proteinjs/ui@2.0.7) (2024-05-21)
+
+**Note:** Version bump only for package @proteinjs/ui
+
+
+
+
+
 ## [2.0.6](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.5...@proteinjs/ui@2.0.6) (2024-05-17)
 
 
