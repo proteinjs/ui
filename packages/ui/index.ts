@@ -14,8 +14,6 @@ export * from './src/container/PageContainer';
 export * from './src/container/AccountAuth';
 export * from './src/container/NavMenu';
 
-export * from './src/list/NestedList';
-
 export * from './src/table/Table';
 export * from './src/table/TableButton';
 export * from './src/table/TableLoader';
