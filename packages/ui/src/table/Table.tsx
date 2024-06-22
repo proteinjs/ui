@@ -85,10 +85,10 @@ export function Table<T>({
   useEffect(() => {
     const fetchData = async () => {
       setLoadingMoreRows(true);
+      if (page === 0) {
+        setPage(1);
+      }
       if (page <= totalPages) {
-        if (page === 0) {
-          setPage(1);
-        }
         const startIndex = rows.length;
         const endIndex = startIndex + rowsPerPage;
         const rowWindow = await tableLoader.load(startIndex, endIndex);
@@ -101,7 +101,7 @@ export function Table<T>({
     if (infiniteScroll) {
       fetchData();
     }
-  }, [page, tableLoader]);
+  }, [page]);
 
   const observer = useRef(
     new IntersectionObserver((entries) => {
