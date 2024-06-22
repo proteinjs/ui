@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import S from 'string';
 import {
   TableContainer,
   Table as MuiTable,
@@ -11,6 +10,9 @@ import {
   TableRow,
   Typography,
   Checkbox,
+  Box,
+  TableContainerOwnProps,
+  ToolbarProps,
 } from '@mui/material';
 import moment from 'moment';
 import { StringUtil } from '@proteinjs/util';
@@ -24,8 +26,21 @@ export type TableProps<T> = {
   columns: (keyof T)[];
   tableLoader: TableLoader<T>;
   rowOnClickRedirectUrl?: (row: T) => Promise<string>;
-  defaultRowsPerPage?: number;
   buttons?: TableButton<T>[];
+  /**
+   * Should not use if you have infiniteScroll set to true. Defaults to false.
+   *  */
+  pagination?: boolean;
+  /**
+   * Should not use if you have pagination set to true. Defaults to true.
+   * */
+  infiniteScroll?: boolean;
+  /*
+   * Pertains to pagination or infinite scroll, depending on which is enabled.
+   * */
+  defaultRowsPerPage?: number;
+  toolbarSx?: ToolbarProps['sx'];
+  tableContainerSx?: TableContainerOwnProps['sx'];
 };
 
 export function Table<T>({
@@ -34,18 +49,25 @@ export function Table<T>({
   columns,
   tableLoader,
   rowOnClickRedirectUrl,
+  pagination = false,
+  infiniteScroll = true,
   defaultRowsPerPage = 10,
   buttons,
+  tableContainerSx,
+  toolbarSx,
 }: TableProps<T>) {
-  const [rowsPerPage, setRowsPerPage] = React.useState(defaultRowsPerPage);
-  const [page, setPage] = React.useState(0);
-  const [totalRows, setTotalRows] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
+  const [page, setPage] = useState(0);
+  const [totalRows, setTotalRows] = useState(0);
   const [rows, setRows] = React.useState<T[]>([]);
-  const [selectedRows, setSelectedRows] = React.useState<{ [key: number]: T }>({});
-  const [selectAll, setSelectAll] = React.useState(false);
+  const [loadingMoreRows, setLoadingMoreRows] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
+  const [selectAll, setSelectAll] = useState(false);
   const navigate = useNavigate();
+  const totalPages = Math.ceil(totalRows / rowsPerPage);
 
-  React.useEffect(() => {
+  // Pagination fetch data logic
+  useEffect(() => {
     const fetchData = async () => {
       const startIndex = page * rowsPerPage;
       const endIndex = startIndex + rowsPerPage;
@@ -54,8 +76,51 @@ export function Table<T>({
       setTotalRows(rowWindow.totalCount);
     };
 
-    fetchData();
+    if (pagination) {
+      fetchData();
+    }
   }, [page, rowsPerPage, tableLoader]);
+
+  // Infinite scroll fetch data logic
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoadingMoreRows(true);
+      if (page <= totalPages) {
+        if (page === 0) {
+          setPage(1);
+        }
+        const startIndex = rows.length;
+        const endIndex = startIndex + rowsPerPage;
+        const rowWindow = await tableLoader.load(startIndex, endIndex);
+        setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
+        setTotalRows(rowWindow.totalCount);
+      }
+      setLoadingMoreRows(false);
+    };
+
+    if (infiniteScroll) {
+      fetchData();
+    }
+  }, [page, tableLoader]);
+
+  const observer = useRef(
+    new IntersectionObserver((entries) => {
+      const first = entries[0];
+      if (first.isIntersecting) {
+        setPage((num) => num + 1);
+      }
+    })
+  );
+
+  const loadMoreRef = useCallback((row: HTMLTableRowElement) => {
+    if (observer.current) {
+      observer.current.disconnect();
+    }
+
+    if (row) {
+      observer.current.observe(row);
+    }
+  }, []);
 
   async function handleRowOnClick(row: T) {
     if (!rowOnClickRedirectUrl) {
@@ -130,82 +195,98 @@ export function Table<T>({
   }
 
   return (
-    <div style={{ overflow: 'auto', width: '100%' }}>
-      {(title || description || (buttons && buttons.length > 0)) && (
-        <TableToolbar
-          title={title}
-          description={description}
-          selectedRows={Object.values(selectedRows)}
-          buttons={buttons}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        overflow: 'auto',
+        width: '100%',
+        height: '100%',
+      }}
+    >
+      <Box>
+        {(title || description || (buttons && buttons.length > 0)) && (
+          <TableToolbar
+            title={title}
+            description={description}
+            selectedRows={Object.values(selectedRows)}
+            buttons={buttons}
+            sx={toolbarSx}
+          />
+        )}
+        <TableContainer sx={tableContainerSx}>
+          <MuiTable stickyHeader>
+            <TableHead>
+              <TableRow>
+                {buttons && buttons.length > 0 && (
+                  <TableCell padding='checkbox'>
+                    <Checkbox
+                      checked={selectAll}
+                      onChange={(event, selected) => toggleSelectAll(selected)}
+                      inputProps={{
+                        'aria-label': 'Select all',
+                      }}
+                    />
+                  </TableCell>
+                )}
+                {columns.map((column, index) => (
+                  <TableCell key={index}>
+                    <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((row, index) => {
+                const isLastRow = infiniteScroll && index === rows.length - 1 && !loadingMoreRows && page <= totalPages;
+                index = rowsPerPage * page + index;
+                return (
+                  <TableRow
+                    hover
+                    role='checkbox'
+                    tabIndex={-1}
+                    key={index}
+                    selected={typeof selectedRows[index] !== 'undefined'}
+                    ref={isLastRow ? loadMoreRef : null}
+                  >
+                    {buttons && buttons.length > 0 && (
+                      <TableCell padding='checkbox'>
+                        <Checkbox
+                          checked={typeof selectedRows[index] !== 'undefined'}
+                          onChange={(event, value) => toggleSelectRow(index, row)}
+                          inputProps={{
+                            'aria-label': 'Select row',
+                          }}
+                        />
+                      </TableCell>
+                    )}
+                    {columns.map((column, index) => {
+                      const cellValue = formatCellValue(row[column]);
+                      return (
+                        <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
+                          <Typography>{cellValue}</Typography>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </MuiTable>
+        </TableContainer>
+      </Box>
+      {pagination && (
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+          component='div'
+          count={totalRows}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(event, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
         />
       )}
-      <TableContainer>
-        <MuiTable stickyHeader>
-          <TableHead>
-            <TableRow>
-              {buttons && buttons.length > 0 && (
-                <TableCell padding='checkbox'>
-                  <Checkbox
-                    checked={selectAll}
-                    onChange={(event, selected) => toggleSelectAll(selected)}
-                    inputProps={{
-                      'aria-label': 'Select all',
-                    }}
-                  />
-                </TableCell>
-              )}
-              {columns.map((column, index) => (
-                <TableCell key={index}>
-                  <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((row, index) => {
-              index = rowsPerPage * page + index;
-              return (
-                <TableRow
-                  hover
-                  role='checkbox'
-                  tabIndex={-1}
-                  key={index}
-                  selected={typeof selectedRows[index] !== 'undefined'}
-                >
-                  {buttons && buttons.length > 0 && (
-                    <TableCell padding='checkbox'>
-                      <Checkbox
-                        checked={typeof selectedRows[index] !== 'undefined'}
-                        onChange={(event, value) => toggleSelectRow(index, row)}
-                        inputProps={{
-                          'aria-label': 'Select row',
-                        }}
-                      />
-                    </TableCell>
-                  )}
-                  {columns.map((column, index) => {
-                    const cellValue = formatCellValue(row[column]);
-                    return (
-                      <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
-                        <Typography variant='subtitle1'>{cellValue}</Typography>
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </MuiTable>
-      </TableContainer>
-      <TablePagination
-        rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-        component='div'
-        count={totalRows}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={(event, newPage) => setPage(newPage)}
-        onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
-      />
-    </div>
+    </Box>
   );
 }
