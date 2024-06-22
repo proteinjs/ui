@@ -197,9 +197,6 @@ export function Table<T>({
   return (
     <Box
       sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
         overflow: 'auto',
         width: '100%',
         height: '100%',
@@ -275,18 +272,18 @@ export function Table<T>({
             </TableBody>
           </MuiTable>
         </TableContainer>
+        {pagination && (
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
+            component='div'
+            count={totalRows}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={(event, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
+          />
+        )}
       </Box>
-      {pagination && (
-        <TablePagination
-          rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
-          component='div'
-          count={totalRows}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={(event, newPage) => setPage(newPage)}
-          onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
-        />
-      )}
     </Box>
   );
 }
