@@ -50,7 +50,7 @@ export function Table<T>({
   tableLoader,
   rowOnClickRedirectUrl,
   pagination = false,
-  infiniteScroll = true,
+  infiniteScroll = !pagination,
   defaultRowsPerPage = 10,
   buttons,
   tableContainerSx,
