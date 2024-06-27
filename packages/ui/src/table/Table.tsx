@@ -39,7 +39,17 @@ export type TableProps<T> = {
    * Pertains to pagination or infinite scroll, depending on which is enabled.
    * */
   defaultRowsPerPage?: number;
+  /*
+   * Styling set on the root element of the toolbar.
+   * */
   toolbarSx?: ToolbarProps['sx'];
+  /*
+   * Content that will be displayed in the toolbar section of the table.
+   * */
+  toolbarContent?: React.ReactNode;
+  /*
+   * Styling set on the container element of the table.
+   * */
   tableContainerSx?: TableContainerOwnProps['sx'];
 };
 
@@ -55,6 +65,7 @@ export function Table<T>({
   buttons,
   tableContainerSx,
   toolbarSx,
+  toolbarContent,
 }: TableProps<T>) {
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [page, setPage] = useState(0);
@@ -64,7 +75,7 @@ export function Table<T>({
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
   const navigate = useNavigate();
-  const totalPages = Math.ceil(totalRows / rowsPerPage);
+  const totalPages = Math.ceil(totalRows / rowsPerPage) - 1; // pages are zero indexed
 
   // Pagination fetch data logic
   useEffect(() => {
@@ -81,33 +92,42 @@ export function Table<T>({
     }
   }, [page, rowsPerPage, tableLoader]);
 
-  // Infinite scroll fetch data logic
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoadingMoreRows(true);
-      if (page === 0) {
-        setPage(1);
-      }
-      if (page <= totalPages) {
-        const startIndex = rows.length;
-        const endIndex = startIndex + rowsPerPage;
-        const rowWindow = await tableLoader.load(startIndex, endIndex);
-        setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
-        setTotalRows(rowWindow.totalCount);
-      }
-      setLoadingMoreRows(false);
-    };
+  const fetchDataInfScroll = async () => {
+    setLoadingMoreRows(true);
+    console.log(`[infinite scroll]: page count is ${page} and total pages is ${totalPages}`);
+    if (page <= totalPages || page === 0) {
+      const startIndex = rows.length;
+      const endIndex = startIndex + rowsPerPage;
+      const rowWindow = await tableLoader.load(startIndex, endIndex);
+      setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
+      setTotalRows(rowWindow.totalCount);
+    }
+    setLoadingMoreRows(false);
+  };
 
+  useEffect(() => {
     if (infiniteScroll) {
-      fetchData();
+      console.log('[infinite scroll]: fetching data');
+      fetchDataInfScroll();
     }
   }, [page]);
+
+  useEffect(() => {
+    console.log(`[table]: tableLoader changing`);
+    if (infiniteScroll) {
+      setPage(0);
+      fetchDataInfScroll();
+    }
+  }, [tableLoader]);
 
   const observer = useRef(
     new IntersectionObserver((entries) => {
       const first = entries[0];
       if (first.isIntersecting) {
-        setPage((num) => num + 1);
+        setPage((num) => {
+          console.log(`updating page count from ${num} to ${num + 1}`);
+          return num + 1;
+        });
       }
     })
   );
@@ -208,70 +228,77 @@ export function Table<T>({
             title={title}
             description={description}
             selectedRows={Object.values(selectedRows)}
+            content={toolbarContent}
             buttons={buttons}
             sx={toolbarSx}
           />
         )}
-        <TableContainer sx={tableContainerSx}>
-          <MuiTable stickyHeader>
-            <TableHead>
-              <TableRow>
-                {buttons && buttons.length > 0 && (
-                  <TableCell padding='checkbox'>
-                    <Checkbox
-                      checked={selectAll}
-                      onChange={(event, selected) => toggleSelectAll(selected)}
-                      inputProps={{
-                        'aria-label': 'Select all',
-                      }}
-                    />
-                  </TableCell>
-                )}
-                {columns.map((column, index) => (
-                  <TableCell key={index}>
-                    <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row, index) => {
-                const isLastRow = infiniteScroll && index === rows.length - 1 && !loadingMoreRows && page <= totalPages;
-                index = rowsPerPage * page + index;
-                return (
-                  <TableRow
-                    hover
-                    role='checkbox'
-                    tabIndex={-1}
-                    key={index}
-                    selected={typeof selectedRows[index] !== 'undefined'}
-                    ref={isLastRow ? loadMoreRef : null}
-                  >
-                    {buttons && buttons.length > 0 && (
-                      <TableCell padding='checkbox'>
-                        <Checkbox
-                          checked={typeof selectedRows[index] !== 'undefined'}
-                          onChange={(event, value) => toggleSelectRow(index, row)}
-                          inputProps={{
-                            'aria-label': 'Select row',
-                          }}
-                        />
-                      </TableCell>
-                    )}
-                    {columns.map((column, index) => {
-                      const cellValue = formatCellValue(row[column]);
-                      return (
-                        <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
-                          <Typography>{cellValue}</Typography>
+        {/* veronica todo: implement pretty loading state */}
+        {loadingMoreRows ? (
+          'Loading...'
+        ) : (
+          <TableContainer sx={tableContainerSx}>
+            <MuiTable stickyHeader>
+              <TableHead>
+                <TableRow>
+                  {buttons && buttons.length > 0 && (
+                    <TableCell padding='checkbox'>
+                      <Checkbox
+                        checked={selectAll}
+                        onChange={(event, selected) => toggleSelectAll(selected)}
+                        inputProps={{
+                          'aria-label': 'Select all',
+                        }}
+                      />
+                    </TableCell>
+                  )}
+                  {columns.map((column, index) => (
+                    <TableCell key={index}>
+                      <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((row, index) => {
+                  const isLastRow =
+                    infiniteScroll && index === rows.length - 1 && !loadingMoreRows && page <= totalPages;
+                  index = rowsPerPage * page + index;
+                  return (
+                    <TableRow
+                      hover
+                      role='checkbox'
+                      tabIndex={-1}
+                      key={index}
+                      selected={typeof selectedRows[index] !== 'undefined'}
+                      ref={isLastRow ? loadMoreRef : null}
+                    >
+                      {buttons && buttons.length > 0 && (
+                        <TableCell padding='checkbox'>
+                          <Checkbox
+                            checked={typeof selectedRows[index] !== 'undefined'}
+                            onChange={(event, value) => toggleSelectRow(index, row)}
+                            inputProps={{
+                              'aria-label': 'Select row',
+                            }}
+                          />
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </MuiTable>
-        </TableContainer>
+                      )}
+                      {columns.map((column, index) => {
+                        const cellValue = formatCellValue(row[column]);
+                        return (
+                          <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
+                            <Typography>{cellValue}</Typography>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </MuiTable>
+          </TableContainer>
+        )}
         {pagination && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}

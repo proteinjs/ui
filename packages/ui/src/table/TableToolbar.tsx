@@ -7,12 +7,13 @@ export type TableToolbarProps = {
   title?: string;
   selectedRows: any[];
   description?: () => JSX.Element;
+  content?: React.ReactNode;
   buttons?: TableButton<any>[];
   sx?: ToolbarProps['sx'];
 };
 
 export const TableToolbar = (props: TableToolbarProps) => {
-  const { title, selectedRows, buttons, sx } = props;
+  const { title, selectedRows, content, buttons, sx } = props;
   const navigate = useNavigate();
   const theme = useTheme();
   return (
@@ -59,6 +60,7 @@ export const TableToolbar = (props: TableToolbarProps) => {
           flex: '1 1 100%',
         }}
       />
+      {content && content}
       <div>
         <Buttons />
       </div>
