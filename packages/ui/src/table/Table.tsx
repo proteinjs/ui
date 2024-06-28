@@ -92,31 +92,36 @@ export function Table<T>({
     }
   }, [page, rowsPerPage, tableLoader]);
 
-  const fetchDataInfScroll = async () => {
-    setLoadingMoreRows(true);
-    console.log(`[infinite scroll]: page count is ${page} and total pages is ${totalPages}`);
-    if (page <= totalPages || page === 0) {
+  useEffect(() => {
+    const fetchDataInfScroll = async () => {
       const startIndex = rows.length;
       const endIndex = startIndex + rowsPerPage;
       const rowWindow = await tableLoader.load(startIndex, endIndex);
       setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
       setTotalRows(rowWindow.totalCount);
-    }
-    setLoadingMoreRows(false);
-  };
+      setLoadingMoreRows(false);
+    };
 
-  useEffect(() => {
-    if (infiniteScroll) {
-      console.log('[infinite scroll]: fetching data');
+    if (infiniteScroll && page <= totalPages) {
       fetchDataInfScroll();
     }
-  }, [page]);
+  }, [page, rowsPerPage]);
 
   useEffect(() => {
-    console.log(`[table]: tableLoader changing`);
+    setPage(0);
+    setRows([]);
+    setLoadingMoreRows(true);
+
+    // Fetch initial data
+    const fetchInitialData = async () => {
+      const rowWindow = await tableLoader.load(0, rowsPerPage);
+      setRows(rowWindow.rows);
+      setTotalRows(rowWindow.totalCount);
+      setLoadingMoreRows(false);
+    };
+
     if (infiniteScroll) {
-      setPage(0);
-      fetchDataInfScroll();
+      fetchInitialData();
     }
   }, [tableLoader]);
 
@@ -233,34 +238,46 @@ export function Table<T>({
             sx={toolbarSx}
           />
         )}
-        {/* veronica todo: implement pretty loading state */}
-        {loadingMoreRows ? (
-          'Loading...'
-        ) : (
-          <TableContainer sx={tableContainerSx}>
-            <MuiTable stickyHeader>
-              <TableHead>
+
+        <TableContainer sx={tableContainerSx}>
+          <MuiTable stickyHeader>
+            <TableHead>
+              <TableRow>
+                {buttons && buttons.length > 0 && (
+                  <TableCell padding='checkbox'>
+                    <Checkbox
+                      checked={selectAll}
+                      onChange={(event, selected) => toggleSelectAll(selected)}
+                      inputProps={{
+                        'aria-label': 'Select all',
+                      }}
+                    />
+                  </TableCell>
+                )}
+                {columns.map((column, index) => (
+                  <TableCell key={index}>
+                    <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+
+            <TableBody>
+              {/* veronica todo: implement pretty loading state */}
+              {loadingMoreRows ? (
                 <TableRow>
-                  {buttons && buttons.length > 0 && (
-                    <TableCell padding='checkbox'>
-                      <Checkbox
-                        checked={selectAll}
-                        onChange={(event, selected) => toggleSelectAll(selected)}
-                        inputProps={{
-                          'aria-label': 'Select all',
-                        }}
-                      />
-                    </TableCell>
-                  )}
-                  {columns.map((column, index) => (
-                    <TableCell key={index}>
-                      <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
-                    </TableCell>
-                  ))}
+                  <TableCell>
+                    <Typography>Loading...</Typography>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row, index) => {
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell>
+                    <Typography>No rows to display.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((row, index) => {
                   const isLastRow =
                     infiniteScroll && index === rows.length - 1 && !loadingMoreRows && page <= totalPages;
                   index = rowsPerPage * page + index;
@@ -294,11 +311,11 @@ export function Table<T>({
                       })}
                     </TableRow>
                   );
-                })}
-              </TableBody>
-            </MuiTable>
-          </TableContainer>
-        )}
+                })
+              )}
+            </TableBody>
+          </MuiTable>
+        </TableContainer>
         {pagination && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
