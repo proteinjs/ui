@@ -80,11 +80,13 @@ export function Table<T>({
   // Pagination fetch
   useEffect(() => {
     const fetchData = async () => {
+      setLoadingRows(true);
       const startIndex = page * rowsPerPage;
       const endIndex = startIndex + rowsPerPage;
       const rowWindow = await tableLoader.load(startIndex, endIndex);
       setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
+      setLoadingRows(false);
     };
 
     if (pagination) {
@@ -92,9 +94,7 @@ export function Table<T>({
     }
   }, [page, rowsPerPage, tableLoader]);
 
-  // Func to be used inside inf scroll component to fetch data
   const fetchDataInfScroll = async () => {
-    console.log('fetching more data');
     setLoadingRows(true);
     const startIndex = rows.length;
     const endIndex = startIndex + rowsPerPage;
@@ -194,7 +194,81 @@ export function Table<T>({
     return value.toString();
   }
 
-  console.log(`[table] hasMore: ${rows.length < totalRows}, rowlength: ${rows.length} and total rows: ${totalRows}`);
+  const renderTableContainer = () => {
+    const totalColumns = columns.length + (buttons && buttons.length > 0 ? 1 : 0);
+
+    return (
+      <TableContainer sx={{ ...tableContainerSx }}>
+        <MuiTable stickyHeader>
+          <TableHead>
+            <TableRow>
+              {buttons && buttons.length > 0 && (
+                <TableCell padding='checkbox'>
+                  <Checkbox
+                    checked={selectAll}
+                    onChange={(event, selected) => toggleSelectAll(selected)}
+                    inputProps={{
+                      'aria-label': 'Select all',
+                    }}
+                  />
+                </TableCell>
+              )}
+              {columns.map((column, index) => (
+                <TableCell key={index}>
+                  <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          {rows.length === 0 && !loadingRows && (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={totalColumns} align='center'>
+                  <Typography>No rows to display.</Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          )}
+          {rows.length > 0 && (
+            <TableBody>
+              {rows.map((row, index) => {
+                index = rowsPerPage * page + index;
+                return (
+                  <TableRow
+                    hover
+                    role='checkbox'
+                    tabIndex={-1}
+                    key={index}
+                    selected={typeof selectedRows[index] !== 'undefined'}
+                  >
+                    {buttons && buttons.length > 0 && (
+                      <TableCell padding='checkbox'>
+                        <Checkbox
+                          checked={typeof selectedRows[index] !== 'undefined'}
+                          onChange={(event, value) => toggleSelectRow(index, row)}
+                          inputProps={{
+                            'aria-label': 'Select row',
+                          }}
+                        />
+                      </TableCell>
+                    )}
+                    {columns.map((column, index) => {
+                      const cellValue = formatCellValue(row[column]);
+                      return (
+                        <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
+                          <Typography>{cellValue}</Typography>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          )}
+        </MuiTable>
+      </TableContainer>
+    );
+  };
 
   return (
     <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -209,75 +283,19 @@ export function Table<T>({
         />
       )}
       <Box id='infinite-scroll-container' sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
-        <InfiniteScroll
-          dataLength={rows.length}
-          next={fetchDataInfScroll}
-          hasMore={rows.length < totalRows}
-          loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
-          scrollableTarget='infinite-scroll-container'
-        >
-          <TableContainer sx={{ ...tableContainerSx }}>
-            <MuiTable stickyHeader>
-              <TableHead>
-                <TableRow>
-                  {buttons && buttons.length > 0 && (
-                    <TableCell padding='checkbox'>
-                      <Checkbox
-                        checked={selectAll}
-                        onChange={(event, selected) => toggleSelectAll(selected)}
-                        inputProps={{
-                          'aria-label': 'Select all',
-                        }}
-                      />
-                    </TableCell>
-                  )}
-                  {columns.map((column, index) => (
-                    <TableCell key={index}>
-                      <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              {rows.length === 0 && !loadingRows && <Typography sx={{ p: 2 }}>No rows to display.</Typography>}
-              {rows.length > 0 && (
-                <TableBody>
-                  {rows.map((row, index) => {
-                    index = rowsPerPage * page + index;
-                    return (
-                      <TableRow
-                        hover
-                        role='checkbox'
-                        tabIndex={-1}
-                        key={index}
-                        selected={typeof selectedRows[index] !== 'undefined'}
-                      >
-                        {buttons && buttons.length > 0 && (
-                          <TableCell padding='checkbox'>
-                            <Checkbox
-                              checked={typeof selectedRows[index] !== 'undefined'}
-                              onChange={(event, value) => toggleSelectRow(index, row)}
-                              inputProps={{
-                                'aria-label': 'Select row',
-                              }}
-                            />
-                          </TableCell>
-                        )}
-                        {columns.map((column, index) => {
-                          const cellValue = formatCellValue(row[column]);
-                          return (
-                            <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
-                              <Typography>{cellValue}</Typography>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              )}
-            </MuiTable>
-          </TableContainer>
-        </InfiniteScroll>
+        {infiniteScroll ? (
+          <InfiniteScroll
+            dataLength={rows.length}
+            next={fetchDataInfScroll}
+            hasMore={rows.length < totalRows}
+            loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+            scrollableTarget='infinite-scroll-container'
+          >
+            {renderTableContainer()}
+          </InfiniteScroll>
+        ) : (
+          renderTableContainer()
+        )}
         {pagination && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
