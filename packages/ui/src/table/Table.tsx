@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TableContainer,
@@ -19,6 +19,7 @@ import { StringUtil } from '@proteinjs/util';
 import { TableLoader } from './TableLoader';
 import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
+import InfiniteScroll from 'react-infinite-scroll-component';
 
 export type TableProps<T> = {
   title?: string;
@@ -71,13 +72,12 @@ export function Table<T>({
   const [page, setPage] = useState(0);
   const [totalRows, setTotalRows] = useState(0);
   const [rows, setRows] = React.useState<T[]>([]);
-  const [loadingMoreRows, setLoadingMoreRows] = useState(false);
+  const [loadingRows, setLoadingRows] = useState(false);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
   const navigate = useNavigate();
-  const totalPages = Math.ceil(totalRows / rowsPerPage) - 1; // pages are zero indexed
 
-  // Pagination fetch data logic
+  // Pagination fetch
   useEffect(() => {
     const fetchData = async () => {
       const startIndex = page * rowsPerPage;
@@ -92,60 +92,35 @@ export function Table<T>({
     }
   }, [page, rowsPerPage, tableLoader]);
 
-  useEffect(() => {
-    const fetchDataInfScroll = async () => {
-      const startIndex = rows.length;
-      const endIndex = startIndex + rowsPerPage;
-      const rowWindow = await tableLoader.load(startIndex, endIndex);
-      setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
-      setTotalRows(rowWindow.totalCount);
-      setLoadingMoreRows(false);
-    };
+  // Func to be used inside inf scroll component to fetch data
+  const fetchDataInfScroll = async () => {
+    console.log('fetching more data');
+    setLoadingRows(true);
+    const startIndex = rows.length;
+    const endIndex = startIndex + rowsPerPage;
+    const rowWindow = await tableLoader.load(startIndex, endIndex);
+    setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
+    setTotalRows(rowWindow.totalCount);
+    setLoadingRows(false);
+  };
 
-    if (infiniteScroll && page <= totalPages) {
-      fetchDataInfScroll();
-    }
-  }, [page, rowsPerPage]);
-
+  // Infinite scroll, reset data fetch for new table loader
   useEffect(() => {
     setPage(0);
     setRows([]);
-    setLoadingMoreRows(true);
+    setLoadingRows(true);
 
-    // Fetch initial data
     const fetchInitialData = async () => {
       const rowWindow = await tableLoader.load(0, rowsPerPage);
       setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
-      setLoadingMoreRows(false);
+      setLoadingRows(false);
     };
 
-    if (infiniteScroll) {
+    if (infiniteScroll && !loadingRows) {
       fetchInitialData();
     }
   }, [tableLoader]);
-
-  const observer = useRef(
-    new IntersectionObserver((entries) => {
-      const first = entries[0];
-      if (first.isIntersecting) {
-        setPage((num) => {
-          console.log(`updating page count from ${num} to ${num + 1}`);
-          return num + 1;
-        });
-      }
-    })
-  );
-
-  const loadMoreRef = useCallback((row: HTMLTableRowElement) => {
-    if (observer.current) {
-      observer.current.disconnect();
-    }
-
-    if (row) {
-      observer.current.observe(row);
-    }
-  }, []);
 
   async function handleRowOnClick(row: T) {
     if (!rowOnClickRedirectUrl) {
@@ -219,103 +194,90 @@ export function Table<T>({
     return value.toString();
   }
 
+  console.log(`[table] hasMore: ${rows.length < totalRows}, rowlength: ${rows.length} and total rows: ${totalRows}`);
+
   return (
-    <Box
-      sx={{
-        overflow: 'auto',
-        width: '100%',
-        height: '100%',
-      }}
-    >
-      <Box>
-        {(title || description || (buttons && buttons.length > 0)) && (
-          <TableToolbar
-            title={title}
-            description={description}
-            selectedRows={Object.values(selectedRows)}
-            content={toolbarContent}
-            buttons={buttons}
-            sx={toolbarSx}
-          />
-        )}
-
-        <TableContainer sx={tableContainerSx}>
-          <MuiTable stickyHeader>
-            <TableHead>
-              <TableRow>
-                {buttons && buttons.length > 0 && (
-                  <TableCell padding='checkbox'>
-                    <Checkbox
-                      checked={selectAll}
-                      onChange={(event, selected) => toggleSelectAll(selected)}
-                      inputProps={{
-                        'aria-label': 'Select all',
-                      }}
-                    />
-                  </TableCell>
-                )}
-                {columns.map((column, index) => (
-                  <TableCell key={index}>
-                    <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-
-            <TableBody>
-              {/* veronica todo: implement pretty loading state */}
-              {loadingMoreRows ? (
+    <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {(title || description || (buttons && buttons.length > 0)) && (
+        <TableToolbar
+          title={title}
+          description={description}
+          selectedRows={Object.values(selectedRows)}
+          content={toolbarContent}
+          buttons={buttons}
+          sx={toolbarSx}
+        />
+      )}
+      <Box id='infinite-scroll-container' sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
+        <InfiniteScroll
+          dataLength={rows.length}
+          next={fetchDataInfScroll}
+          hasMore={rows.length < totalRows}
+          loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+          scrollableTarget='infinite-scroll-container'
+        >
+          <TableContainer sx={{ ...tableContainerSx }}>
+            <MuiTable stickyHeader>
+              <TableHead>
                 <TableRow>
-                  <TableCell>
-                    <Typography>Loading...</Typography>
-                  </TableCell>
+                  {buttons && buttons.length > 0 && (
+                    <TableCell padding='checkbox'>
+                      <Checkbox
+                        checked={selectAll}
+                        onChange={(event, selected) => toggleSelectAll(selected)}
+                        inputProps={{
+                          'aria-label': 'Select all',
+                        }}
+                      />
+                    </TableCell>
+                  )}
+                  {columns.map((column, index) => (
+                    <TableCell key={index}>
+                      <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                    </TableCell>
+                  ))}
                 </TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell>
-                    <Typography>No rows to display.</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((row, index) => {
-                  const isLastRow =
-                    infiniteScroll && index === rows.length - 1 && !loadingMoreRows && page <= totalPages;
-                  index = rowsPerPage * page + index;
-                  return (
-                    <TableRow
-                      hover
-                      role='checkbox'
-                      tabIndex={-1}
-                      key={index}
-                      selected={typeof selectedRows[index] !== 'undefined'}
-                      ref={isLastRow ? loadMoreRef : null}
-                    >
-                      {buttons && buttons.length > 0 && (
-                        <TableCell padding='checkbox'>
-                          <Checkbox
-                            checked={typeof selectedRows[index] !== 'undefined'}
-                            onChange={(event, value) => toggleSelectRow(index, row)}
-                            inputProps={{
-                              'aria-label': 'Select row',
-                            }}
-                          />
-                        </TableCell>
-                      )}
-                      {columns.map((column, index) => {
-                        const cellValue = formatCellValue(row[column]);
-                        return (
-                          <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
-                            <Typography>{cellValue}</Typography>
+              </TableHead>
+              {rows.length === 0 && !loadingRows && <Typography sx={{ p: 2 }}>No rows to display.</Typography>}
+              {rows.length > 0 && (
+                <TableBody>
+                  {rows.map((row, index) => {
+                    index = rowsPerPage * page + index;
+                    return (
+                      <TableRow
+                        hover
+                        role='checkbox'
+                        tabIndex={-1}
+                        key={index}
+                        selected={typeof selectedRows[index] !== 'undefined'}
+                      >
+                        {buttons && buttons.length > 0 && (
+                          <TableCell padding='checkbox'>
+                            <Checkbox
+                              checked={typeof selectedRows[index] !== 'undefined'}
+                              onChange={(event, value) => toggleSelectRow(index, row)}
+                              inputProps={{
+                                'aria-label': 'Select row',
+                              }}
+                            />
                           </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  );
-                })
+                        )}
+                        {columns.map((column, index) => {
+                          const cellValue = formatCellValue(row[column]);
+                          return (
+                            <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
+                              <Typography>{cellValue}</Typography>
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
               )}
-            </TableBody>
-          </MuiTable>
-        </TableContainer>
+            </MuiTable>
+          </TableContainer>
+        </InfiniteScroll>
         {pagination && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
