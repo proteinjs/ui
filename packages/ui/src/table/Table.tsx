@@ -21,10 +21,19 @@ import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
 import InfiniteScroll from 'react-infinite-scroll-component';
 
+export type CustomRenderer<T> = (value: T[keyof T]) => React.ReactNode;
+
+export type ColumnConfig<T> = {
+  [K in keyof T]?: {
+    renderer?: CustomRenderer<T>;
+  };
+};
+
 export type TableProps<T> = {
   title?: string;
   description?: () => JSX.Element;
   columns: (keyof T)[];
+  columnConfig?: ColumnConfig<T>;
   tableLoader: TableLoader<T>;
   rowOnClickRedirectUrl?: (row: T) => Promise<string>;
   buttons?: TableButton<T>[];
@@ -58,6 +67,7 @@ export function Table<T>({
   title,
   description,
   columns,
+  columnConfig = {},
   tableLoader,
   rowOnClickRedirectUrl,
   pagination = false,
@@ -75,6 +85,7 @@ export function Table<T>({
   const [loadingRows, setLoadingRows] = useState(false);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
   const navigate = useNavigate();
 
   // Pagination fetch
@@ -87,6 +98,9 @@ export function Table<T>({
       setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
       setLoadingRows(false);
+      if (isFirstLoad) {
+        setIsFirstLoad(false);
+      }
     };
 
     if (pagination) {
@@ -115,6 +129,9 @@ export function Table<T>({
       setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
       setLoadingRows(false);
+      if (isFirstLoad) {
+        setIsFirstLoad(false);
+      }
     };
 
     if (infiniteScroll && !loadingRows) {
@@ -174,7 +191,13 @@ export function Table<T>({
     setSelectAll(selected);
   }
 
-  function formatCellValue(value: any): string {
+  function formatCellValue(value: any, column: keyof T): React.ReactNode {
+    const customRenderer = columnConfig[column]?.renderer;
+    if (customRenderer) {
+      return customRenderer(value);
+    }
+
+    // Default formatting logic
     if (value == null) {
       return '';
     }
@@ -220,6 +243,15 @@ export function Table<T>({
               ))}
             </TableRow>
           </TableHead>
+          {isFirstLoad && (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={totalColumns} sx={{ p: 2 }}>
+                  <Typography>Loading...</Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          )}
           {rows.length === 0 && !loadingRows && (
             <TableBody>
               <TableRow>
@@ -253,7 +285,7 @@ export function Table<T>({
                       </TableCell>
                     )}
                     {columns.map((column, index) => {
-                      const cellValue = formatCellValue(row[column]);
+                      const cellValue = formatCellValue(row[column], column);
                       return (
                         <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
                           <Typography>{cellValue}</Typography>
