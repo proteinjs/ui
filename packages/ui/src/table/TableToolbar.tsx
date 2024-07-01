@@ -1,37 +1,41 @@
 import React from 'react';
 import { TableButton } from './TableButton';
-import { IconButton, Toolbar, Tooltip, Typography, lighten } from '@mui/material';
+import { IconButton, Toolbar, ToolbarProps, Tooltip, Typography, lighten, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router';
 
 export type TableToolbarProps = {
   title?: string;
   selectedRows: any[];
   description?: () => JSX.Element;
+  content?: React.ReactNode;
   buttons?: TableButton<any>[];
+  sx?: ToolbarProps['sx'];
 };
 
 export const TableToolbar = (props: TableToolbarProps) => {
-  const { title, selectedRows, buttons } = props;
+  const { title, selectedRows, content, buttons, sx } = props;
   const navigate = useNavigate();
+  const theme = useTheme();
   return (
     <Toolbar
-      sx={(theme) => {
-        if (selectedRows.length > 0) {
-          return theme.palette.mode === 'light'
-            ? {
-                color: theme.palette.info.main,
-                backgroundColor: lighten(theme.palette.info.light, 0.85),
-              }
+      sx={() => {
+        const defaultSx =
+          selectedRows.length > 0
+            ? theme.palette.mode === 'light'
+              ? {
+                  color: theme.palette.info.main,
+                  backgroundColor: lighten(theme.palette.info.light, 0.85),
+                }
+              : {
+                  color: theme.palette.info.light,
+                  backgroundColor: theme.palette.info.dark,
+                }
             : {
-                color: theme.palette.info.light,
-                backgroundColor: theme.palette.info.dark,
+                paddingLeft: theme.spacing(2),
+                paddingRight: theme.spacing(1),
               };
-        }
 
-        return {
-          paddingLeft: theme.spacing(2),
-          paddingRight: theme.spacing(1),
-        };
+        return sx ? { ...defaultSx, ...sx } : defaultSx;
       }}
     >
       <div
@@ -56,6 +60,7 @@ export const TableToolbar = (props: TableToolbarProps) => {
           flex: '1 1 100%',
         }}
       />
+      {content && content}
       <div>
         <Buttons />
       </div>
