@@ -21,11 +21,12 @@ import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
 import InfiniteScroll from 'react-infinite-scroll-component';
 
-export type CustomRenderer<T> = (value: T[keyof T]) => React.ReactNode;
-
+type ColumnValue<T, K extends keyof T> = T[K];
+export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
 export type ColumnConfig<T> = {
   [K in keyof T]?: {
-    renderer?: CustomRenderer<T>;
+    renderer?: (value: T[K], row: T) => React.ReactNode;
+    header?: string | React.ReactNode;
   };
 };
 
@@ -91,13 +92,11 @@ export function Table<T>({
   // Pagination fetch
   useEffect(() => {
     const fetchData = async () => {
-      setLoadingRows(true);
       const startIndex = page * rowsPerPage;
       const endIndex = startIndex + rowsPerPage;
       const rowWindow = await tableLoader.load(startIndex, endIndex);
       setRows(rowWindow.rows);
       setTotalRows(rowWindow.totalCount);
-      setLoadingRows(false);
       if (isFirstLoad) {
         setIsFirstLoad(false);
       }
@@ -134,7 +133,7 @@ export function Table<T>({
       }
     };
 
-    if (infiniteScroll && !loadingRows) {
+    if (infiniteScroll) {
       fetchInitialData();
     }
   }, [tableLoader]);
@@ -191,10 +190,10 @@ export function Table<T>({
     setSelectAll(selected);
   }
 
-  function formatCellValue(value: any, column: keyof T): React.ReactNode {
+  function formatCellValue(value: any, column: keyof T, row: T): React.ReactNode {
     const customRenderer = columnConfig[column]?.renderer;
     if (customRenderer) {
-      return customRenderer(value);
+      return customRenderer(value, row);
     }
 
     // Default formatting logic
@@ -238,7 +237,9 @@ export function Table<T>({
               )}
               {columns.map((column, index) => (
                 <TableCell key={index}>
-                  <Typography variant='h6'>{StringUtil.humanizeCamel(column as string)}</Typography>
+                  <Typography variant='h6'>
+                    {columnConfig[column]?.header || StringUtil.humanizeCamel(column as string)}
+                  </Typography>
                 </TableCell>
               ))}
             </TableRow>
@@ -272,12 +273,17 @@ export function Table<T>({
                     tabIndex={-1}
                     key={index}
                     selected={typeof selectedRows[index] !== 'undefined'}
+                    onClick={(event: any) => handleRowOnClick(row)}
                   >
                     {buttons && buttons.length > 0 && (
                       <TableCell padding='checkbox'>
                         <Checkbox
                           checked={typeof selectedRows[index] !== 'undefined'}
-                          onChange={(event, value) => toggleSelectRow(index, row)}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            toggleSelectRow(index, row);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
                           inputProps={{
                             'aria-label': 'Select row',
                           }}
@@ -285,9 +291,9 @@ export function Table<T>({
                       </TableCell>
                     )}
                     {columns.map((column, index) => {
-                      const cellValue = formatCellValue(row[column], column);
+                      const cellValue = formatCellValue(row[column], column, row);
                       return (
-                        <TableCell key={index} onClick={(event: any) => handleRowOnClick(row)}>
+                        <TableCell key={index}>
                           <Typography>{cellValue}</Typography>
                         </TableCell>
                       );
