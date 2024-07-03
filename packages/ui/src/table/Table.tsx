@@ -20,6 +20,7 @@ import { TableLoader } from './TableLoader';
 import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
 import InfiniteScroll from 'react-infinite-scroll-component';
+import { useTableQuery } from './tableData';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
@@ -81,62 +82,49 @@ export function Table<T>({
 }: TableProps<T>) {
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [page, setPage] = useState(0);
-  const [totalRows, setTotalRows] = useState(0);
-  const [rows, setRows] = React.useState<T[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const navigate = useNavigate();
 
-  // Pagination fetch
-  useEffect(() => {
-    const fetchData = async () => {
-      const startIndex = page * rowsPerPage;
-      const endIndex = startIndex + rowsPerPage;
-      const rowWindow = await tableLoader.load(startIndex, endIndex);
-      setRows(rowWindow.rows);
-      setTotalRows(rowWindow.totalCount);
-      if (isFirstLoad) {
-        setIsFirstLoad(false);
-      }
-    };
+  const startIndex = page * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  // TODO useTableQuery hook is not taking in the new TableLoader
+  const { data: rowWindow, isLoading, isFetching, error } = useTableQuery<T>(tableLoader, startIndex, endIndex);
+  const rows = rowWindow?.rows || [];
+  const totalRows = rowWindow?.totalCount || 0;
 
-    if (pagination) {
-      fetchData();
-    }
-  }, [page, rowsPerPage, tableLoader]);
+  // const fetchDataInfScroll = async () => {
+  //   setLoadingRows(true);
+  //   const startIndex = rows.length;
+  //   const endIndex = startIndex + rowsPerPage;
+  //   const rowWindow = await tableLoader.load(startIndex, endIndex);
+  //   setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
+  //   setTotalRows(rowWindow.totalCount);
+  //   setLoadingRows(false);
+  // };
 
-  const fetchDataInfScroll = async () => {
-    setLoadingRows(true);
-    const startIndex = rows.length;
-    const endIndex = startIndex + rowsPerPage;
-    const rowWindow = await tableLoader.load(startIndex, endIndex);
-    setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
-    setTotalRows(rowWindow.totalCount);
-    setLoadingRows(false);
-  };
+  // // Infinite scroll, reset data fetch for new table loader
+  // useEffect(() => {
+  //   setPage(0);
+  //   setRows([]);
+  //   setLoadingRows(true);
 
-  // Infinite scroll, reset data fetch for new table loader
-  useEffect(() => {
-    setPage(0);
-    setRows([]);
-    setLoadingRows(true);
+  //   const fetchInitialData = async () => {
+  //     const rowWindow = await tableLoader.load(0, rowsPerPage);
+  //     setRows(rowWindow.rows);
+  //     setTotalRows(rowWindow.totalCount);
+  //     setLoadingRows(false);
+  //     if (isFirstLoad) {
+  //       setIsFirstLoad(false);
+  //     }
+  //   };
 
-    const fetchInitialData = async () => {
-      const rowWindow = await tableLoader.load(0, rowsPerPage);
-      setRows(rowWindow.rows);
-      setTotalRows(rowWindow.totalCount);
-      setLoadingRows(false);
-      if (isFirstLoad) {
-        setIsFirstLoad(false);
-      }
-    };
-
-    if (infiniteScroll) {
-      fetchInitialData();
-    }
-  }, [tableLoader]);
+  //   if (infiniteScroll) {
+  //     fetchInitialData();
+  //   }
+  // }, [tableLoader]);
 
   async function handleRowOnClick(row: T) {
     if (!rowOnClickRedirectUrl) {
@@ -322,15 +310,16 @@ export function Table<T>({
       )}
       <Box id='infinite-scroll-container' sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
         {infiniteScroll ? (
-          <InfiniteScroll
-            dataLength={rows.length}
-            next={fetchDataInfScroll}
-            hasMore={rows.length < totalRows}
-            loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
-            scrollableTarget='infinite-scroll-container'
-          >
-            {renderTableContainer()}
-          </InfiniteScroll>
+          <div />
+          // <InfiniteScroll
+          //   dataLength={rows.length}
+          //   next={fetchDataInfScroll}
+          //   hasMore={rows.length < totalRows}
+          //   loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+          //   scrollableTarget='infinite-scroll-container'
+          // >
+          //   {renderTableContainer()}
+          // </InfiniteScroll>
         ) : (
           renderTableContainer()
         )}
