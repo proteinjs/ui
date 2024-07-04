@@ -298,7 +298,7 @@ export function Table<T>({
         ) : (
           renderTableContainer()
         )}
-        {pagination && (
+        {pagination && !isLoading && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
             component='div'
