@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TableContainer,
@@ -13,6 +13,7 @@ import {
   Box,
   TableContainerOwnProps,
   ToolbarProps,
+  CircularProgress,
 } from '@mui/material';
 import moment from 'moment';
 import { StringUtil } from '@proteinjs/util';
@@ -20,7 +21,7 @@ import { TableLoader } from './TableLoader';
 import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
 import InfiniteScroll from 'react-infinite-scroll-component';
-import { useTableQuery } from './tableData';
+import { useTableData } from './tableData';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
@@ -82,49 +83,24 @@ export function Table<T>({
 }: TableProps<T>) {
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [page, setPage] = useState(0);
-  const [loadingRows, setLoadingRows] = useState(false);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
   const navigate = useNavigate();
 
-  const startIndex = page * rowsPerPage;
-  const endIndex = startIndex + rowsPerPage;
-  // TODO useTableQuery hook is not taking in the new TableLoader
-  const { data: rowWindow, isLoading, isFetching, error } = useTableQuery<T>(tableLoader, startIndex, endIndex);
-  const rows = rowWindow?.rows || [];
-  const totalRows = rowWindow?.totalCount || 0;
+  const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
+    useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll);
 
-  // const fetchDataInfScroll = async () => {
-  //   setLoadingRows(true);
-  //   const startIndex = rows.length;
-  //   const endIndex = startIndex + rowsPerPage;
-  //   const rowWindow = await tableLoader.load(startIndex, endIndex);
-  //   setRows((prevRows) => [...prevRows, ...rowWindow.rows]);
-  //   setTotalRows(rowWindow.totalCount);
-  //   setLoadingRows(false);
-  // };
+  useEffect(() => {
+    resetQuery();
+    setPage(0);
+  }, [tableLoader, resetQuery]);
 
-  // // Infinite scroll, reset data fetch for new table loader
-  // useEffect(() => {
-  //   setPage(0);
-  //   setRows([]);
-  //   setLoadingRows(true);
-
-  //   const fetchInitialData = async () => {
-  //     const rowWindow = await tableLoader.load(0, rowsPerPage);
-  //     setRows(rowWindow.rows);
-  //     setTotalRows(rowWindow.totalCount);
-  //     setLoadingRows(false);
-  //     if (isFirstLoad) {
-  //       setIsFirstLoad(false);
-  //     }
-  //   };
-
-  //   if (infiniteScroll) {
-  //     fetchInitialData();
-  //   }
-  // }, [tableLoader]);
+  const handleFetchNextPage = useCallback(() => {
+    if (!isFetchingNextPage) {
+      console.log('Fetching next page');
+      fetchNextPage();
+    }
+  }, [fetchNextPage, isFetchingNextPage]);
 
   async function handleRowOnClick(row: T) {
     if (!rowOnClickRedirectUrl) {
@@ -232,16 +208,16 @@ export function Table<T>({
               ))}
             </TableRow>
           </TableHead>
-          {isFirstLoad && (
+          {isLoading && (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={totalColumns} sx={{ p: 2 }}>
-                  <Typography>Loading...</Typography>
+                <TableCell colSpan={totalColumns} align='center' sx={{ py: 3 }}>
+                  <CircularProgress />
                 </TableCell>
               </TableRow>
             </TableBody>
           )}
-          {rows.length === 0 && !loadingRows && (
+          {rows.length === 0 && !isLoading && (
             <TableBody>
               <TableRow>
                 <TableCell colSpan={totalColumns} align='center'>
@@ -310,16 +286,15 @@ export function Table<T>({
       )}
       <Box id='infinite-scroll-container' sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
         {infiniteScroll ? (
-          <div />
-          // <InfiniteScroll
-          //   dataLength={rows.length}
-          //   next={fetchDataInfScroll}
-          //   hasMore={rows.length < totalRows}
-          //   loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
-          //   scrollableTarget='infinite-scroll-container'
-          // >
-          //   {renderTableContainer()}
-          // </InfiniteScroll>
+          <InfiniteScroll
+            dataLength={rows.length}
+            next={handleFetchNextPage}
+            hasMore={!!hasNextPage}
+            loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+            scrollableTarget='infinite-scroll-container'
+          >
+            {renderTableContainer()}
+          </InfiniteScroll>
         ) : (
           renderTableContainer()
         )}
@@ -327,7 +302,7 @@ export function Table<T>({
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
             component='div'
-            count={totalRows}
+            count={totalRows || 0}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={(event, newPage) => setPage(newPage)}

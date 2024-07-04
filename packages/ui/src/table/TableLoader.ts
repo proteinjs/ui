@@ -4,13 +4,12 @@ export type RowWindow<T> = {
 };
 
 export type TableLoader<T> = {
+  // TODO: make this optional
   reactQueryKeys: {
     /** Unique name of data set */
     dataKey: string;
-    /** Unique name of the query applied to the data */
+    /** Unique name to differentiate between queries on the data set */
     dataQueryKey: string;
-    /** Unique property of each row object */
-    rowKey: string;
   };
   load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>;
 };
