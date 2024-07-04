@@ -8,7 +8,6 @@ interface SearchInputProps {
   value: string;
   onChange: (value: string) => void;
   onClear?: () => void;
-  debounceTime?: number;
   placeholder?: string;
   sx?: SxProps<Theme>;
   inputSx?: SxProps<Theme>;
@@ -19,30 +18,21 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   value,
   onChange,
   onClear,
-  debounceTime = 500,
   placeholder = 'Search...',
   sx,
   inputSx,
   variant = 'outlined',
 }) => {
-  const searchDebouncerRef = useRef(new Debouncer(debounceTime));
-
-  const handleChangeSearchInput = useCallback<React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement>>(
-    (event) => {
-      const newValue = event.target.value;
-      searchDebouncerRef.current.debounce(() => {
-        onChange(newValue);
-      });
-    },
-    [onChange]
-  );
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(event.target.value);
+  };
 
   return (
     <Box sx={sx}>
       <TextField
         variant={variant}
         value={value}
-        onChange={handleChangeSearchInput}
+        onChange={handleChange}
         placeholder={placeholder}
         InputProps={{
           startAdornment: (
