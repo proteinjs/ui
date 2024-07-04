@@ -142,10 +142,10 @@ export const useInfiniteScrollTableQuery = <T>(
   });
 };
 
-export const useTableMutation = <T>(
+export const useTableMutation = <T, TVariables = unknown>(
   tableLoader: TableLoader<T>,
-  mutationFn: () => Promise<void>
-): UseMutationResult<void, Error, unknown> => {
+  mutationFn: (variables: TVariables) => Promise<void>
+): UseMutationResult<void, Error, TVariables> => {
   const queryClient = useQueryClient();
   const { reactQueryKeys } = tableLoader;
 
@@ -155,13 +155,12 @@ export const useTableMutation = <T>(
 
   const { dataKey } = reactQueryKeys;
 
-  return useMutation<void, Error, unknown>(mutationFn, {
+  return useMutation<void, Error, TVariables>(mutationFn, {
     onSuccess: (): void => {
-      // Invalidate and refetch
+      // Invalidate all tables that use the same data key
       queryClient.invalidateQueries({ queryKey: [dataKey] });
     },
     onError: (error: Error): void => {
-      // Handle the error, e.g., show a notification
       console.error('Mutation failed:', error);
     },
   });
