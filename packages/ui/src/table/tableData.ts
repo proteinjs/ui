@@ -8,7 +8,7 @@ import {
   UseInfiniteQueryResult,
   QueryFunctionContext,
 } from 'react-query';
-import { TableLoader, RowWindow } from './TableLoader';
+import { TableLoader, RowWindow, generateDefaultReactQueryKeys } from './TableLoader';
 import { useCallback, useMemo } from 'react';
 
 export function useTableData<T>(
@@ -17,13 +17,16 @@ export function useTableData<T>(
   page: number,
   infiniteScroll: boolean
 ) {
+  if (!tableLoader.reactQueryKeys) {
+    tableLoader.reactQueryKeys = generateDefaultReactQueryKeys();
+  }
+
   const startIndex = useMemo(() => page * rowsPerPage, [page, rowsPerPage]);
   const endIndex = useMemo(() => startIndex + rowsPerPage, [startIndex, rowsPerPage]);
 
   const {
     data: paginatedData,
     isLoading: isPaginatedLoading,
-    isFetching: isPaginatedFetching,
     error: paginatedError,
     refetch: refetchPaginatedData,
   } = usePaginationTableQuery<T>(tableLoader, startIndex, endIndex);
@@ -67,6 +70,8 @@ export function useTableData<T>(
   const resetQuery = useCallback(() => {
     if (infiniteScroll) {
       refetchInfiniteData();
+    } else {
+      refetchPaginatedData();
     }
   }, [infiniteScroll, refetchInfiniteData]);
 

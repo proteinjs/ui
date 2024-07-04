@@ -97,7 +97,6 @@ export function Table<T>({
 
   const handleFetchNextPage = useCallback(() => {
     if (!isFetchingNextPage) {
-      console.log('Fetching next page');
       fetchNextPage();
     }
   }, [fetchNextPage, isFetchingNextPage]);

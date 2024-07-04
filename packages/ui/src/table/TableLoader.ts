@@ -5,6 +5,13 @@ export type RowWindow<T> = {
   totalCount: number;
 };
 
+export function generateDefaultReactQueryKeys(): ReactQueryKeys {
+  return {
+    dataKey: uuidv1(),
+    dataQueryKey: uuidv1(),
+  };
+}
+
 export type ReactQueryKeys = {
   /** Unique name of data set */
   dataKey: string;
@@ -16,13 +23,6 @@ export type TableLoader<T> = {
   reactQueryKeys?: ReactQueryKeys;
   load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>;
 };
-
-export function generateDefaultReactQueryKeys(): ReactQueryKeys {
-  return {
-    dataKey: uuidv1(),
-    dataQueryKey: uuidv1(),
-  };
-}
 
 export class StaticTableLoader<T> implements TableLoader<T> {
   constructor(
