@@ -21,7 +21,7 @@ export type ReactQueryKeys = {
 
 export type TableLoader<T> = {
   reactQueryKeys?: ReactQueryKeys;
-  load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>;
+  load: (startIndex: number, endIndex: number, skipRowCount?: boolean) => Promise<RowWindow<T>>;
 };
 
 export class StaticTableLoader<T> implements TableLoader<T> {

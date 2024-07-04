@@ -40,29 +40,15 @@ export type TableProps<T> = {
   tableLoader: TableLoader<T>;
   rowOnClickRedirectUrl?: (row: T) => Promise<string>;
   buttons?: TableButton<T>[];
-  /**
-   * Should not use if you have infiniteScroll set to true. Defaults to false.
-   *  */
+  /** If true, use pagination for table page navigation, if false uses infinite scroll. Defaults to false. */
   pagination?: boolean;
-  /**
-   * Should not use if you have pagination set to true. Defaults to true.
-   * */
-  infiniteScroll?: boolean;
-  /*
-   * Pertains to pagination or infinite scroll, depending on which is enabled.
-   * */
+  /* Pertains to pagination or infinite scroll, depending on which is enabled. */
   defaultRowsPerPage?: number;
-  /*
-   * Styling set on the root element of the toolbar.
-   * */
+  /* Styling set on the root element of the toolbar. */
   toolbarSx?: ToolbarProps['sx'];
-  /*
-   * Content that will be displayed in the toolbar section of the table.
-   * */
+  /* Content that will be displayed in the toolbar section of the table. */
   toolbarContent?: React.ReactNode;
-  /*
-   * Styling set on the container element of the table.
-   * */
+  /* Styling set on the container element of the table. */
   tableContainerSx?: TableContainerOwnProps['sx'];
 };
 
@@ -74,13 +60,13 @@ export function Table<T>({
   tableLoader,
   rowOnClickRedirectUrl,
   pagination = false,
-  infiniteScroll = !pagination,
   defaultRowsPerPage = 10,
   buttons,
   tableContainerSx,
   toolbarSx,
   toolbarContent,
 }: TableProps<T>) {
+  const infiniteScroll = !pagination;
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
   const [page, setPage] = useState(0);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});

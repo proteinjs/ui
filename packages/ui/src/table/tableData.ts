@@ -29,7 +29,7 @@ export function useTableData<T>(
     isLoading: isPaginatedLoading,
     error: paginatedError,
     refetch: refetchPaginatedData,
-  } = usePaginationTableQuery<T>(tableLoader, startIndex, endIndex);
+  } = usePaginationTableQuery<T>(tableLoader, startIndex, endIndex, !infiniteScroll);
 
   const {
     data: infiniteData,
@@ -92,7 +92,8 @@ type QueryKeyType = [string, string, number, number];
 export const usePaginationTableQuery = <T>(
   tableLoader: TableLoader<T>,
   startIndex: number,
-  endIndex: number
+  endIndex: number,
+  enabled = false
 ): UseQueryResult<RowWindow<T>, Error> => {
   const { reactQueryKeys } = tableLoader;
 
@@ -106,6 +107,7 @@ export const usePaginationTableQuery = <T>(
     [dataKey, dataQueryKey, startIndex, endIndex],
     async () => await tableLoader.load(startIndex, endIndex),
     {
+      enabled,
       refetchOnWindowFocus: false,
     }
   );
@@ -126,8 +128,8 @@ export const useInfiniteScrollTableQuery = <T>(
     pageParam = { startIndex: 0, endIndex: rowsPerPage },
   }: QueryFunctionContext<[string, string], { startIndex: number; endIndex: number }>) => {
     const { startIndex, endIndex } = pageParam;
-    // veronica todo: prevent get row count for infinite scroll
-    return await tableLoader.load(startIndex, endIndex);
+    // skip row count query since it is not utilized in infinite scroll implementation
+    return await tableLoader.load(startIndex, endIndex, true);
   };
 
   const { dataKey, dataQueryKey } = reactQueryKeys;
