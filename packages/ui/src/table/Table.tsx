@@ -81,6 +81,11 @@ export function Table<T>({
     setPage(0);
   }, [tableLoader, resetQuery]);
 
+  useEffect(() => {
+    setSelectedRows({});
+    setSelectAll(false);
+  }, [rows]);
+
   const handleFetchNextPage = useCallback(() => {
     if (!isFetchingNextPage) {
       fetchNextPage();
