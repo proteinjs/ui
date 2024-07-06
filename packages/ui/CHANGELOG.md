@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.8...@proteinjs/ui@2.1.0) (2024-07-06)
+
+
+### Features
+
+* add react query and infinite scroll to table ([#6](https://github.com/proteinjs/ui/issues/6)) ([b9cb502](https://github.com/proteinjs/ui/commit/b9cb5028c2544ca9e50dbee7af69da15a80b9c66))
+
+
+
+
+
 ## [2.0.7](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.6...@proteinjs/ui@2.0.7) (2024-05-21)
 
 **Note:** Version bump only for package @proteinjs/ui
