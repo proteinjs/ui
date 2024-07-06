@@ -1,14 +1,38 @@
+import { v1 as uuidv1 } from 'uuid';
+
 export type RowWindow<T> = {
   rows: T[];
   totalCount: number;
 };
 
+export function generateDefaultReactQueryKeys(): ReactQueryKeys {
+  return {
+    dataKey: uuidv1(),
+    dataQueryKey: uuidv1(),
+  };
+}
+
+export type ReactQueryKeys = {
+  /** Unique name of data set */
+  dataKey: string;
+  /** Unique name to differentiate between queries on the data set */
+  dataQueryKey: string;
+};
+
 export type TableLoader<T> = {
-  load: (startIndex: number, endIndex: number) => Promise<RowWindow<T>>;
+  reactQueryKeys?: ReactQueryKeys;
+  load: (startIndex: number, endIndex: number, skipRowCount?: boolean) => Promise<RowWindow<T>>;
 };
 
 export class StaticTableLoader<T> implements TableLoader<T> {
-  constructor(private list: T[]) {}
+  constructor(
+    private list: T[],
+    public reactQueryKeys?: TableLoader<T>['reactQueryKeys']
+  ) {
+    if (!this.reactQueryKeys) {
+      this.reactQueryKeys = generateDefaultReactQueryKeys();
+    }
+  }
 
   async load(startIndex: number, endIndex: number) {
     return {

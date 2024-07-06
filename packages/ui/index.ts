@@ -17,3 +17,6 @@ export * from './src/container/NavMenu';
 export * from './src/table/Table';
 export * from './src/table/TableButton';
 export * from './src/table/TableLoader';
+export * from './src/table/tableData';
+
+export * from './src/components/SearchInput';
