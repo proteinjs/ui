@@ -44,7 +44,7 @@ export function useTableData<T>(
   const rows = useMemo(
     () =>
       infiniteScroll
-        ? (infiniteData?.pages || []).reduce((acc, page) => acc.concat(page.rows), [] as T[])
+        ? (infiniteData?.pages || []).reduce((acc: T[], page: RowWindow<T>) => acc.concat(page.rows), [] as T[])
         : paginatedData?.rows || [],
     [infiniteScroll, infiniteData, paginatedData]
   );
@@ -135,7 +135,7 @@ export const useInfiniteScrollTableQuery = <T>(
   const { dataKey, dataQueryKey } = reactQueryKeys;
   return useInfiniteQuery([dataKey, dataQueryKey], fetchTableData, {
     enabled,
-    getNextPageParam: (lastPage, pages) => {
+    getNextPageParam: (lastPage: RowWindow<T>, pages: RowWindow<T>[]) => {
       if (lastPage.rows.length < rowsPerPage) {
         return undefined; // No more pages to load
       }
