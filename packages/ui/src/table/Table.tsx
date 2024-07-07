@@ -20,8 +20,8 @@ import { StringUtil } from '@proteinjs/util';
 import { TableLoader } from './TableLoader';
 import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
-import InfiniteScroll from 'react-infinite-scroll-component';
 import { useTableData } from './tableData';
+import { InfiniteScroll } from './InfiniteScroll';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
