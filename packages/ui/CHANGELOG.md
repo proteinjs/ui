@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.1.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.0...@proteinjs/ui@2.1.1) (2024-07-07)
+
+
+### Bug Fixes
+
+* inf scroll should fetch more when rows don't fill container ([fb1526e](https://github.com/proteinjs/ui/commit/fb1526e36b83f0227285114d35d9e7109c896d9b))
+
+
+
+
+
 # [2.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.0.8...@proteinjs/ui@2.1.0) (2024-07-06)
 
 
