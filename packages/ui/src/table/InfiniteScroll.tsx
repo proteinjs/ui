@@ -1,32 +1,34 @@
 import { Box, BoxProps } from '@mui/material';
-import React, { useEffect, useRef, ReactNode } from 'react';
-import InfiniteScrollComponent from 'react-infinite-scroll-component';
+import React, { useEffect, useRef } from 'react';
+import InfiniteScrollComponent, { Props as InfiniteScrollComponentProps } from 'react-infinite-scroll-component';
 
-interface InfiniteScrollProps {
-  children: ReactNode;
-  dataLength: number;
-  next: () => void;
-  hasMore: boolean;
-  loader?: ReactNode;
-  scrollableTarget?: string;
+interface InfiniteScrollProps extends InfiniteScrollComponentProps {
   sx?: BoxProps['sx'];
 }
 
 export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
   children,
-  dataLength,
   next,
   hasMore,
-  loader,
   scrollableTarget,
   sx,
+  ...otherProps
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const getScrollableTarget = () => {
+      if (typeof scrollableTarget === 'string') {
+        return document.getElementById(scrollableTarget);
+      } else if (scrollableTarget instanceof HTMLElement) {
+        return scrollableTarget;
+      }
+      return null;
+    };
+
     const options = {
-      root: scrollableTarget ? document.getElementById(scrollableTarget) : null,
+      root: getScrollableTarget(),
       rootMargin: '0px 0px 100px 0px',
       threshold: 0.1,
     };
@@ -51,13 +53,7 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
 
   return (
     <Box ref={containerRef} sx={sx}>
-      <InfiniteScrollComponent
-        dataLength={dataLength}
-        next={next}
-        hasMore={hasMore}
-        loader={loader}
-        scrollableTarget={scrollableTarget}
-      >
+      <InfiniteScrollComponent next={next} hasMore={hasMore} scrollableTarget={scrollableTarget} {...otherProps}>
         {children}
       </InfiniteScrollComponent>
       {hasMore && (
