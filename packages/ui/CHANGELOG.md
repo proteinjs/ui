@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.1.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.2...@proteinjs/ui@2.1.3) (2024-07-08)
+
+
+### Bug Fixes
+
+* add all props for infinite scroll component ([b66170a](https://github.com/proteinjs/ui/commit/b66170ac00f473bc09b547818d58a911931186fe))
+
+
+
+
+
 ## [2.1.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.0...@proteinjs/ui@2.1.1) (2024-07-07)
 
 
