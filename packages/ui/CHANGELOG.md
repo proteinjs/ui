@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.2.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.3...@proteinjs/ui@2.2.0) (2024-07-09)
+
+
+### Features
+
+* button alignment and maxwidth on form ([31e7873](https://github.com/proteinjs/ui/commit/31e78738c267c90dc0bc14d7c6a0a91fd0d57364))
+
+
+
+
+
 ## [2.1.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.2...@proteinjs/ui@2.1.3) (2024-07-08)
 
 
