@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Container, Grid, IconButton, Typography, LinearProgress } from '@mui/material';
+import { Button, Container, Grid, IconButton, Typography, LinearProgress, Stack } from '@mui/material';
 import queryString from 'query-string';
 import { Field, FieldComponent, Fields } from './Field';
 import { FormButton, FormButtons } from './FormButton';
@@ -13,6 +13,7 @@ export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   buttons: B;
   onLoad?: (fields: F, buttons: B) => Promise<void>;
   onLoadProgressMessage?: string;
+  maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
 } & Partial<WithRouterProps>;
 
 export type FormState<F extends Fields> = {
@@ -131,7 +132,7 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 
   render() {
     return (
-      <Container sx={{ padding: 0 }} maxWidth={this.getContainerMaxWidth()}>
+      <Container sx={{ padding: 0 }} maxWidth={this.props.maxWidth || this.getContainerMaxWidth()}>
         <form autoComplete='off'>
           <Grid container>
             {this.Title()}
@@ -369,11 +370,49 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private Buttons() {
+    const leftAlignedButtons: JSX.Element[] = [];
+    const rightAlignedButtons: JSX.Element[] = [];
+
+    Object.keys(this.props.buttons)
+      .map((buttonPropertyName) => this.props.buttons[buttonPropertyName])
+      .filter((button) => !button.accessibility?.hidden)
+      .forEach((button, index) => {
+        const buttonElement = (
+          <Grid
+            key={index}
+            sx={(theme) => ({
+              marginLeft: theme.spacing(1),
+            })}
+          >
+            {button.style.icon ? (
+              <IconButton disabled={button.accessibility?.disabled} onClick={(event: any) => this.onClick(button)}>
+                <button.style.icon />
+              </IconButton>
+            ) : (
+              <Button
+                color={button.style.color}
+                variant={button.style.variant || 'contained'}
+                disabled={button.accessibility?.disabled}
+                onClick={(event) => this.onClick(button)}
+              >
+                {button.name}
+              </Button>
+            )}
+          </Grid>
+        );
+
+        if (button.style.align === 'left') {
+          leftAlignedButtons.push(buttonElement);
+        } else {
+          rightAlignedButtons.push(buttonElement);
+        }
+      });
+
     return (
       <Grid
         container
         direction='row'
-        justifyContent='flex-end'
+        justifyContent='space-between'
         alignItems='center'
         xs={12}
         sx={(theme) => ({
@@ -381,40 +420,16 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
           marginBottom: theme.spacing(1),
         })}
       >
-        {Object.keys(this.props.buttons)
-          .map((buttonPropertyName) => this.props.buttons[buttonPropertyName])
-          .filter((button) => {
-            if (button.accessibility?.hidden) {
-              return false;
-            }
-
-            return true;
-          })
-          .map((button, key) => {
-            return (
-              <Grid
-                key={key}
-                sx={(theme) => ({
-                  marginLeft: theme.spacing(1),
-                })}
-              >
-                {button.style.icon ? (
-                  <IconButton disabled={button.accessibility?.disabled} onClick={(event: any) => this.onClick(button)}>
-                    <button.style.icon />
-                  </IconButton>
-                ) : (
-                  <Button
-                    color={button.style.color}
-                    variant={button.style.variant ? button.style.variant : 'contained'}
-                    disabled={button.accessibility?.disabled}
-                    onClick={(event) => this.onClick(button)}
-                  >
-                    {button.name}
-                  </Button>
-                )}
-              </Grid>
-            );
-          })}
+        <Grid item>
+          <Stack direction='row' spacing={1}>
+            {leftAlignedButtons}
+          </Stack>
+        </Grid>
+        <Grid item>
+          <Stack direction='row' spacing={1}>
+            {rightAlignedButtons}
+          </Stack>
+        </Grid>
       </Grid>
     );
   }

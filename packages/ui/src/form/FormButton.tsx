@@ -10,6 +10,7 @@ export type FormButton<F extends Fields> = {
   style: {
     color?: 'inherit' | 'primary' | 'success' | 'warning' | 'secondary' | 'error' | 'info';
     variant?: 'text' | 'outlined' | 'contained';
+    align?: 'right' | 'left';
     icon?: React.ComponentType;
   };
   clearFormOnClick?: boolean;
