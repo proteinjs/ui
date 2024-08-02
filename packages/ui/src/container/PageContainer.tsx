@@ -27,6 +27,7 @@ export type PageContainerProps = {
   appBarProps?: AppBarProps;
   toolbarProps?: ToolbarProps;
   CustomAccountIconButton?: React.ComponentType<AccountIconButtonProps>;
+  abovePageSlot?: React.ReactNode;
 };
 
 const Page = React.memo(
@@ -72,6 +73,7 @@ export function PageContainer(props: PageContainerProps) {
     appBarProps,
     toolbarProps,
     CustomAccountIconButton,
+    abovePageSlot,
   } = props;
   const [loginClicked, setLoginClicked] = React.useState(false);
   const [navMenuOpen, setNavMenuOpen] = React.useState(false);
@@ -142,6 +144,7 @@ export function PageContainer(props: PageContainerProps) {
       {navMenuItems && (
         <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />
       )}
+      {abovePageSlot}
       <Page auth={auth} page={page} navigate={navigate} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
     </Box>
   );
