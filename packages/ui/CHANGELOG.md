@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.3.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.2.2...@proteinjs/ui@2.3.0) (2024-08-02)
+
+
+### Features
+
+* added `PageContainerProps.abovePageSlot` ([4a53f2b](https://github.com/proteinjs/ui/commit/4a53f2b1e8d2bac8c04ca0aa9ecc89fb089fd906))
+
+
+
+
+
 ## [2.2.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.2.1...@proteinjs/ui@2.2.2) (2024-08-02)
 
 
