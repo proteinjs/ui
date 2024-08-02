@@ -93,7 +93,7 @@ export function PageContainer(props: PageContainerProps) {
   return (
     <Box
       sx={(theme) => {
-        const defaultStyles = {};
+        const defaultStyles = { minHeight: '100vh', backgroundColor: theme.palette.background.default };
         if (!page.pageContainerSxProps) {
           return defaultStyles;
         }
