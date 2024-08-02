@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.2.1...@proteinjs/ui@2.2.2) (2024-08-02)
+
+
+### Bug Fixes
+
+* add default styles for page container ([98f1a30](https://github.com/proteinjs/ui/commit/98f1a30434354387163ef76fd5dd9ff9d19ef37b))
+
+
+
+
+
 # [2.2.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.1.3...@proteinjs/ui@2.2.0) (2024-07-09)
 
 
