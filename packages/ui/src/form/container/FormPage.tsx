@@ -1,8 +1,14 @@
-import React from 'react';
-import { Grid, PaperProps } from '@mui/material';
+import React, { ReactNode } from 'react';
+import { Grid, GridProps, PaperProps } from '@mui/material';
 import { FormPaper } from './FormPaper';
 
-export function FormPage(props: PaperProps) {
+interface FormPageProps {
+  gridContainerProps?: GridProps;
+  gridItemProps?: GridProps;
+  paperProps?: PaperProps;
+  children?: ReactNode;
+}
+export function FormPage(props: FormPageProps) {
   return (
     <Grid
       container
@@ -12,9 +18,10 @@ export function FormPage(props: PaperProps) {
       direction='row'
       justifyContent='center'
       alignItems='center'
+      {...props.gridContainerProps}
     >
-      <Grid item>
-        <FormPaper {...props}>{props.children}</FormPaper>
+      <Grid item {...props.gridItemProps}>
+        <FormPaper {...props.paperProps}>{props.children}</FormPaper>
       </Grid>
     </Grid>
   );

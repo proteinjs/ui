@@ -190,7 +190,6 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     return (
       <Grid
         container
-        xs={12}
         justifyContent='flex-start'
         alignItems='flex-start'
         sx={(theme) => ({
@@ -198,7 +197,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
           marginBottom: theme.spacing(3),
         })}
       >
-        <Typography variant='h5'>{this.props.name}</Typography>
+        <Grid item xs={12}>
+          <Typography variant='h5'>{this.props.name}</Typography>
+        </Grid>
       </Grid>
     );
   }
@@ -209,10 +210,12 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     }
 
     return (
-      <Grid container xs={12} justifyContent='flex-start' alignItems='flex-start'>
-        <Container>
-          <this.props.documentation />
-        </Container>
+      <Grid container justifyContent='flex-start' alignItems='flex-start'>
+        <Grid item xs={12}>
+          <Container>
+            <this.props.documentation />
+          </Container>
+        </Grid>
       </Grid>
     );
   }
@@ -223,23 +226,25 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     }
 
     return (
-      <Grid container xs={12}>
-        <Container
-          sx={(theme) => ({
-            marginBottom: theme.spacing(1),
-          })}
-        >
-          <Typography variant='subtitle1' color={this.state.status.isError ? 'error' : 'primary'}>
-            {this.state.status.message}
-          </Typography>
-        </Container>
+      <Grid container>
+        <Grid item xs={12}>
+          <Container
+            sx={(theme) => ({
+              marginBottom: theme.spacing(1),
+            })}
+          >
+            <Typography variant='subtitle1' color={this.state.status.isError ? 'error' : 'primary'}>
+              {this.state.status.message}
+            </Typography>
+          </Container>
+        </Grid>
       </Grid>
     );
   }
 
   private Fields() {
     return (
-      <Grid container direction='column' xs={12}>
+      <Grid container direction='column'>
         {this.getFieldRows().map((fieldComponents, index) => {
           if (!this.isFieldRowVisible(fieldComponents)) {
             return null;
@@ -414,19 +419,18 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
         direction='row'
         justifyContent='space-between'
         alignItems='center'
-        xs={12}
         sx={(theme) => ({
           marginTop: theme.spacing(2),
           marginBottom: theme.spacing(1),
         })}
       >
-        <Grid item>
-          <Stack direction='row' spacing={1}>
+        <Grid item xs={6}>
+          <Stack direction='row' spacing={1} justifyContent='flex-start'>
             {leftAlignedButtons}
           </Stack>
         </Grid>
-        <Grid item>
-          <Stack direction='row' spacing={1}>
+        <Grid item xs={6}>
+          <Stack direction='row' spacing={1} justifyContent='flex-end'>
             {rightAlignedButtons}
           </Stack>
         </Grid>
