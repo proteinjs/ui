@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.4.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.3.0...@proteinjs/ui@2.4.0) (2024-08-05)
+
+
+### Features
+
+* add fields for props on form page grid container ([d43a467](https://github.com/proteinjs/ui/commit/d43a467b010b6cfde1d3e17eb2a76926fd95a16d))
+
+
+
+
+
 # [2.3.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.2.2...@proteinjs/ui@2.3.0) (2024-08-02)
 
 
