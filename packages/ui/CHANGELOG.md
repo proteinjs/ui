@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [3.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.4.1...@proteinjs/ui@3.0.0) (2024-08-08)
+
+
+### Features
+
+* add navigate prop to CustomAccountIconButton ([952f21d](https://github.com/proteinjs/ui/commit/952f21d1bc8520e7bdde0a5b7d875150c0e064a8))
+
+
+### BREAKING CHANGES
+
+* navigate prop is required
+
+
+
+
+
 # [2.4.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.3.0...@proteinjs/ui@2.4.0) (2024-08-05)
 
 
