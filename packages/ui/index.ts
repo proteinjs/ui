@@ -1,4 +1,5 @@
 export * from './src/router/Router';
+export * from './src/router/withRouter';
 export * from './src/router/Page';
 
 export * from './src/form/Form';

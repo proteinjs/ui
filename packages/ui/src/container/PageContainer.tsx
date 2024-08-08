@@ -16,6 +16,10 @@ function qualifiedPath(path: string) {
   return `/${path}`;
 }
 
+interface AccountIconButtonWithNavigateProps extends AccountIconButtonProps {
+  navigate: NavigateFunction;
+}
+
 export type PageContainerProps = {
   page: Page;
   auth?: AccountAuth;
@@ -26,7 +30,7 @@ export type PageContainerProps = {
   navMenuItems?: NavMenuItem[];
   appBarProps?: AppBarProps;
   toolbarProps?: ToolbarProps;
-  CustomAccountIconButton?: React.ComponentType<AccountIconButtonProps>;
+  CustomAccountIconButton?: React.ComponentType<AccountIconButtonWithNavigateProps>;
   abovePageSlot?: React.ReactNode;
 };
 
@@ -130,7 +134,12 @@ export function PageContainer(props: PageContainerProps) {
           {toolbarChildren}
           <div style={{ flexGrow: 1 }}></div>
           {CustomAccountIconButton ? (
-            <CustomAccountIconButton loginClicked={loginClicked} setLoginClicked={setLoginClicked} auth={auth} />
+            <CustomAccountIconButton
+              loginClicked={loginClicked}
+              setLoginClicked={setLoginClicked}
+              auth={auth}
+              navigate={navigate}
+            />
           ) : (
             <AccountIconButton
               loginClicked={loginClicked}
