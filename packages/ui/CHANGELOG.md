@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [3.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@3.0.1...@proteinjs/ui@3.1.0) (2024-08-27)
+
+
+### Features
+
+* add empty table component for tables ([2b368af](https://github.com/proteinjs/ui/commit/2b368afd017418b71b6e0dbbfbca71619a0f4a6e))
+
+
+
+
+
 # [3.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@2.4.1...@proteinjs/ui@3.0.0) (2024-08-08)
 
 
