@@ -50,6 +50,8 @@ export type TableProps<T> = {
   toolbarContent?: React.ReactNode;
   /* Styling set on the container element of the table. */
   tableContainerSx?: TableContainerOwnProps['sx'];
+  /* Component displayed when there are no rows to display. */
+  emptyTableComponent?: React.ReactNode;
 };
 
 export function Table<T>({
@@ -65,6 +67,7 @@ export function Table<T>({
   tableContainerSx,
   toolbarSx,
   toolbarContent,
+  emptyTableComponent,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
@@ -211,7 +214,7 @@ export function Table<T>({
             <TableBody>
               <TableRow>
                 <TableCell colSpan={totalColumns} align='center'>
-                  <Typography>No rows to display.</Typography>
+                  {emptyTableComponent ? emptyTableComponent : <Typography>No rows to display.</Typography>}
                 </TableCell>
               </TableRow>
             </TableBody>
