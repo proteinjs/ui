@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@3.1.0...@proteinjs/ui@4.0.0) (2024-09-27)
+
+
+### Features
+
+* table enhancements (rowOnClick, custom skeleton, hideColumnHeaders, setRowCount) ([#7](https://github.com/proteinjs/ui/issues/7)) ([1024069](https://github.com/proteinjs/ui/commit/10240696bce41ba2c3105b882d2b7cbd5182f89d))
+
+
+### BREAKING CHANGES
+
+* rowOnClickRedirectUrl name has been changed to rowOnClick
+
+
+
+
+
 # [3.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@3.0.1...@proteinjs/ui@3.1.0) (2024-08-27)
 
 
