@@ -278,7 +278,7 @@ export function Table<T>({
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
-                    onClick={() => rowOnClick && handleRowOnClick(row, rowOnClick, navigate)}
+                    onClick={rowOnClick ? () => handleRowOnClick(row, rowOnClick, navigate) : undefined}
                   >
                     {buttons && buttons.length > 0 && (
                       <TableCell padding='checkbox'>
