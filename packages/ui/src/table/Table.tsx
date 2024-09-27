@@ -107,7 +107,6 @@ export function Table<T>({
     }
 
     setRowCount(totalRows);
-    console.log(`setRowCount: ${totalRows}`);
   }, [totalRows, setRowCount]);
 
   const handleFetchNextPage = useCallback(() => {
@@ -276,7 +275,6 @@ export function Table<T>({
                 return (
                   <TableRow
                     hover
-                    role='checkbox'
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
@@ -333,7 +331,11 @@ export function Table<T>({
             dataLength={rows.length}
             next={handleFetchNextPage}
             hasMore={!!hasNextPage}
-            loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+            loader={
+              <Typography variant='body2' sx={{ p: 3 }}>
+                Loading...
+              </Typography>
+            }
             scrollableTarget='infinite-scroll-container'
           >
             {renderTableContainer()}
