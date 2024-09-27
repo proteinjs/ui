@@ -27,18 +27,25 @@ type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
 export type ColumnConfig<T> = {
   [K in keyof T]?: {
-    renderer?: (value: T[K], row: T) => React.ReactNode;
+    renderer?: CustomRenderer<T, K>;
+    /** If no header is provided, a default header will be used. Pass in `null` if you'd like the header to be omitted. */
     header?: string | React.ReactNode;
   };
 };
+
+type RowClickAction<T> = string | ((row: T) => void | Promise<void> | string | Promise<string>);
 
 export type TableProps<T> = {
   title?: string;
   description?: () => JSX.Element;
   columns: (keyof T)[];
   columnConfig?: ColumnConfig<T>;
+  hideColumnHeaders?: boolean;
   tableLoader: TableLoader<T>;
-  rowOnClickRedirectUrl?: (row: T) => Promise<string>;
+  /** Setter which will be used to update the row count when rows are loaded */
+  setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>;
+  rowOnClick?: RowClickAction<T>;
+  /** Buttons displayed in the table head */
   buttons?: TableButton<T>[];
   /** If true, use pagination for table page navigation, if false uses infinite scroll. Defaults to false. */
   pagination?: boolean;
@@ -52,6 +59,8 @@ export type TableProps<T> = {
   tableContainerSx?: TableContainerOwnProps['sx'];
   /* Component displayed when there are no rows to display. */
   emptyTableComponent?: React.ReactNode;
+  /* Loading skeleton that's displayed before the table rows are first fetched. */
+  skeleton?: React.ReactNode;
 };
 
 export function Table<T>({
@@ -59,8 +68,10 @@ export function Table<T>({
   description,
   columns,
   columnConfig = {},
+  hideColumnHeaders = false,
   tableLoader,
-  rowOnClickRedirectUrl,
+  rowOnClick,
+  setRowCount,
   pagination = false,
   defaultRowsPerPage = 10,
   buttons,
@@ -68,6 +79,7 @@ export function Table<T>({
   toolbarSx,
   toolbarContent,
   emptyTableComponent,
+  skeleton,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
@@ -77,7 +89,7 @@ export function Table<T>({
   const navigate = useNavigate();
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
-    useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll);
+    useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount);
 
   useEffect(() => {
     resetQuery();
@@ -89,23 +101,56 @@ export function Table<T>({
     setSelectAll(false);
   }, [rows]);
 
+  useEffect(() => {
+    if (!setRowCount || !totalRows) {
+      return;
+    }
+
+    setRowCount(totalRows);
+  }, [totalRows, setRowCount]);
+
   const handleFetchNextPage = useCallback(() => {
     if (!isFetchingNextPage) {
       fetchNextPage();
     }
   }, [fetchNextPage, isFetchingNextPage]);
 
-  async function handleRowOnClick(row: T) {
-    if (!rowOnClickRedirectUrl) {
+  async function handleRowOnClick<T>(row: T, action: RowClickAction<T>, navigate: (url: string) => void) {
+    if (!action) {
       return;
     }
 
-    let redirectUrl = await rowOnClickRedirectUrl(row);
-    if (!redirectUrl.startsWith('/')) {
-      redirectUrl = `/${redirectUrl}`;
+    if (typeof action === 'string') {
+      // If action is a string, treat it as a URL
+      let url = action;
+      if (!url.startsWith('/')) {
+        url = `/${url}`;
+      }
+      navigate(url);
+      return;
     }
 
-    navigate(redirectUrl);
+    // If action is a function, execute it
+    const result = action(row);
+
+    if (result instanceof Promise) {
+      // If the result is a Promise, wait for it to resolve
+      const resolvedResult = await result;
+      if (typeof resolvedResult === 'string') {
+        let url = resolvedResult;
+        if (!url.startsWith('/')) {
+          url = `/${url}`;
+        }
+        navigate(url);
+      }
+    } else if (typeof result === 'string') {
+      let url = result;
+      if (!url.startsWith('/')) {
+        url = `/${url}`;
+      }
+      navigate(url);
+    }
+    // If result is void, do nothing (the action has been performed in the function)
   }
 
   function updateRowsPerPage(newValue: number) {
@@ -147,30 +192,30 @@ export function Table<T>({
     setSelectAll(selected);
   }
 
-  function formatCellValue(value: any, column: keyof T, row: T): React.ReactNode {
+  function formatCellValue(value: any, column: keyof T, row: T): { value: React.ReactNode; isCustomRendered: boolean } {
     const customRenderer = columnConfig[column]?.renderer;
     if (customRenderer) {
-      return customRenderer(value, row);
+      return {
+        value: customRenderer(value, row),
+        isCustomRendered: true,
+      };
     }
 
     // Default formatting logic
+    let formattedValue: React.ReactNode;
     if (value == null) {
-      return '';
+      formattedValue = '';
+    } else if (typeof value === 'boolean') {
+      formattedValue = value ? 'True' : 'False';
+    } else if (moment.isMoment(value)) {
+      formattedValue = value.format('ddd, MMM Do YY, h:mm:ss a');
+    } else if (typeof value === 'object') {
+      formattedValue = JSON.stringify(value);
+    } else {
+      formattedValue = value.toString();
     }
 
-    if (typeof value === 'boolean') {
-      return value ? 'True' : 'False';
-    }
-
-    if (moment.isMoment(value)) {
-      return value.format('ddd, MMM Do YY, h:mm:ss a');
-    }
-
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-
-    return value.toString();
+    return { value: formattedValue, isCustomRendered: false };
   }
 
   const renderTableContainer = () => {
@@ -192,20 +237,23 @@ export function Table<T>({
                   />
                 </TableCell>
               )}
-              {columns.map((column, index) => (
-                <TableCell key={index}>
-                  <Typography variant='h6'>
-                    {columnConfig[column]?.header || StringUtil.humanizeCamel(column as string)}
-                  </Typography>
-                </TableCell>
-              ))}
+              {!hideColumnHeaders &&
+                columns.map((column, index) => (
+                  <TableCell key={index}>
+                    {columnConfig[column]?.header !== null && (
+                      <Typography variant='h6'>
+                        {columnConfig[column]?.header || StringUtil.humanizeCamel(column as string)}
+                      </Typography>
+                    )}
+                  </TableCell>
+                ))}
             </TableRow>
           </TableHead>
           {isLoading && (
             <TableBody>
               <TableRow>
                 <TableCell colSpan={totalColumns} align='center' sx={{ py: 3 }}>
-                  <CircularProgress />
+                  {skeleton ? skeleton : <CircularProgress />}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -223,19 +271,19 @@ export function Table<T>({
             <TableBody>
               {rows.map((row, index) => {
                 index = rowsPerPage * page + index;
+                const isSelected = typeof selectedRows[index] !== 'undefined';
                 return (
                   <TableRow
                     hover
-                    role='checkbox'
                     tabIndex={-1}
                     key={index}
-                    selected={typeof selectedRows[index] !== 'undefined'}
-                    onClick={(event: any) => handleRowOnClick(row)}
+                    selected={isSelected}
+                    onClick={rowOnClick ? () => handleRowOnClick(row, rowOnClick, navigate) : undefined}
                   >
                     {buttons && buttons.length > 0 && (
                       <TableCell padding='checkbox'>
                         <Checkbox
-                          checked={typeof selectedRows[index] !== 'undefined'}
+                          checked={isSelected}
                           onChange={(event) => {
                             event.stopPropagation();
                             toggleSelectRow(index, row);
@@ -248,10 +296,10 @@ export function Table<T>({
                       </TableCell>
                     )}
                     {columns.map((column, index) => {
-                      const cellValue = formatCellValue(row[column], column, row);
+                      const { value: cellValue, isCustomRendered } = formatCellValue(row[column], column, row);
                       return (
                         <TableCell key={index}>
-                          <Typography>{cellValue}</Typography>
+                          {isCustomRendered ? cellValue : <Typography>{cellValue}</Typography>}
                         </TableCell>
                       );
                     })}
@@ -283,7 +331,11 @@ export function Table<T>({
             dataLength={rows.length}
             next={handleFetchNextPage}
             hasMore={!!hasNextPage}
-            loader={<Typography sx={{ p: 2 }}>Loading...</Typography>}
+            loader={
+              <Typography variant='body2' sx={{ p: 3 }}>
+                Loading...
+              </Typography>
+            }
             scrollableTarget='infinite-scroll-container'
           >
             {renderTableContainer()}

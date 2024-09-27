@@ -8,19 +8,16 @@ import {
   UseInfiniteQueryResult,
   QueryFunctionContext,
 } from 'react-query';
-import { TableLoader, RowWindow, generateDefaultReactQueryKeys } from './TableLoader';
+import { TableLoader, RowWindow } from './TableLoader';
 import { useCallback, useMemo } from 'react';
 
 export function useTableData<T>(
   tableLoader: TableLoader<T>,
   rowsPerPage: number,
   page: number,
-  infiniteScroll: boolean
+  infiniteScroll: boolean,
+  setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>
 ) {
-  if (!tableLoader.reactQueryKeys) {
-    tableLoader.reactQueryKeys = generateDefaultReactQueryKeys();
-  }
-
   const startIndex = useMemo(() => page * rowsPerPage, [page, rowsPerPage]);
   const endIndex = useMemo(() => startIndex + rowsPerPage, [startIndex, rowsPerPage]);
 
@@ -39,7 +36,7 @@ export function useTableData<T>(
     isFetchingNextPage,
     error: infiniteError,
     refetch: refetchInfiniteData,
-  } = useInfiniteScrollTableQuery<T>(tableLoader, rowsPerPage, infiniteScroll);
+  } = useInfiniteScrollTableQuery<T>(tableLoader, rowsPerPage, setRowCount, infiniteScroll);
 
   const rows = useMemo(
     () =>
@@ -116,6 +113,7 @@ export const usePaginationTableQuery = <T>(
 export const useInfiniteScrollTableQuery = <T>(
   tableLoader: TableLoader<T>,
   rowsPerPage: number,
+  setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>,
   enabled = true
 ): UseInfiniteQueryResult<RowWindow<T>, Error> => {
   const { reactQueryKeys } = tableLoader;
@@ -128,8 +126,10 @@ export const useInfiniteScrollTableQuery = <T>(
     pageParam = { startIndex: 0, endIndex: rowsPerPage },
   }: QueryFunctionContext<[string, string], { startIndex: number; endIndex: number }>) => {
     const { startIndex, endIndex } = pageParam;
-    // skip row count query since it is not utilized in infinite scroll implementation
-    return await tableLoader.load(startIndex, endIndex, true);
+    // skip row count query, unless setRowCount was provided, since it is not utilized in infinite scroll implementation
+    const data = await tableLoader.load(startIndex, endIndex, setRowCount ? false : true);
+    setRowCount && setRowCount(data.totalCount);
+    return data;
   };
 
   const { dataKey, dataQueryKey } = reactQueryKeys;

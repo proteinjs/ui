@@ -19,15 +19,29 @@ export type ReactQueryKeys = {
   dataQueryKey: string;
 };
 
-export type TableLoader<T> = {
-  reactQueryKeys?: ReactQueryKeys;
+export interface TableLoader<T> {
+  /**
+   * Query keys are used in React Query to uniquely identify and manage cached data fetched from an API.
+   * If you do not want to set your own query keys, extend `BaseTableLoader` and it will implement defaults for you.
+   * */
+  reactQueryKeys: ReactQueryKeys;
   load: (startIndex: number, endIndex: number, skipRowCount?: boolean) => Promise<RowWindow<T>>;
-};
+}
+
+export abstract class BaseTableLoader<T> implements TableLoader<T> {
+  readonly reactQueryKeys: ReactQueryKeys;
+
+  constructor() {
+    this.reactQueryKeys = generateDefaultReactQueryKeys();
+  }
+
+  abstract load(startIndex: number, endIndex: number, skipRowCount?: boolean): Promise<RowWindow<T>>;
+}
 
 export class StaticTableLoader<T> implements TableLoader<T> {
   constructor(
     private list: T[],
-    public reactQueryKeys?: TableLoader<T>['reactQueryKeys']
+    public reactQueryKeys: TableLoader<T>['reactQueryKeys']
   ) {
     if (!this.reactQueryKeys) {
       this.reactQueryKeys = generateDefaultReactQueryKeys();
