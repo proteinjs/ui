@@ -14,6 +14,7 @@ import {
   TableContainerOwnProps,
   ToolbarProps,
   CircularProgress,
+  TablePaginationProps,
 } from '@mui/material';
 import moment from 'moment';
 import { StringUtil } from '@proteinjs/util';
@@ -33,7 +34,9 @@ export type ColumnConfig<T> = {
   };
 };
 
-type RowClickAction<T> = string | ((row: T) => void | Promise<void> | string | Promise<string>);
+type RowClickAction<T> =
+  | string
+  | ((row: T, event?: React.MouseEvent) => void | Promise<void> | string | Promise<string>);
 
 export type TableProps<T> = {
   title?: string;
@@ -49,6 +52,8 @@ export type TableProps<T> = {
   buttons?: TableButton<T>[];
   /** If true, use pagination for table page navigation, if false uses infinite scroll. Defaults to false. */
   pagination?: boolean;
+  /** Props passed into the TablePagination component. This component is only displayed if `pagination` is true. */
+  tablePaginationProps?: Partial<TablePaginationProps>;
   /* Pertains to pagination or infinite scroll, depending on which is enabled. */
   defaultRowsPerPage?: number;
   /* Styling set on the root element of the toolbar. */
@@ -73,6 +78,7 @@ export function Table<T>({
   rowOnClick,
   setRowCount,
   pagination = false,
+  tablePaginationProps,
   defaultRowsPerPage = 10,
   buttons,
   tableContainerSx,
@@ -115,7 +121,12 @@ export function Table<T>({
     }
   }, [fetchNextPage, isFetchingNextPage]);
 
-  async function handleRowOnClick<T>(row: T, action: RowClickAction<T>, navigate: (url: string) => void) {
+  async function handleRowOnClick<T>(
+    row: T,
+    event: React.MouseEvent,
+    action: RowClickAction<T>,
+    navigate: (url: string) => void
+  ) {
     if (!action) {
       return;
     }
@@ -131,7 +142,7 @@ export function Table<T>({
     }
 
     // If action is a function, execute it
-    const result = action(row);
+    const result = action(row, event);
 
     if (result instanceof Promise) {
       // If the result is a Promise, wait for it to resolve
@@ -278,7 +289,11 @@ export function Table<T>({
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
-                    onClick={rowOnClick ? () => handleRowOnClick(row, rowOnClick, navigate) : undefined}
+                    onClick={
+                      rowOnClick
+                        ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick, navigate)
+                        : undefined
+                    }
                   >
                     {buttons && buttons.length > 0 && (
                       <TableCell padding='checkbox'>
@@ -343,7 +358,7 @@ export function Table<T>({
         ) : (
           renderTableContainer()
         )}
-        {pagination && !isLoading && (
+        {pagination && (
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50, 100, 200]}
             component='div'
@@ -352,6 +367,7 @@ export function Table<T>({
             page={page}
             onPageChange={(event, newPage) => setPage(newPage)}
             onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
+            {...tablePaginationProps}
           />
         )}
       </Box>
