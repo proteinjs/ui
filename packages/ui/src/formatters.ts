@@ -59,3 +59,11 @@ export function formatRelativeDate(inputDate: DateInput, options: DateFormatterO
 
   return date.format(defaultFormat);
 }
+
+/** Capitalize the first character in a string. Returns empty string for invalid inputs. */
+export const capitalizeFirst = (str?: string | null): string => {
+  if (!str || typeof str !== 'string' || str.length === 0) {
+    return '';
+  }
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};

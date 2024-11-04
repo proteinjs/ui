@@ -64,7 +64,12 @@ export type TableProps<T> = {
   tableContainerSx?: TableContainerOwnProps['sx'];
   /* Component displayed when there are no rows to display. */
   emptyTableComponent?: React.ReactNode;
-  /* Loading skeleton that's displayed before the table rows are first fetched. */
+  /* Loading skeleton that's displayed before the table rows are first fetched.\
+   * You can use these class names to target the containers with styling:
+   * - `loading-skeleton-table-body`
+   * - `loading-skeleton-row`
+   * - `loading-skeleton-cell`
+   */
   skeleton?: React.ReactNode;
 };
 
@@ -96,6 +101,8 @@ export function Table<T>({
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
     useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount);
+
+  const isLoadingTrue = true;
 
   useEffect(() => {
     resetQuery();
@@ -261,9 +268,9 @@ export function Table<T>({
             </TableRow>
           </TableHead>
           {isLoading && (
-            <TableBody>
-              <TableRow>
-                <TableCell colSpan={totalColumns} align='center' sx={{ py: 3 }}>
+            <TableBody className='loading-skeleton-table-body'>
+              <TableRow className='loading-skeleton-row'>
+                <TableCell colSpan={totalColumns} align='center' className='loading-skeleton-cell' sx={{ py: 3 }}>
                   {skeleton ? skeleton : <CircularProgress />}
                 </TableCell>
               </TableRow>
