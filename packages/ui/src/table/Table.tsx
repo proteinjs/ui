@@ -15,6 +15,7 @@ import {
   ToolbarProps,
   CircularProgress,
   TablePaginationProps,
+  TableCellProps,
 } from '@mui/material';
 import moment from 'moment';
 import { StringUtil } from '@proteinjs/util';
@@ -28,6 +29,7 @@ type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
 export type ColumnConfig<T> = {
   [K in keyof T]?: {
+    cellProps?: TableCellProps;
     renderer?: CustomRenderer<T, K>;
     /** If no header is provided, a default header will be used. Pass in `null` if you'd like the header to be omitted. */
     header?: string | React.ReactNode;
@@ -45,8 +47,11 @@ export type TableProps<T> = {
   columnConfig?: ColumnConfig<T>;
   hideColumnHeaders?: boolean;
   tableLoader: TableLoader<T>;
+  refetchOnWindowFocus?: boolean;
   /** Setter which will be used to update the row count when rows are loaded */
   setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>;
+  /** Setter which will be used to update the row data when rows are loaded */
+  setRows?: React.Dispatch<React.SetStateAction<T | undefined>>;
   rowOnClick?: RowClickAction<T>;
   /** Buttons displayed in the table head */
   buttons?: TableButton<T>[];
@@ -80,6 +85,7 @@ export function Table<T>({
   columnConfig = {},
   hideColumnHeaders = false,
   tableLoader,
+  refetchOnWindowFocus = false,
   rowOnClick,
   setRowCount,
   pagination = false,
@@ -100,7 +106,7 @@ export function Table<T>({
   const navigate = useNavigate();
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
-    useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount);
+    useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount, refetchOnWindowFocus);
 
   const isLoadingTrue = true;
 
@@ -320,7 +326,7 @@ export function Table<T>({
                     {columns.map((column, index) => {
                       const { value: cellValue, isCustomRendered } = formatCellValue(row[column], column, row);
                       return (
-                        <TableCell key={index}>
+                        <TableCell key={index} {...columnConfig?.[column]?.cellProps}>
                           {isCustomRendered ? cellValue : <Typography>{cellValue}</Typography>}
                         </TableCell>
                       );
