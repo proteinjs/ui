@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TableContainer,
@@ -59,8 +59,8 @@ export type TableProps<T> = {
   pagination?: boolean;
   /** Props passed into the TablePagination component. This component is only displayed if `pagination` is true. */
   tablePaginationProps?: Partial<TablePaginationProps>;
-  /* Pertains to pagination or infinite scroll, depending on which is enabled. */
-  defaultRowsPerPage?: number;
+  /* Number of rows that are loaded per page. */
+  rowsPerPage?: number;
   /* Styling set on the root element of the toolbar. */
   toolbarSx?: ToolbarProps['sx'];
   /* Content that will be displayed in the toolbar section of the table. */
@@ -76,6 +76,8 @@ export type TableProps<T> = {
    * - `loading-skeleton-cell`
    */
   skeleton?: React.ReactNode;
+  /** Loader to display while items are fetching. Only applicable when pagination prop is false. */
+  infiniteScrollLoader?: React.ReactNode;
 };
 
 export function Table<T>({
@@ -90,19 +92,21 @@ export function Table<T>({
   setRowCount,
   pagination = false,
   tablePaginationProps,
-  defaultRowsPerPage = 10,
+  rowsPerPage: rowsPerPageProp = 10,
   buttons,
   tableContainerSx,
   toolbarSx,
   toolbarContent,
   emptyTableComponent,
   skeleton,
+  infiniteScrollLoader,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
-  const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
+  const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageProp);
   const [page, setPage] = useState(0);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
+  const infScrollContainerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
@@ -353,18 +357,20 @@ export function Table<T>({
           sx={toolbarSx}
         />
       )}
-      <Box id='infinite-scroll-container' sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
+      <Box ref={infScrollContainerRef} sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
         {infiniteScroll ? (
           <InfiniteScroll
             dataLength={rows.length}
             next={handleFetchNextPage}
             hasMore={!!hasNextPage}
             loader={
-              <Typography variant='body2' sx={{ p: 3 }}>
-                Loading...
-              </Typography>
+              infiniteScrollLoader || (
+                <Typography variant='body2' sx={{ p: 2 }}>
+                  Loading...
+                </Typography>
+              )
             }
-            scrollableTarget='infinite-scroll-container'
+            scrollableTarget={React.createElement('div', { ref: infScrollContainerRef })}
           >
             {renderTableContainer()}
           </InfiniteScroll>
