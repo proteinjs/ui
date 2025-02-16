@@ -50,8 +50,6 @@ export type TableProps<T> = {
   refetchOnWindowFocus?: boolean;
   /** Setter which will be used to update the row count when rows are loaded */
   setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>;
-  /** Setter which will be used to update the row data when rows are loaded */
-  setRows?: React.Dispatch<React.SetStateAction<T | undefined>>;
   rowOnClick?: RowClickAction<T>;
   /** Buttons displayed in the table head */
   buttons?: TableButton<T>[];
@@ -112,7 +110,18 @@ export function Table<T>({
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
     useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount, refetchOnWindowFocus);
 
-  const isLoadingTrue = true;
+  const maxPage = Math.max(0, Math.ceil((totalRows || 0) / rowsPerPage) - 1);
+
+  // Adjust page if it exceeds maxPage
+  useEffect(() => {
+    if (!pagination || isLoading) {
+      return;
+    }
+
+    if (page > maxPage && maxPage >= 0) {
+      setPage(maxPage);
+    }
+  }, [page, maxPage, pagination, isLoading, totalRows]);
 
   useEffect(() => {
     resetQuery();
@@ -383,7 +392,7 @@ export function Table<T>({
             component='div'
             count={totalRows || 0}
             rowsPerPage={rowsPerPage}
-            page={page}
+            page={isLoading ? page : Math.min(page, maxPage)}
             onPageChange={(event, newPage) => setPage(newPage)}
             onRowsPerPageChange={(event) => updateRowsPerPage(parseInt(event.target.value))}
             {...tablePaginationProps}
