@@ -29,7 +29,6 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   );
 
   function RoutesComponent() {
-    const navigate = useNavigate();
     return (
       <Routes>
         {(() => {
@@ -41,7 +40,7 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
                 <Route
                   key={key++}
                   path={getPath(page.path)}
-                  element={<ContainerizedComponent options={options} page={page} navigate={navigate} />}
+                  element={<ContainerizedComponent options={options} page={page} />}
                 />
               );
             } else {
@@ -51,7 +50,7 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
                   <Route
                     key={key++}
                     path={getPath(path)}
-                    element={<ContainerizedComponent options={options} page={page} navigate={navigate} />}
+                    element={<ContainerizedComponent options={options} page={page} />}
                   />
                 );
               }
@@ -64,12 +63,12 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
     );
   }
 
-  function ContainerizedComponent(props: { options: AppOptions; page: Page; navigate: NavigateFunction }) {
+  function ContainerizedComponent(props: { options: AppOptions; page: Page }) {
     if (props.options.pageContainer && !props.page.noPageContainer) {
       return <props.options.pageContainer page={props.page} />;
     }
 
-    return <props.page.component urlParams={createUrlParams()} navigate={props.navigate} />;
+    return <props.page.component urlParams={createUrlParams()} />;
   }
 
   function PageNotFound(props: { pageNotFound: AppOptions['pageNotFound'] }) {

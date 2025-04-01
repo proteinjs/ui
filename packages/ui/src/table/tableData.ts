@@ -11,12 +11,18 @@ import {
 import { TableLoader, RowWindow } from './TableLoader';
 import { useCallback, useMemo } from 'react';
 
+export type InfiniteQueryData<T> = {
+  pages: RowWindow<T>[];
+  pageParams: any[];
+};
+
 export function useTableData<T>(
   tableLoader: TableLoader<T>,
   rowsPerPage: number,
   page: number,
   infiniteScroll: boolean,
-  setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>
+  setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>,
+  refetchOnWindowFocus = false
 ) {
   const startIndex = useMemo(() => page * rowsPerPage, [page, rowsPerPage]);
   const endIndex = useMemo(() => startIndex + rowsPerPage, [startIndex, rowsPerPage]);
@@ -26,7 +32,7 @@ export function useTableData<T>(
     isLoading: isPaginatedLoading,
     error: paginatedError,
     refetch: refetchPaginatedData,
-  } = usePaginationTableQuery<T>(tableLoader, startIndex, endIndex, !infiniteScroll);
+  } = usePaginationTableQuery<T>(tableLoader, startIndex, endIndex, !infiniteScroll, refetchOnWindowFocus);
 
   const {
     data: infiniteData,
@@ -36,7 +42,7 @@ export function useTableData<T>(
     isFetchingNextPage,
     error: infiniteError,
     refetch: refetchInfiniteData,
-  } = useInfiniteScrollTableQuery<T>(tableLoader, rowsPerPage, setRowCount, infiniteScroll);
+  } = useInfiniteScrollTableQuery<T>(tableLoader, rowsPerPage, setRowCount, infiniteScroll, refetchOnWindowFocus);
 
   const rows = useMemo(
     () =>
@@ -90,7 +96,8 @@ export const usePaginationTableQuery = <T>(
   tableLoader: TableLoader<T>,
   startIndex: number,
   endIndex: number,
-  enabled = false
+  enabled = false,
+  refetchOnWindowFocus = false
 ): UseQueryResult<RowWindow<T>, Error> => {
   const { reactQueryKeys } = tableLoader;
 
@@ -105,7 +112,7 @@ export const usePaginationTableQuery = <T>(
     async () => await tableLoader.load(startIndex, endIndex),
     {
       enabled,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus,
     }
   );
 };
@@ -114,7 +121,8 @@ export const useInfiniteScrollTableQuery = <T>(
   tableLoader: TableLoader<T>,
   rowsPerPage: number,
   setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>,
-  enabled = true
+  enabled = true,
+  refetchOnWindowFocus = false
 ): UseInfiniteQueryResult<RowWindow<T>, Error> => {
   const { reactQueryKeys } = tableLoader;
 
@@ -145,7 +153,7 @@ export const useInfiniteScrollTableQuery = <T>(
         endIndex: nextStartIndex + rowsPerPage,
       };
     },
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus,
   });
 };
 

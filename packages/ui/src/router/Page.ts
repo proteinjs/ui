@@ -7,7 +7,6 @@ export const getPages = () => SourceRepository.get().objects<Page>('@proteinjs/u
 
 export type PageComponentProps = {
   urlParams: { [key: string]: string };
-  navigate: NavigateFunction;
 };
 
 export interface Page extends Loadable {
