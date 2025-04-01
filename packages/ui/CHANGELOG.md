@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.0.0...@proteinjs/ui@4.1.0) (2025-03-28)
+
+
+### Features
+
+* `useTableMutation` make `tableLoader` optional ([360454d](https://github.com/proteinjs/ui/commit/360454d5761be0ec4e4b9e29cc169ccb6b7efc63))
+
+
+
+
+
 # [4.0.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@3.1.0...@proteinjs/ui@4.0.0) (2024-09-27)
 
 

@@ -158,25 +158,26 @@ export const useInfiniteScrollTableQuery = <T>(
 };
 
 export const useTableMutation = <T, TVariables = unknown>(
-  tableLoader: TableLoader<T>,
+  tableLoader: TableLoader<T> | null | undefined,
   mutationFn: (variables: TVariables) => Promise<void>
 ): UseMutationResult<void, Error, TVariables> => {
   const queryClient = useQueryClient();
-  const { reactQueryKeys } = tableLoader;
 
-  if (!reactQueryKeys) {
-    throw new Error('TableLoader must have reactQueryKeys defined to use with react-query');
-  }
-
-  const { dataKey } = reactQueryKeys;
-
-  return useMutation<void, Error, TVariables>(mutationFn, {
-    onSuccess: (): void => {
-      // Invalidate all tables that use the same data key
-      queryClient.invalidateQueries({ queryKey: [dataKey] });
+  return useMutation<void, Error, TVariables>(
+    async (variables: TVariables) => {
+      if (tableLoader) {
+        return mutationFn(variables);
+      }
     },
-    onError: (error: Error): void => {
-      console.error('Mutation failed:', error);
-    },
-  });
+    {
+      onSuccess: (): void => {
+        if (tableLoader?.reactQueryKeys) {
+          queryClient.invalidateQueries({ queryKey: [tableLoader.reactQueryKeys.dataKey] });
+        }
+      },
+      onError: (error: Error): void => {
+        console.error('Mutation failed:', error);
+      },
+    }
+  );
 };
