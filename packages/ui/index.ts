@@ -21,3 +21,5 @@ export * from './src/table/TableLoader';
 export * from './src/table/tableData';
 
 export * from './src/components/SearchInput';
+
+export * from './src/formatters';

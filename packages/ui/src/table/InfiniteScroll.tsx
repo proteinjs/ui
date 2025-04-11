@@ -19,9 +19,7 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
 
   useEffect(() => {
     const getScrollableTarget = () => {
-      if (typeof scrollableTarget === 'string') {
-        return document.getElementById(scrollableTarget);
-      } else if (scrollableTarget instanceof HTMLElement) {
+      if (scrollableTarget instanceof HTMLElement) {
         return scrollableTarget;
       }
       return null;
@@ -29,8 +27,8 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
 
     const options = {
       root: getScrollableTarget(),
-      rootMargin: '0px 0px 100px 0px',
-      threshold: 0.1,
+      rootMargin: '100px 0px',
+      threshold: 0,
     };
 
     const observer = new IntersectionObserver((entries) => {
@@ -60,7 +58,7 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
         <Box
           ref={observerTarget}
           sx={{
-            height: '100px',
+            height: '48px',
             visibility: 'hidden',
           }}
         />
