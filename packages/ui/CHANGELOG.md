@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.2.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.1.2...@proteinjs/ui@4.2.0) (2025-04-24)
+
+
+### Features
+
+* Add `page` to `CustomPageContainerProps` so consumers can do custom rendering based on the current page ([49ec692](https://github.com/proteinjs/ui/commit/49ec692bdb65b3d3b521a8f8f78e91013b0e09b1))
+
+
+
+
+
 # [4.1.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.0.0...@proteinjs/ui@4.1.0) (2025-03-28)
 
 
