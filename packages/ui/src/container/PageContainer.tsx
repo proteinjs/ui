@@ -21,6 +21,7 @@ interface AccountIconButtonWithNavigateProps extends AccountIconButtonProps {
 }
 
 export interface CustomPageContainerProps {
+  page: Page;
   children: React.ReactNode;
   pageContainerSxProps: ((theme: Theme) => SxProps) | undefined;
   loginClicked: boolean;
@@ -115,6 +116,7 @@ export function PageContainer(props: PageContainerProps) {
   if (CustomPageContainer) {
     return (
       <CustomPageContainer
+        page={page}
         loginClicked={loginClicked}
         setLoginClicked={setLoginClicked}
         auth={auth}
