@@ -65,6 +65,8 @@ export type TableProps<T> = {
   toolbarContent?: React.ReactNode;
   /* Styling set on the container element of the table. */
   tableContainerSx?: TableContainerOwnProps['sx'];
+  /* Styling set on the scroll container element that wraps the table. */
+  scrollContainerSx?: TableContainerOwnProps['sx'];
   /* Component displayed when there are no rows to display. */
   emptyTableComponent?: React.ReactNode;
   /* Loading skeleton that's displayed before the table rows are first fetched.\
@@ -93,6 +95,7 @@ export function Table<T>({
   rowsPerPage: rowsPerPageProp = 10,
   buttons,
   tableContainerSx,
+  scrollContainerSx,
   toolbarSx,
   toolbarContent,
   emptyTableComponent,
@@ -366,7 +369,13 @@ export function Table<T>({
           sx={toolbarSx}
         />
       )}
-      <Box ref={infScrollContainerRef} sx={{ width: '100%', flexGrow: 1, overflow: 'auto' }}>
+      <Box
+        ref={infScrollContainerRef}
+        sx={[
+          { width: '100%', flexGrow: 1, overflow: 'auto' },
+          ...(Array.isArray(scrollContainerSx) ? scrollContainerSx : [scrollContainerSx]),
+        ]}
+      >
         {infiniteScroll ? (
           <InfiniteScroll
             dataLength={rows.length}
