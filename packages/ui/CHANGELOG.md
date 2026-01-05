@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.3.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.2.4...@proteinjs/ui@4.3.0) (2026-01-05)
+
+
+### Features
+
+* `Table` added `TableProps.scrollContainerSx` so the consumer can style the scrollbar. ([416eec7](https://github.com/proteinjs/ui/commit/416eec7da293302d228d7e69ec10e6d30fa90c03))
+
+
+
+
+
 # [4.2.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.1.2...@proteinjs/ui@4.2.0) (2025-04-24)
 
 
