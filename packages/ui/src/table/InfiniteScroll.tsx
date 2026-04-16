@@ -2,8 +2,9 @@ import { Box, BoxProps } from '@mui/material';
 import React, { useEffect, useRef } from 'react';
 import InfiniteScrollComponent, { Props as InfiniteScrollComponentProps } from 'react-infinite-scroll-component';
 
-interface InfiniteScrollProps extends InfiniteScrollComponentProps {
+interface InfiniteScrollProps extends Omit<InfiniteScrollComponentProps, 'scrollableTarget'> {
   sx?: BoxProps['sx'];
+  scrollableTarget?: InfiniteScrollComponentProps['scrollableTarget'] | HTMLElement;
 }
 
 export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
@@ -51,7 +52,12 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
 
   return (
     <Box ref={containerRef} sx={sx}>
-      <InfiniteScrollComponent next={next} hasMore={hasMore} scrollableTarget={scrollableTarget} {...otherProps}>
+      <InfiniteScrollComponent
+        next={next}
+        hasMore={hasMore}
+        scrollableTarget={scrollableTarget instanceof HTMLElement ? undefined : scrollableTarget}
+        {...otherProps}
+      >
         {children}
       </InfiniteScrollComponent>
       {hasMore && (
