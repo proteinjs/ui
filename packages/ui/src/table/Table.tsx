@@ -107,7 +107,10 @@ export function Table<T>({
   const [page, setPage] = useState(0);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
   const [selectAll, setSelectAll] = useState(false);
-  const infScrollContainerRef = useRef<HTMLDivElement>(null);
+  const [infScrollContainer, setInfScrollContainer] = useState<HTMLDivElement | null>(null);
+  const infScrollContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setInfScrollContainer(node);
+  }, []);
   const navigate = useNavigate();
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
@@ -388,7 +391,7 @@ export function Table<T>({
                 </Typography>
               )
             }
-            scrollableTarget={React.createElement('div', { ref: infScrollContainerRef })}
+            scrollableTarget={infScrollContainer || undefined}
           >
             {renderTableContainer()}
           </InfiniteScroll>
