@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.3.6](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.5...@proteinjs/ui@4.3.6) (2026-04-16)
+
+
+### Bug Fixes
+
+* **table:** pass actual DOM element as InfiniteScroll scrollableTarget ([1f2b3f4](https://github.com/proteinjs/ui/commit/1f2b3f4907ef39afc387758f601f03b763f17216))
+* **table:** widen InfiniteScroll scrollableTarget type to accept HTMLElement ([7e76dbb](https://github.com/proteinjs/ui/commit/7e76dbb8ff5356c36ed3652f8d6e59281a068616))
+
+
+
+
+
 # [4.3.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.2.4...@proteinjs/ui@4.3.0) (2026-01-05)
 
 
