@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.3.8](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.7...@proteinjs/ui@4.3.8) (2026-07-02)
+
+
+### Bug Fixes
+
+* getNextPageParam guards an empty/absent pages cache ([a93dbb1](https://github.com/proteinjs/ui/commit/a93dbb160b223a963b94f4b30c6dc3193fc166af))
+
+
+
+
+
 ## [4.3.6](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.5...@proteinjs/ui@4.3.6) (2026-04-16)
 
 
