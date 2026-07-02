@@ -143,8 +143,10 @@ export const useInfiniteScrollTableQuery = <T>(
   const { dataKey, dataQueryKey } = reactQueryKeys;
   return useInfiniteQuery([dataKey, dataQueryKey], fetchTableData, {
     enabled,
-    getNextPageParam: (lastPage: RowWindow<T>, pages: RowWindow<T>[]) => {
-      if (lastPage.rows.length < rowsPerPage) {
+    getNextPageParam: (lastPage: RowWindow<T> | undefined, pages: RowWindow<T>[]) => {
+      // A zero-page cache (an optimistic patch left `pages: []`, or the query hasn't fetched yet) has no
+      // next page — and `hasNextPage` must never crash reading `lastPage.rows` when `lastPage` is undefined.
+      if (!lastPage || lastPage.rows.length < rowsPerPage) {
         return undefined; // No more pages to load
       }
       const nextStartIndex = pages.reduce((acc, page) => acc + page.rows.length, 0);
