@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.3.10](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.9...@proteinjs/ui@4.3.10) (2026-07-25)
+
+
+### Bug Fixes
+
+* hoist createUrlParams out of conditional branches (rules of hooks) ([2138b6e](https://github.com/proteinjs/ui/commit/2138b6e08703cf6b9cd80cb8195c4c0fb3cf8bb4))
+
+
+
+
+
 ## [4.3.8](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.7...@proteinjs/ui@4.3.8) (2026-07-02)
 
 
