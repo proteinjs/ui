@@ -64,11 +64,12 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   }
 
   function ContainerizedComponent(props: { options: AppOptions; page: Page }) {
+    const urlParams = createUrlParams();
     if (props.options.pageContainer && !props.page.noPageContainer) {
       return <props.options.pageContainer page={props.page} />;
     }
 
-    return <props.page.component urlParams={createUrlParams()} />;
+    return <props.page.component urlParams={urlParams} />;
   }
 
   function PageNotFound(props: { pageNotFound: AppOptions['pageNotFound'] }) {

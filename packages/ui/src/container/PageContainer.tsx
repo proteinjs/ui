@@ -64,8 +64,9 @@ const Page = React.memo(
     setLoginClicked: (loginClicked: boolean) => void;
   }) => {
     const navigate = useNavigate();
+    const urlParams = createUrlParams();
     if (auth?.canViewPage(page)) {
-      return <page.component urlParams={createUrlParams()} />;
+      return <page.component urlParams={urlParams} />;
     }
 
     if (!auth?.isLoggedIn) {
