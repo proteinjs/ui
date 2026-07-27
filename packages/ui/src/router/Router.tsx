@@ -2,7 +2,6 @@ import React from 'react';
 import { Route, Routes } from 'react-router';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useNavigate, NavigateFunction } from 'react-router-dom';
-import { CssBaseline } from '@mui/material';
 import { Page, getPages } from './Page';
 import { createUrlParams } from './createUrlParams';
 
@@ -19,9 +18,12 @@ export function loadApp(options: AppOptions = {}) {
 
 export function Router(props: { pages: Page[]; options: AppOptions }) {
   const { pages, options } = props;
+  // NOTE: no CssBaseline here — this Router renders OUTSIDE any app ThemeProvider, so a baseline
+  // at this level styles <body> with MUI's DEFAULT theme (light text color, white background,
+  // Roboto). Every `color: inherit` in the app then bottoms out at light-mode black even in dark
+  // mode. The app's ThemeProvider owns the baseline (see @n3xah/util-ui ThemeProvider).
   return (
     <div>
-      <CssBaseline />
       <BrowserRouter>
         <RoutesComponent />
       </BrowserRouter>
