@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.3.11](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.10...@proteinjs/ui@4.3.11) (2026-07-27)
+
+
+### Bug Fixes
+
+* remove un-themed CssBaseline from Router ([593ed3c](https://github.com/proteinjs/ui/commit/593ed3c03f3aefaf0f779424a00b39be65e89cbd))
+
+
+
+
+
 ## [4.3.10](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.9...@proteinjs/ui@4.3.10) (2026-07-25)
 
 
