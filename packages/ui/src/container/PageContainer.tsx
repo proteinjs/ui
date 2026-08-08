@@ -7,6 +7,7 @@ import { createUrlParams } from '../router/createUrlParams';
 import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
 import { AccountIconButton, AccountIconButtonProps } from './AccountIconButton';
 import { AccountAuth } from './AccountAuth';
+import { DefaultUnauthorizedPage, UnauthorizedPageProps } from './DefaultUnauthorizedPage';
 
 function qualifiedPath(path: string) {
   if (path.startsWith('/')) {
@@ -40,6 +41,11 @@ export type PageContainerProps = {
   auth?: AccountAuth;
   /** Will be used to render the `Page` within as children */
   CustomPageContainer?: React.ComponentType<CustomPageContainerProps>;
+  /**
+   * Rendered in place of the page when the user is logged in but `auth.canViewPage` denies access.
+   * Defaults to `DefaultUnauthorizedPage`.
+   */
+  unauthorizedPage?: React.ComponentType<UnauthorizedPageProps>;
   appName?: string;
   toolbarChildren?: React.ReactNode;
   /** An array of menu items, each containing a React node and an action triggered when selected, either a string, dialog component, or a function. */
@@ -57,13 +63,14 @@ const Page = React.memo(
     page,
     loginClicked,
     setLoginClicked,
+    unauthorizedPage,
   }: {
     auth: PageContainerProps['auth'];
     page: PageContainerProps['page'];
     loginClicked: boolean;
     setLoginClicked: (loginClicked: boolean) => void;
+    unauthorizedPage: PageContainerProps['unauthorizedPage'];
   }) => {
-    const navigate = useNavigate();
     const urlParams = createUrlParams();
     if (auth?.canViewPage(page)) {
       return <page.component urlParams={urlParams} />;
@@ -77,8 +84,9 @@ const Page = React.memo(
       return null;
     }
 
-    navigate('/');
-    return null;
+    // Logged in but not allowed to view this page.
+    const UnauthorizedPage = unauthorizedPage ?? DefaultUnauthorizedPage;
+    return <UnauthorizedPage page={page} />;
   }
 );
 
@@ -95,6 +103,7 @@ export function PageContainer(props: PageContainerProps) {
     toolbarProps,
     CustomAccountIconButton,
     CustomPageContainer,
+    unauthorizedPage,
     abovePageSlot,
   } = props;
   const [loginClicked, setLoginClicked] = React.useState(false);
@@ -123,7 +132,13 @@ export function PageContainer(props: PageContainerProps) {
         auth={auth}
         pageContainerSxProps={page.pageContainerSxProps}
       >
-        <Page auth={auth} page={page} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
+        <Page
+          auth={auth}
+          page={page}
+          loginClicked={loginClicked}
+          setLoginClicked={setLoginClicked}
+          unauthorizedPage={unauthorizedPage}
+        />
       </CustomPageContainer>
     );
   }
@@ -186,7 +201,13 @@ export function PageContainer(props: PageContainerProps) {
         <NavMenu navMenuItems={navMenuItems} navMenuOpen={navMenuOpen} setNavMenuOpen={setNavMenuOpen} />
       )}
       {abovePageSlot}
-      <Page auth={auth} page={page} loginClicked={loginClicked} setLoginClicked={setLoginClicked} />
+      <Page
+        auth={auth}
+        page={page}
+        loginClicked={loginClicked}
+        setLoginClicked={setLoginClicked}
+        unauthorizedPage={unauthorizedPage}
+      />
     </Box>
   );
 }

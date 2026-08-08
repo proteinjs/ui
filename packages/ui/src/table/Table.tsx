@@ -24,6 +24,8 @@ import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
 import { useTableData } from './tableData';
 import { InfiniteScroll } from './InfiniteScroll';
+import { hasTextSelectionInRow, PointerPosition, shouldRunRowClickAction } from './rowClickIntent';
+import { resolveTableBodyState, tableLoadErrorText } from './tableLoadState';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
@@ -112,6 +114,12 @@ export function Table<T>({
     setInfScrollContainer(node);
   }, []);
   const navigate = useNavigate();
+  /**
+   * Where the pointer went down for the in-progress gesture, so a drag that ends on a row can be
+   * told apart from a click on it. Cleared after each click; a keyboard-activated click never sets
+   * it. A ref rather than state: this must not re-render rows.
+   */
+  const pointerDownAt = useRef<PointerPosition | undefined>(undefined);
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
     useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount, refetchOnWindowFocus);
@@ -160,6 +168,17 @@ export function Table<T>({
     navigate: (url: string) => void
   ) {
     if (!action) {
+      return;
+    }
+
+    const gestureStart = pointerDownAt.current;
+    pointerDownAt.current = undefined;
+    const runAction = shouldRunRowClickAction({
+      pointerDownAt: gestureStart,
+      clickAt: { x: event.clientX, y: event.clientY },
+      hasTextSelectionInRow: hasTextSelectionInRow(event.currentTarget, window.getSelection()),
+    });
+    if (!runAction) {
       return;
     }
 
@@ -263,6 +282,7 @@ export function Table<T>({
 
   const renderTableContainer = () => {
     const totalColumns = columns.length + (buttons && buttons.length > 0 ? 1 : 0);
+    const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
 
     return (
       <TableContainer sx={{ ...tableContainerSx }}>
@@ -292,7 +312,7 @@ export function Table<T>({
                 ))}
             </TableRow>
           </TableHead>
-          {isLoading && (
+          {bodyState === 'loading' && (
             <TableBody className='loading-skeleton-table-body'>
               <TableRow className='loading-skeleton-row'>
                 <TableCell colSpan={totalColumns} align='center' className='loading-skeleton-cell' sx={{ py: 3 }}>
@@ -301,7 +321,19 @@ export function Table<T>({
               </TableRow>
             </TableBody>
           )}
-          {rows.length === 0 && !isLoading && (
+          {bodyState === 'error' && (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={totalColumns} align='center' sx={{ py: 3 }}>
+                  <Typography color='error'>Couldn't load rows.</Typography>
+                  <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+                    {tableLoadErrorText(error)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          )}
+          {bodyState === 'empty' && (
             <TableBody>
               <TableRow>
                 <TableCell colSpan={totalColumns} align='center'>
@@ -310,7 +342,7 @@ export function Table<T>({
               </TableRow>
             </TableBody>
           )}
-          {rows.length > 0 && (
+          {bodyState === 'rows' && (
             <TableBody>
               {rows.map((row, index) => {
                 index = rowsPerPage * page + index;
@@ -321,6 +353,13 @@ export function Table<T>({
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
+                    onPointerDown={
+                      rowOnClick
+                        ? (event: React.PointerEvent) => {
+                            pointerDownAt.current = { x: event.clientX, y: event.clientY };
+                          }
+                        : undefined
+                    }
                     onClick={
                       rowOnClick
                         ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick, navigate)

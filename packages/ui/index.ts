@@ -14,11 +14,13 @@ export * from './src/form/container/FormPage';
 export * from './src/container/PageContainer';
 export * from './src/container/AccountAuth';
 export * from './src/container/NavMenu';
+export * from './src/container/DefaultUnauthorizedPage';
 
 export * from './src/table/Table';
 export * from './src/table/TableButton';
 export * from './src/table/TableLoader';
 export * from './src/table/tableData';
+export * from './src/table/rowClickIntent';
 
 export * from './src/components/SearchInput';
 
