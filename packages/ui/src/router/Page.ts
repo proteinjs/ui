@@ -22,6 +22,13 @@ export interface Page extends Loadable {
     allUsers?: boolean;
     /** The user must be logged in and have these roles to access this page. If blank, defaults to requiring the 'admin' role. */
     roles?: string[];
+    /**
+     * The user must hold this abstract permission slug, resolved to roles at runtime through the
+     * consumer app's `PermissionRolesMapping` (enforced by the auth container's `canViewPage` —
+     * see @proteinjs/user-ui). Generic pages declare permissions; only the consumer names roles.
+     * Takes precedence over `roles` when both are set. Admin passes every permission (break-glass).
+     */
+    permission?: string;
   };
   pageContainerSxProps?: (theme: Theme) => SxProps;
 }
