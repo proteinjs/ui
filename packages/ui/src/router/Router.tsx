@@ -1,14 +1,23 @@
 import React from 'react';
 import { Route, Routes } from 'react-router';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { Router as LowLevelRouter } from 'react-router-dom';
+import { createBrowserHistory, type Action, type History, type Location } from '@remix-run/router';
 import { Page, getPages } from './Page';
 import { createUrlParams } from './createUrlParams';
 import { NotFound } from './NotFound';
+import { decorateHistoryWithViewTransitions, RouteTransitionPolicy } from './ViewTransitionHistory';
 
 export type AppOptions = {
   pageContainer?: React.ComponentType<{ page: Page }>;
   pageNotFound?: React.ComponentType;
+  /**
+   * Optional route-transition policy (MOBILE_POLISH T2): when provided, route commits the
+   * policy approves run inside document.startViewTransition (see ViewTransitionHistory).
+   * The router is the ONE place every navigation dispatches, so this is the app's single
+   * transition seam. Absent → byte-identical to the plain BrowserRouter this replaced.
+   */
+  routeTransitions?: RouteTransitionPolicy;
 };
 
 export function loadApp(options: AppOptions = {}) {
@@ -24,10 +33,37 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   // mode. The app's ThemeProvider owns the baseline (see @n3xah/util-ui ThemeProvider).
   return (
     <div>
-      <BrowserRouter>
+      <HistoryRouter routeTransitions={props.options.routeTransitions}>
         <AppRoutes pages={props.pages} options={props.options} />
-      </BrowserRouter>
+      </HistoryRouter>
     </div>
+  );
+}
+
+/**
+ * BrowserRouter's own ~10 lines (react-router-dom 6.16: createBrowserHistory({window,
+ * v5Compat}) + listen→setState), inlined so the history is OURS to decorate — react-router
+ * 6.16 has no view-transition support and BrowserRouter hides its history. With no policy
+ * the undecorated history dispatches identically to BrowserRouter.
+ */
+function HistoryRouter(props: { routeTransitions?: RouteTransitionPolicy; children: React.ReactNode }) {
+  const historyRef = React.useRef<History | null>(null);
+  if (historyRef.current == null) {
+    const history = createBrowserHistory({ window, v5Compat: true });
+    historyRef.current = props.routeTransitions
+      ? decorateHistoryWithViewTransitions(history, props.routeTransitions)
+      : history;
+  }
+  const history = historyRef.current;
+  const [state, setState] = React.useState<{ action: Action; location: Location }>({
+    action: history.action,
+    location: history.location,
+  });
+  React.useLayoutEffect(() => history.listen(setState), [history]);
+  return (
+    <LowLevelRouter location={state.location} navigationType={state.action} navigator={history}>
+      {props.children}
+    </LowLevelRouter>
   );
 }
 
