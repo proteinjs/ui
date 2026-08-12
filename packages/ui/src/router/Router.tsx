@@ -3,14 +3,15 @@ import { Route, Routes } from 'react-router';
 import { createRoot } from 'react-dom/client';
 import { Router as LowLevelRouter } from 'react-router-dom';
 import { createBrowserHistory, type Action, type History, type Location } from '@remix-run/router';
-import { Page, getPages } from './Page';
+import { Page, PageComponentProps, getPages } from './Page';
 import { createUrlParams } from './createUrlParams';
 import { NotFound } from './NotFound';
 import { decorateHistoryWithViewTransitions, RouteTransitionPolicy } from './ViewTransitionHistory';
 
 export type AppOptions = {
   pageContainer?: React.ComponentType<{ page: Page }>;
-  pageNotFound?: React.ComponentType;
+  /** Rendered for unmatched routes. Routed through `pageContainer` like any other page. */
+  pageNotFound?: React.ComponentType<PageComponentProps>;
   /**
    * Optional route-transition policy (MOBILE_POLISH T2): when provided, route commits the
    * policy approves run inside document.startViewTransition (see ViewTransitionHistory).
@@ -69,7 +70,15 @@ function HistoryRouter(props: { routeTransitions?: RouteTransitionPolicy; childr
 
 export function AppRoutes(props: { pages: Page[]; options: AppOptions }) {
   const { pages, options } = props;
-  const PageNotFound = options.pageNotFound ?? NotFound;
+  // The catch-all is a real Page routed through the normal page container, so the 404 renders
+  // inside the app chrome (theme, nav) like any other surface. Public: a signed-out visitor on
+  // a dead link sees the 404, not a login redirect.
+  const notFoundPage: Page = {
+    name: 'Page not found',
+    path: '*',
+    component: options.pageNotFound ?? NotFound,
+    auth: { public: true },
+  };
   const routes: React.ReactElement[] = [];
   let key = 0;
   for (const page of pages) {
@@ -84,7 +93,7 @@ export function AppRoutes(props: { pages: Page[]; options: AppOptions }) {
   return (
     <Routes>
       {routes}
-      <Route path='*' element={<PageNotFound />} />
+      <Route path='*' element={<ContainerizedComponent options={options} page={notFoundPage} />} />
     </Routes>
   );
 }

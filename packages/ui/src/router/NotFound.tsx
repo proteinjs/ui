@@ -1,16 +1,24 @@
 import React from 'react';
-import { Box, Link, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 
 /**
- * Default 404 page for unmatched routes. Deliberately framework-neutral: it renders outside any
- * app ThemeProvider (see Router), so it sticks to plain MUI defaults — no product branding.
- * Apps replace it via `AppOptions.pageNotFound`.
+ * Default 404 page for unmatched routes. The router routes it through the app's page container
+ * (see AppRoutes), so it renders inside the app's theme and chrome like any other page.
+ * Deliberately framework-neutral — plain MUI, no product branding. Apps replace it via
+ * `AppOptions.pageNotFound`.
+ *
+ * Geometry: fills the viewport (`100dvh`) when rendered bare, capped at the page container's
+ * content area (`maxHeight: 100%`) when containerized — centered in both without branching.
  */
 export function NotFound() {
+  const navigate = useNavigate();
   return (
     <Box
       sx={{
-        minHeight: '100dvh',
+        height: '100dvh',
+        maxHeight: '100%',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -24,9 +32,9 @@ export function NotFound() {
         Page not found
       </Typography>
       <Typography color='text.secondary'>It may have been moved or no longer exists.</Typography>
-      <Link href='/' underline='hover'>
-        Go to home
-      </Link>
+      <Button variant='contained' disableElevation onClick={() => navigate('/', { replace: true })} sx={{ mt: 1 }}>
+        Go home
+      </Button>
     </Box>
   );
 }

@@ -24,7 +24,7 @@ describe('route table 404 handling', () => {
   it('renders the default NotFound page (not a blank screen) for an unmatched path', () => {
     const html = render('/no-such-page');
     expect(html).toContain('Page not found');
-    expect(html).toContain(`href="/"`);
+    expect(html).toContain('Go home');
   });
 
   it('renders the registered pageNotFound override for an unmatched path', () => {
@@ -32,6 +32,18 @@ describe('route table 404 handling', () => {
     const html = render('/no-such-page', { pageNotFound: Custom });
     expect(html).toContain('custom-not-found');
     expect(html).not.toContain('Page not found');
+  });
+
+  it('routes the 404 through the app page container so the app chrome renders', () => {
+    const Container = ({ page }: { page: Page }) => (
+      <div>
+        page-container-chrome
+        <page.component urlParams={{}} />
+      </div>
+    );
+    const html = render('/no-such-page', { pageContainer: Container });
+    expect(html).toContain('page-container-chrome');
+    expect(html).toContain('Page not found');
   });
 
   it('still renders a registered page for a matched path', () => {
