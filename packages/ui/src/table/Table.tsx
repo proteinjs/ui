@@ -420,9 +420,9 @@ export function Table<T>({
       >
         {infiniteScroll ? (
           <InfiniteScroll
-            dataLength={rows.length}
             next={handleFetchNextPage}
             hasMore={!!hasNextPage}
+            isFetching={isFetchingNextPage}
             loader={
               infiniteScrollLoader || (
                 <Typography variant='body2' sx={{ p: 2 }}>
@@ -430,7 +430,7 @@ export function Table<T>({
                 </Typography>
               )
             }
-            scrollableTarget={infScrollContainer || undefined}
+            scrollableTarget={infScrollContainer}
           >
             {renderTableContainer()}
           </InfiniteScroll>
