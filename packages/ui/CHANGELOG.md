@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.6.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.5.0...@proteinjs/ui@4.6.0) (2026-08-13)
+
+
+### Bug Fixes
+
+* render a real 404 page for unmatched routes ([e3de77f](https://github.com/proteinjs/ui/commit/e3de77fdca3b8d6d8a6ee2582e972a3a3d804699))
+
+
+### Features
+
+* CursorLoader — first-class cursor windows on the shared caching contract ([2319ab6](https://github.com/proteinjs/ui/commit/2319ab6eb12ece71c3f8cafbf73cb4bee5d31fa6))
+* export ViewTransitionHistory from the package index ([3f8b880](https://github.com/proteinjs/ui/commit/3f8b880a262f7c6ca0d3d1a6a656de649de2dcb5))
+* real not-found surface routed through the app container ([dd39a2c](https://github.com/proteinjs/ui/commit/dd39a2cb75727644b9d025fc51ec0cf9043c302f))
+* **ui:** route-transition seam — history-owning router + View Transitions decorator ([120fe60](https://github.com/proteinjs/ui/commit/120fe60ffacf73fb265c8933edad438923395ca0))
+
+
+
+
+
 ## [4.3.11](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.3.10...@proteinjs/ui@4.3.11) (2026-07-27)
 
 
