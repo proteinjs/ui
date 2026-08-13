@@ -1,13 +1,24 @@
 import React from 'react';
 import { Route, Routes } from 'react-router';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, useNavigate, NavigateFunction } from 'react-router-dom';
-import { Page, getPages } from './Page';
+import { Router as LowLevelRouter } from 'react-router-dom';
+import { createBrowserHistory, type Action, type History, type Location } from '@remix-run/router';
+import { Page, PageComponentProps, getPages } from './Page';
 import { createUrlParams } from './createUrlParams';
+import { NotFound } from './NotFound';
+import { decorateHistoryWithViewTransitions, RouteTransitionPolicy } from './ViewTransitionHistory';
 
 export type AppOptions = {
   pageContainer?: React.ComponentType<{ page: Page }>;
-  pageNotFound?: React.ComponentType;
+  /** Rendered for unmatched routes. Routed through `pageContainer` like any other page. */
+  pageNotFound?: React.ComponentType<PageComponentProps>;
+  /**
+   * Optional route-transition policy (MOBILE_POLISH T2): when provided, route commits the
+   * policy approves run inside document.startViewTransition (see ViewTransitionHistory).
+   * The router is the ONE place every navigation dispatches, so this is the app's single
+   * transition seam. Absent → byte-identical to the plain BrowserRouter this replaced.
+   */
+  routeTransitions?: RouteTransitionPolicy;
 };
 
 export function loadApp(options: AppOptions = {}) {
@@ -17,70 +28,83 @@ export function loadApp(options: AppOptions = {}) {
 }
 
 export function Router(props: { pages: Page[]; options: AppOptions }) {
-  const { pages, options } = props;
   // NOTE: no CssBaseline here — this Router renders OUTSIDE any app ThemeProvider, so a baseline
   // at this level styles <body> with MUI's DEFAULT theme (light text color, white background,
   // Roboto). Every `color: inherit` in the app then bottoms out at light-mode black even in dark
   // mode. The app's ThemeProvider owns the baseline (see @n3xah/util-ui ThemeProvider).
   return (
     <div>
-      <BrowserRouter>
-        <RoutesComponent />
-      </BrowserRouter>
+      <HistoryRouter routeTransitions={props.options.routeTransitions}>
+        <AppRoutes pages={props.pages} options={props.options} />
+      </HistoryRouter>
     </div>
   );
+}
 
-  function RoutesComponent() {
-    return (
-      <Routes>
-        {(() => {
-          const routes = [];
-          let key = 0;
-          for (const page of pages) {
-            if (typeof page.path === 'string') {
-              routes.push(
-                <Route
-                  key={key++}
-                  path={getPath(page.path)}
-                  element={<ContainerizedComponent options={options} page={page} />}
-                />
-              );
-            } else {
-              const paths = page.path as string[];
-              for (const path of paths) {
-                routes.push(
-                  <Route
-                    key={key++}
-                    path={getPath(path)}
-                    element={<ContainerizedComponent options={options} page={page} />}
-                  />
-                );
-              }
-            }
-          }
-          return routes;
-        })()}
-        <Route element={<PageNotFound pageNotFound={options.pageNotFound} />} />
-      </Routes>
-    );
+/**
+ * BrowserRouter's own ~10 lines (react-router-dom 6.16: createBrowserHistory({window,
+ * v5Compat}) + listen→setState), inlined so the history is OURS to decorate — react-router
+ * 6.16 has no view-transition support and BrowserRouter hides its history. With no policy
+ * the undecorated history dispatches identically to BrowserRouter.
+ */
+function HistoryRouter(props: { routeTransitions?: RouteTransitionPolicy; children: React.ReactNode }) {
+  const historyRef = React.useRef<History | null>(null);
+  if (historyRef.current == null) {
+    const history = createBrowserHistory({ window, v5Compat: true });
+    historyRef.current = props.routeTransitions
+      ? decorateHistoryWithViewTransitions(history, props.routeTransitions)
+      : history;
   }
+  const history = historyRef.current;
+  const [state, setState] = React.useState<{ action: Action; location: Location }>({
+    action: history.action,
+    location: history.location,
+  });
+  React.useLayoutEffect(() => history.listen(setState), [history]);
+  return (
+    <LowLevelRouter location={state.location} navigationType={state.action} navigator={history}>
+      {props.children}
+    </LowLevelRouter>
+  );
+}
 
-  function ContainerizedComponent(props: { options: AppOptions; page: Page }) {
-    const urlParams = createUrlParams();
-    if (props.options.pageContainer && !props.page.noPageContainer) {
-      return <props.options.pageContainer page={props.page} />;
+export function AppRoutes(props: { pages: Page[]; options: AppOptions }) {
+  const { pages, options } = props;
+  // The catch-all is a real Page routed through the normal page container, so the 404 renders
+  // inside the app chrome (theme, nav) like any other surface. Public: a signed-out visitor on
+  // a dead link sees the 404, not a login redirect.
+  const notFoundPage: Page = {
+    name: 'Page not found',
+    path: '*',
+    component: options.pageNotFound ?? NotFound,
+    auth: { public: true },
+  };
+  const routes: React.ReactElement[] = [];
+  let key = 0;
+  for (const page of pages) {
+    const paths = typeof page.path === 'string' ? [page.path] : page.path;
+    for (const path of paths) {
+      routes.push(
+        <Route key={key++} path={getPath(path)} element={<ContainerizedComponent options={options} page={page} />} />
+      );
     }
-
-    return <props.page.component urlParams={urlParams} />;
   }
 
-  function PageNotFound(props: { pageNotFound: AppOptions['pageNotFound'] }) {
-    if (props.pageNotFound) {
-      return <props.pageNotFound />;
-    }
+  return (
+    <Routes>
+      {routes}
+      <Route path='*' element={<ContainerizedComponent options={options} page={notFoundPage} />} />
+    </Routes>
+  );
+}
 
-    return <h1>404: Page not found</h1>;
+function ContainerizedComponent(props: { options: AppOptions; page: Page }) {
+  const urlParams = createUrlParams();
+  if (props.options.pageContainer && !props.page.noPageContainer) {
+    return <props.options.pageContainer page={props.page} />;
   }
+
+  return <props.page.component urlParams={urlParams} />;
 }
 
 function getPath(path: string) {

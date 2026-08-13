@@ -8,7 +8,7 @@ import {
   UseInfiniteQueryResult,
   QueryFunctionContext,
 } from 'react-query';
-import { TableLoader, RowWindow } from './TableLoader';
+import { TableLoader, RowWindow, KeyedDataLoader } from './TableLoader';
 import { useCallback, useMemo } from 'react';
 
 export type InfiniteQueryData<T> = {
@@ -159,22 +159,28 @@ export const useInfiniteScrollTableQuery = <T>(
   });
 };
 
-export const useTableMutation = <T, TVariables = unknown>(
-  tableLoader: TableLoader<T> | null | undefined,
+/**
+ * THE mutation → cache-refresh pattern for loader-backed data: on success, invalidate the
+ * loader's `dataKey`, which prefix-matches every cached query over the data set — offset
+ * pages (`useTableData`) and cursor windows (`useCursorWindows`) alike — and refetches the
+ * active ones in place.
+ */
+export const useTableMutation = <TVariables = unknown>(
+  loader: KeyedDataLoader | null | undefined,
   mutationFn: (variables: TVariables) => Promise<void>
 ): UseMutationResult<void, Error, TVariables> => {
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, TVariables>(
     async (variables: TVariables) => {
-      if (tableLoader) {
+      if (loader) {
         return mutationFn(variables);
       }
     },
     {
       onSuccess: (): void => {
-        if (tableLoader?.reactQueryKeys) {
-          queryClient.invalidateQueries({ queryKey: [tableLoader.reactQueryKeys.dataKey] });
+        if (loader?.reactQueryKeys) {
+          queryClient.invalidateQueries({ queryKey: [loader.reactQueryKeys.dataKey] });
         }
       },
       onError: (error: Error): void => {

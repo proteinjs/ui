@@ -19,7 +19,17 @@ export type ReactQueryKeys = {
   dataQueryKey: string;
 };
 
-export interface TableLoader<T> {
+/**
+ * The caching contract every loader shape shares: react-query entries are keyed
+ * `[dataKey, dataQueryKey, ...]`, so invalidating `[dataKey]` reaches every cached query over
+ * the data set regardless of which loader (offset `TableLoader`, cursor `CursorLoader`)
+ * produced it. Mutation helpers (`useTableMutation`) accept any keyed loader.
+ */
+export interface KeyedDataLoader {
+  reactQueryKeys: ReactQueryKeys;
+}
+
+export interface TableLoader<T> extends KeyedDataLoader {
   /**
    * Query keys are used in React Query to uniquely identify and manage cached data fetched from an API.
    * If you do not want to set your own query keys, extend `BaseTableLoader` and it will implement defaults for you.

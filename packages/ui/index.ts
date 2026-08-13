@@ -1,6 +1,7 @@
 export * from './src/router/Router';
 export * from './src/router/withRouter';
 export * from './src/router/Page';
+export * from './src/router/ViewTransitionHistory';
 
 export * from './src/form/Form';
 export * from './src/form/Field';
@@ -20,6 +21,8 @@ export * from './src/table/Table';
 export * from './src/table/TableButton';
 export * from './src/table/TableLoader';
 export * from './src/table/tableData';
+export * from './src/table/CursorLoader';
+export * from './src/table/cursorWindows';
 export * from './src/table/rowClickIntent';
 
 export * from './src/components/SearchInput';
