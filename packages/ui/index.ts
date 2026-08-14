@@ -25,6 +25,8 @@ export * from './src/table/CursorLoader';
 export * from './src/table/cursorWindows';
 export * from './src/table/rowClickIntent';
 
+export * from './src/list/List';
+
 export * from './src/components/SearchInput';
 
 export * from './src/formatters';

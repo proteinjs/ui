@@ -73,6 +73,12 @@ export interface CursorWindowsResult<T> {
   /** Re-read every loaded window from the top with freshly derived cursors; one atomic swap. */
   refresh: () => void;
   isFetching: boolean;
+  /**
+   * The query's error (null while healthy). Pairs with `rows` for slot decisions: an error with
+   * `rows` undefined means nothing ever loaded (`List`'s errorState); once rows have resolved
+   * they persist through refetch failures, so an error never has to replace real data.
+   */
+  error: Error | null;
 }
 
 /**
@@ -87,7 +93,7 @@ export function useCursorWindows<T>(
   options: UseCursorWindowsOptions<T> = {}
 ): CursorWindowsResult<T> {
   const { queryKey, queryFn, getNextPageParam } = buildCursorWindowsQuery(loader, windowSize);
-  const { data, fetchNextPage, hasNextPage, isFetching, isPreviousData, refetch } = useInfiniteQuery<
+  const { data, error, fetchNextPage, hasNextPage, isFetching, isPreviousData, refetch } = useInfiniteQuery<
     CursorWindow<T>,
     Error,
     CursorWindow<T>,
@@ -121,5 +127,6 @@ export function useCursorWindows<T>(
     hasMore: !!hasNextPage && !isPreviousData,
     refresh,
     isFetching,
+    error,
   };
 }
