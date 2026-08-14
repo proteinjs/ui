@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.7.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.6.1...@proteinjs/ui@4.7.0) (2026-08-14)
+
+
+### Features
+
+* List — Table's row-stream peer on the CursorLoader seam ([687e5bd](https://github.com/proteinjs/ui/commit/687e5bd247acd8d804338162ebdbd9d03ef747ca))
+
+
+
+
+
 ## [4.6.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.6.0...@proteinjs/ui@4.6.1) (2026-08-13)
 
 **Note:** Version bump only for package @proteinjs/ui
