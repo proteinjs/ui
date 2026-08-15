@@ -21,6 +21,8 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { ScrollTopButton } from '../src/components/ScrollTopButton';
 import { Table } from '../src/table/Table';
 import type { TableLoader, RowWindow } from '../src/table/TableLoader';
+import { List } from '../src/list/List';
+import type { CursorLoader, CursorValue, CursorWindow } from '../src/table/CursorLoader';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -225,6 +227,91 @@ describe('Table — scrollTopButton prop', () => {
 
     await click(container);
     // The OUTCOME: Table's scroller is back at the top, and the button retires on the next scroll.
+    expect(scroller.scrollTop).toBe(0);
+    await scrollTo(scroller, 0);
+    expect(isActive(container)).toBe(false);
+  });
+});
+
+// ── List integration: the opt-in prop discovers the CONSUMER'S scroller ───────────────────────
+// Unlike Table, List renders inside the consumer's scroll container rather than owning one, so
+// the wiring finds the nearest scrollable ancestor in the DOM and drives that element.
+
+type ListRow = { id: string };
+const listRows: ListRow[] = Array.from({ length: 12 }, (_, i) => ({ id: `row-${i + 1}` }));
+
+/** One exhausted window — the button wiring under test needs rows, not windowing. */
+class OneWindowLoader implements CursorLoader<ListRow> {
+  reactQueryKeys = { dataKey: `list-scroll-top-test-${Date.now()}-${Math.random()}`, dataQueryKey: 'all' };
+  async loadWindow(_cursor: CursorValue | null, _windowSize: number): Promise<CursorWindow<ListRow>> {
+    return { rows: listRows, nextCursor: null };
+  }
+}
+
+describe('List — scrollTopButton prop', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  const mount = async (scrollTopButton?: boolean) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          {/* The consumer's scroller, with a non-scrollable layer between it and List — the
+              wiring must walk UP to the real scroll container, not grab the direct parent. */}
+          <div data-test-scroller style={{ overflowY: 'auto' }}>
+            <div>
+              <List<ListRow>
+                loader={new OneWindowLoader()}
+                windowSize={20}
+                rowId={(row) => row.id}
+                renderRow={(row) => <div data-test-row>{row.id}</div>}
+                scrollTopButton={scrollTopButton}
+              />
+            </div>
+          </div>
+        </QueryClientProvider>
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  };
+
+  it('is opt-in: no back-to-top button unless the prop is set', async () => {
+    await mount();
+    expect(container.querySelectorAll('[data-test-row]').length).toBe(listRows.length);
+    expect(button(container)).toBeNull();
+  });
+
+  it('when enabled, the button watches and scrolls the discovered ancestor scroller', async () => {
+    await mount(true);
+    expect(container.querySelectorAll('[data-test-row]').length).toBe(listRows.length);
+    expect(button(container)).toBeTruthy();
+
+    const scroller = container.querySelector<HTMLElement>('[data-test-scroller]')!;
+    stubScrollTo(scroller);
+
+    // Inert at the top, active once the CONSUMER'S scroller passes the threshold.
+    expect(isActive(container)).toBe(false);
+    await scrollTo(scroller, 200);
+    expect(isActive(container)).toBe(true);
+
+    await click(container);
+    // The OUTCOME: the consumer's scroller is back at the top, and the button retires.
     expect(scroller.scrollTop).toBe(0);
     await scrollTo(scroller, 0);
     expect(isActive(container)).toBe(false);

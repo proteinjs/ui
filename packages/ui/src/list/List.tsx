@@ -1,7 +1,8 @@
-import React, { ReactNode, useEffect, useMemo, useRef } from 'react';
-import { Box, BoxProps, Skeleton, Typography } from '@mui/material';
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, BoxProps, Skeleton, SxProps, Theme, Typography } from '@mui/material';
 import { CursorLoader } from '../table/CursorLoader';
 import { useCursorWindows } from '../table/cursorWindows';
+import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
 
 export interface ListProps<T> {
   /**
@@ -41,6 +42,16 @@ export interface ListProps<T> {
   /** Gate fetching (react-query `enabled`) — e.g. a popover list that must not load until opened. */
   enabled?: boolean;
   refetchOnWindowFocus?: boolean;
+  /**
+   * Opt-in floating back-to-top button over the list's scroll container. `true` renders the
+   * framework-default styling; pass `ScrollTopButtonStyleProps` (e.g. an app's house preset) to
+   * restyle. Off by default. Unlike `Table`, `List` renders inside the consumer's scroller
+   * rather than owning one, so the wiring finds the nearest scrollable ancestor and floats the
+   * button over its bottom edge via a sticky strip at the list's tail — same geometry as
+   * `Table`'s sibling-after-scroller placement. Element scrollers only: a window-scrolled page
+   * has no scrollable ancestor and the button stays retired.
+   */
+  scrollTopButton?: boolean | ScrollTopButtonStyleProps;
   /** The root container (wraps rows and sentinel; slots render bare). */
   sx?: BoxProps['sx'];
   /** Each group's container. */
@@ -87,6 +98,28 @@ const defaultErrorState = (
   <Typography sx={{ fontSize: '15px', color: 'text.secondary', py: 2 }}>Something went wrong.</Typography>
 );
 
+/** The nearest ancestor that scrolls vertically — the scroller the back-to-top button watches
+ *  and returns to the top. `List` renders inside the consumer's scroll container rather than
+ *  owning one (unlike `Table`), so the wiring finds it in the DOM at mount. */
+const findScrollableAncestor = (node: HTMLElement): HTMLElement | null => {
+  for (let el = node.parentElement; el; el = el.parentElement) {
+    const { overflowY } = getComputedStyle(el);
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+      return el;
+    }
+  }
+  return null;
+};
+
+/** The button's host strip rides `position: sticky` inside the scroller — stuck at the scroll
+ *  viewport's bottom edge while the reader is scrolled up, at the content tail at rest. Same
+ *  geometry as `Table`'s sibling-after-scroller strip, achieved from within the scroller. The
+ *  consumer's `hostSx` appends after (array-merged), so it can still restyle the strip. */
+const stickyHostSx = (hostSx: ScrollTopButtonStyleProps['hostSx']): SxProps<Theme> => [
+  { position: 'sticky', bottom: 0 },
+  ...(Array.isArray(hostSx) ? hostSx : hostSx ? [hostSx] : []),
+];
+
 /**
  * `Table`'s row-stream peer: `List` renders cursor windows through `renderRow`, owning behavior
  * while the consumer owns every pixel. Behavior in the shell: window accumulation and row
@@ -111,6 +144,7 @@ export function List<T>({
   errorState = defaultErrorState,
   enabled,
   refetchOnWindowFocus,
+  scrollTopButton,
   sx,
   groupSx,
   groupRowsSx,
@@ -123,6 +157,14 @@ export function List<T>({
     refetchOnWindowFocus,
   });
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroller discovery via callback ref: runs exactly when the shell mounts/unmounts (the
+  // skeleton/empty slots render bare, so there is no root to anchor discovery to until rows
+  // exist), and re-runs if React remounts the root.
+  const [scrollHost, setScrollHost] = useState<HTMLElement | null>(null);
+  const discoverScrollHost = useCallback((node: HTMLDivElement | null) => {
+    setScrollHost(node ? findScrollableAncestor(node) : null);
+  }, []);
 
   // Re-created whenever the list grows: observe() re-reports current intersection, so a
   // sentinel still in view after a fetch keeps pulling windows without a new scroll event.
@@ -150,8 +192,10 @@ export function List<T>({
     return <>{emptyState}</>;
   }
 
+  const scrollTopStyleProps = scrollTopButton && scrollTopButton !== true ? scrollTopButton : undefined;
+
   return (
-    <Box sx={sx}>
+    <Box ref={scrollTopButton ? discoverScrollHost : undefined} sx={sx}>
       {groups
         ? groups.map((group, groupIndex) => (
             <Box key={group.reactKey} sx={groupSx}>
@@ -165,6 +209,13 @@ export function List<T>({
           ))
         : rows.map((row, index) => <React.Fragment key={rowId(row)}>{renderRow(row, index)}</React.Fragment>)}
       {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} />}
+      {scrollTopButton && (
+        <ScrollTopButton
+          scrollContainer={scrollHost}
+          {...scrollTopStyleProps}
+          hostSx={stickyHostSx(scrollTopStyleProps?.hostSx)}
+        />
+      )}
     </Box>
   );
 }
