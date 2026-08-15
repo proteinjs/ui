@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.8.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.7.0...@proteinjs/ui@4.8.0) (2026-08-15)
+
+
+### Features
+
+* floating scroll-to-top affordance for infinite-scroll lists ([bfaab99](https://github.com/proteinjs/ui/commit/bfaab9980ac71e8a789161d8c234e790ce8b75e1))
+* wire the scroll-to-top affordance into List ([23072ac](https://github.com/proteinjs/ui/commit/23072ac1e7181a8d0b7c7b4f488e9d7d02599fd1))
+
+
+
+
+
 # [4.7.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.6.1...@proteinjs/ui@4.7.0) (2026-08-14)
 
 
