@@ -26,6 +26,7 @@ import { useTableData } from './tableData';
 import { InfiniteScroll } from './InfiniteScroll';
 import { hasTextSelectionInRow, PointerPosition, shouldRunRowClickAction } from './rowClickIntent';
 import { resolveTableBodyState, tableLoadErrorText } from './tableLoadState';
+import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
@@ -80,6 +81,12 @@ export type TableProps<T> = {
   skeleton?: React.ReactNode;
   /** Loader to display while items are fetching. Only applicable when pagination prop is false. */
   infiniteScrollLoader?: React.ReactNode;
+  /**
+   * Opt-in floating back-to-top button over the table's scroll container. `true` renders the
+   * framework-default styling; pass `ScrollTopButtonStyleProps` (e.g. an app's house preset) to
+   * restyle. Off by default.
+   */
+  scrollTopButton?: boolean | ScrollTopButtonStyleProps;
 };
 
 export function Table<T>({
@@ -103,6 +110,7 @@ export function Table<T>({
   emptyTableComponent,
   skeleton,
   infiniteScrollLoader,
+  scrollTopButton,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
   const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageProp);
@@ -450,6 +458,11 @@ export function Table<T>({
           />
         )}
       </Box>
+      {/* Sibling immediately AFTER the scroller: the zero-height strip floats the button over
+          the scroller's bottom edge without taking layout space. */}
+      {scrollTopButton && (
+        <ScrollTopButton scrollContainer={infScrollContainer} {...(scrollTopButton === true ? {} : scrollTopButton)} />
+      )}
     </Box>
   );
 }
