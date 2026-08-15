@@ -1,5 +1,6 @@
 import React from 'react';
 import { Fields } from './Field';
+import { ConfirmationConfig } from '../components/ConfirmationDialog';
 
 export type FormButton<F extends Fields> = {
   name: string;
@@ -7,6 +8,11 @@ export type FormButton<F extends Fields> = {
     disabled?: boolean;
     hidden?: boolean;
   };
+  /**
+   * When provided, clicking the button opens a confirmation dialog instead of acting; `onClick`,
+   * `redirect`, and `clearFormOnClick` only run after the user confirms. Cancelling is a no-op.
+   */
+  confirm?: (fields: F) => ConfirmationConfig;
   style: {
     color?: 'inherit' | 'primary' | 'success' | 'warning' | 'secondary' | 'error' | 'info';
     variant?: 'text' | 'outlined' | 'contained';

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Button, Container, Grid, IconButton, Typography, LinearProgress, Stack } from '@mui/material';
+import { Alert, Button, Container, Grid, IconButton, Typography, LinearProgress, Stack } from '@mui/material';
 import queryString from 'query-string';
 import { Field, FieldComponent, Fields } from './Field';
 import { FormButton, FormButtons } from './FormButton';
 import { withRouter, WithRouterProps } from '../router/withRouter';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 
 export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   name?: string;
@@ -21,6 +22,10 @@ export type FormState<F extends Fields> = {
   fields: F;
   progress?: { visible?: boolean; message?: string };
   onLoadExecuted?: boolean;
+  /** True while a button's action is executing; buttons are disabled so a click acts exactly once. */
+  actionInFlight?: boolean;
+  /** Button whose `confirm` dialog is currently open; its action runs only on confirm. */
+  pendingConfirmationButton?: FormButton<F>;
 };
 
 export class FormComponent<F extends Fields, B extends FormButtons<F>> extends React.Component<
@@ -92,41 +97,61 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private async onClick(button: FormButton<any>) {
-    if (button.onClick) {
-      this.setState({
-        progress: {
-          visible: true,
-          message: button.progressMessage ? button.progressMessage(this.state.fields) : undefined,
-        },
-      });
-      try {
-        const successMessage = await button.onClick(this.state.fields, this.props.buttons);
-        if (successMessage) {
-          this.setState({ status: { message: successMessage, isError: false } });
-        }
-      } catch (error: any) {
-        this.setState({ status: { message: error.message, isError: true } });
-        console.error(`Error when clicking button: ${button.name}`, error);
-      }
-      this.setState({ progress: { visible: false } });
-    }
-
-    if (button.redirect) {
-      const redirect = await button.redirect(this.state.fields, this.props.buttons);
-      let path = redirect.path;
-      if (redirect.props) {
-        path += `?${queryString.stringify(redirect.props)}`;
-      }
-
-      if (this.props.navigate) {
-        this.props.navigate(path);
-      }
-
+    if (button.confirm) {
+      this.setState({ pendingConfirmationButton: button });
       return;
     }
 
-    if (button.clearFormOnClick) {
-      await this.onLoad();
+    await this.executeButtonAction(button);
+  }
+
+  private async executeButtonAction(button: FormButton<any>) {
+    // Single owner of the double-submit guard: whether a click comes straight from a button or
+    // through the confirmation dialog, an action only starts when none is in flight.
+    if (this.state.actionInFlight) {
+      return;
+    }
+
+    this.setState({ actionInFlight: true });
+    try {
+      if (button.onClick) {
+        this.setState({
+          progress: {
+            visible: true,
+            message: button.progressMessage ? button.progressMessage(this.state.fields) : undefined,
+          },
+        });
+        try {
+          const successMessage = await button.onClick(this.state.fields, this.props.buttons);
+          if (successMessage) {
+            this.setState({ status: { message: successMessage, isError: false } });
+          }
+        } catch (error: any) {
+          this.setState({ status: { message: error.message, isError: true } });
+          console.error(`Error when clicking button: ${button.name}`, error);
+        }
+        this.setState({ progress: { visible: false } });
+      }
+
+      if (button.redirect) {
+        const redirect = await button.redirect(this.state.fields, this.props.buttons);
+        let path = redirect.path;
+        if (redirect.props) {
+          path += `?${queryString.stringify(redirect.props)}`;
+        }
+
+        if (this.props.navigate) {
+          this.props.navigate(path);
+        }
+
+        return;
+      }
+
+      if (button.clearFormOnClick) {
+        await this.onLoad();
+      }
+    } finally {
+      this.setState({ actionInFlight: false });
     }
   }
 
@@ -143,7 +168,27 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
             {this.Buttons()}
           </Grid>
         </form>
+        {this.Confirmation()}
       </Container>
+    );
+  }
+
+  private Confirmation() {
+    const button = this.state.pendingConfirmationButton;
+    if (!button || !button.confirm) {
+      return null;
+    }
+
+    return (
+      <ConfirmationDialog
+        open
+        {...button.confirm(this.state.fields)}
+        onConfirm={() => {
+          this.setState({ pendingConfirmationButton: undefined });
+          this.executeButtonAction(button);
+        }}
+        onCancel={() => this.setState({ pendingConfirmationButton: undefined })}
+      />
     );
   }
 
@@ -233,9 +278,7 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
               marginBottom: theme.spacing(1),
             })}
           >
-            <Typography variant='subtitle1' color={this.state.status.isError ? 'error' : 'primary'}>
-              {this.state.status.message}
-            </Typography>
+            <Alert severity={this.state.status.isError ? 'error' : 'success'}>{this.state.status.message}</Alert>
           </Container>
         </Grid>
       </Grid>
@@ -390,14 +433,17 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
             })}
           >
             {button.style.icon ? (
-              <IconButton disabled={button.accessibility?.disabled} onClick={(event: any) => this.onClick(button)}>
+              <IconButton
+                disabled={button.accessibility?.disabled || this.state.actionInFlight}
+                onClick={(event: any) => this.onClick(button)}
+              >
                 <button.style.icon />
               </IconButton>
             ) : (
               <Button
                 color={button.style.color}
                 variant={button.style.variant || 'contained'}
-                disabled={button.accessibility?.disabled}
+                disabled={button.accessibility?.disabled || this.state.actionInFlight}
                 onClick={(event) => this.onClick(button)}
               >
                 {button.name}

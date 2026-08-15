@@ -1,25 +1,29 @@
 import React from 'react';
-import { InputAdornment, TextField as MuiTextField, IconButton } from '@mui/material';
-import { Visibility, VisibilityOff } from '@mui/icons-material';
+import { TextField as MuiTextField } from '@mui/material';
 import { Field, FieldComponent, FieldComponentProps, fieldDisplayValue, fieldLabel, Fields } from '../Field';
 
-export type TextFieldProps<T, F extends Fields> = Field<T, F> & {
-  isPassword?: boolean;
+export type DateFieldProps<F extends Fields> = Field<string, F> & {
+  /** Render a native datetime-local input (date + time) instead of a date input */
+  includeTime?: boolean;
 };
 
-export function textField<F extends Fields>(props: TextFieldProps<string, F>): FieldComponent<string, F> {
-  const { isPassword } = props;
+/**
+ * A date field rendered as a native date input (`datetime-local` when `includeTime` is set) —
+ * no date-picker dependency required. The field value is the input's own string format:
+ * 'YYYY-MM-DD', or 'YYYY-MM-DDTHH:mm' with `includeTime`; empty string when unset.
+ */
+export function dateField<F extends Fields>(props: DateFieldProps<F>): FieldComponent<string, F> {
+  const { includeTime } = props;
 
   return {
     field: props,
-    component: TextField,
+    component: DateField,
   };
 
-  function TextField(props: FieldComponentProps<string, F>) {
-    const { field, onChange, ...other } = props;
+  function DateField(props: FieldComponentProps<string, F>) {
+    const { field, onChange } = props;
     const [error, setError] = React.useState(false);
     const [statusMessage, setStatusMessage] = React.useState<string>();
-    const [passwordVisible, setPasswordVisible] = React.useState(false);
 
     return (
       <MuiTextField
@@ -29,11 +33,15 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
         }}
         key={field.name}
         label={fieldLabel(field)}
-        type={isPassword && !passwordVisible ? 'password' : 'text'}
+        type={includeTime ? 'datetime-local' : 'date'}
         value={fieldDisplayValue(field)}
         error={error}
         helperText={statusMessage ? statusMessage : field.description}
         required={field.accessibility?.required}
+        // Native date inputs always show their placeholder chrome; keep the label floated so it
+        // never overlaps.
+        InputLabelProps={{ shrink: true }}
+        InputProps={{ readOnly: field.accessibility?.readonly }}
         onChange={(event) => {
           let errorReceived = false;
           let messageReceived: string;
@@ -53,22 +61,6 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
             }
           });
         }}
-        InputProps={{
-          // readOnly (not disabled): a disabled input blocks text selection, so values like ids
-          // and timestamps couldn't be copied out of readonly fields.
-          readOnly: field.accessibility?.readonly,
-          endAdornment: isPassword && (
-            <InputAdornment position='end'>
-              <IconButton
-                aria-label='Toggle password visibility'
-                onClick={(event) => setPasswordVisible(!passwordVisible)}
-              >
-                {passwordVisible ? <VisibilityOff /> : <Visibility />}
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
-        {...other}
       />
     );
   }

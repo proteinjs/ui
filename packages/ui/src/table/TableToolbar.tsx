@@ -2,6 +2,7 @@ import React from 'react';
 import { TableButton } from './TableButton';
 import { IconButton, Toolbar, ToolbarProps, Tooltip, Typography, lighten, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 
 export type TableToolbarProps = {
   title?: string;
@@ -16,6 +17,24 @@ export const TableToolbar = (props: TableToolbarProps) => {
   const { title, selectedRows, content, buttons, sx } = props;
   const navigate = useNavigate();
   const theme = useTheme();
+  /**
+   * A button with `confirm` routes here on click: its action and the rows it would act on wait
+   * in this state until the dialog's confirm runs them; cancel discards them.
+   */
+  const [pendingConfirmation, setPendingConfirmation] = React.useState<{
+    button: TableButton<any>;
+    rows: any[];
+  }>();
+
+  function onButtonClick(button: TableButton<any>, rows: any[]) {
+    if (button.confirm) {
+      setPendingConfirmation({ button, rows });
+      return;
+    }
+
+    button.onClick(rows, navigate);
+  }
+
   return (
     <Toolbar
       sx={() => {
@@ -64,6 +83,17 @@ export const TableToolbar = (props: TableToolbarProps) => {
       <div>
         <Buttons />
       </div>
+      {pendingConfirmation && pendingConfirmation.button.confirm && (
+        <ConfirmationDialog
+          open
+          {...pendingConfirmation.button.confirm(pendingConfirmation.rows)}
+          onConfirm={() => {
+            setPendingConfirmation(undefined);
+            pendingConfirmation.button.onClick(pendingConfirmation.rows, navigate);
+          }}
+          onCancel={() => setPendingConfirmation(undefined)}
+        />
+      )}
     </Toolbar>
   );
 
@@ -77,7 +107,7 @@ export const TableToolbar = (props: TableToolbarProps) => {
         .filter((button) => button.visibility.showWhenRowsSelected)
         .map((button, index) => (
           <Tooltip key={index} title={button.name}>
-            <IconButton aria-label={button.name} onClick={(event) => button.onClick(selectedRows, navigate)}>
+            <IconButton aria-label={button.name} onClick={(event) => onButtonClick(button, selectedRows)}>
               <button.icon />
             </IconButton>
           </Tooltip>
@@ -88,7 +118,7 @@ export const TableToolbar = (props: TableToolbarProps) => {
       .filter((button) => button.visibility.showWhenNoRowsSelected)
       .map((button, index) => (
         <Tooltip key={index} title={button.name}>
-          <IconButton aria-label={button.name} onClick={(event) => button.onClick([], navigate)}>
+          <IconButton aria-label={button.name} onClick={(event) => onButtonClick(button, [])}>
             <button.icon />
           </IconButton>
         </Tooltip>

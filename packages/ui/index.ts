@@ -8,6 +8,8 @@ export * from './src/form/Field';
 export * from './src/form/FormButton';
 
 export * from './src/form/fields/TextField';
+export * from './src/form/fields/CheckboxField';
+export * from './src/form/fields/DateField';
 
 export * from './src/form/container/FormPaper';
 export * from './src/form/container/FormPage';
@@ -29,5 +31,6 @@ export * from './src/list/List';
 
 export * from './src/components/SearchInput';
 export * from './src/components/ScrollTopButton';
+export * from './src/components/ConfirmationDialog';
 
 export * from './src/formatters';
