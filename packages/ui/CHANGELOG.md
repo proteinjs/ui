@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.9.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.8.0...@proteinjs/ui@4.9.0) (2026-08-17)
+
+
+### Features
+
+* functional hardening for admin record surfaces — double-submit guard, declarative button confirmation, copyable readonly fields, Alert status, checkbox/date field controls ([9a1140f](https://github.com/proteinjs/ui/commit/9a1140fa46a0c09e775559d1312884ada28df0b6))
+
+
+
+
+
 # [4.8.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.7.0...@proteinjs/ui@4.8.0) (2026-08-15)
 
 
