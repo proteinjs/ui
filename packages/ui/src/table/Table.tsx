@@ -145,10 +145,21 @@ export function Table<T>({
     }
   }, [page, maxPage, pagination, isLoading, totalRows]);
 
+  /**
+   * Reset (page 0 + refetch) when the loader's DATA changes — keyed by the loader's react-query
+   * keys (its value identity), never by object identity. Parents construct a fresh loader every
+   * render (RecordTable does), and an identity-keyed reset refetched on every parent re-render:
+   * react-query flips a refetching errored query back to `loading`, so a denied table (DbService
+   * 400) rendered as a perpetual spinner re-issuing the failed query instead of its honest error
+   * state (/record/table?name=migration as a non-admin).
+   */
+  const { dataKey: loaderDataKey, dataQueryKey: loaderDataQueryKey } = tableLoader.reactQueryKeys;
   useEffect(() => {
     resetQuery();
     setPage(0);
-  }, [tableLoader, resetQuery]);
+    // resetQuery is intentionally not a dependency: this must run only when the loader's keys
+    // change, and refetch-function identity is not a data change.
+  }, [loaderDataKey, loaderDataQueryKey]);
 
   useEffect(() => {
     setSelectedRows({});
