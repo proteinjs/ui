@@ -27,6 +27,7 @@ import { InfiniteScroll } from './InfiniteScroll';
 import { hasTextSelectionInRow, PointerPosition, shouldRunRowClickAction } from './rowClickIntent';
 import { resolveTableBodyState, tableLoadErrorText } from './tableLoadState';
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
+import { useFormFactor } from '../hooks/useFormFactor';
 
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
@@ -113,6 +114,13 @@ export function Table<T>({
   scrollTopButton,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
+  /**
+   * The phone card face (MOBILE_SUPPORT §4.5): below the phone line rows present as a stacked
+   * card list — an MUI table's fixed column grid cannot fit a phone without horizontal page
+   * scroll. One machinery, two faces: the loader pipeline, toolbar, selection model, row-click
+   * intent guard, and infinite scroll are shared; only the row presentation forks.
+   */
+  const { isPhone } = useFormFactor();
   const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageProp);
   const [page, setPage] = useState(0);
   const [selectedRows, setSelectedRows] = useState<{ [key: number]: T }>({});
@@ -299,6 +307,124 @@ export function Table<T>({
     return { value: formattedValue, isCustomRendered: false };
   }
 
+  /** One column's block on a phone card: quiet label over the value. The first column is the
+   *  card's identity line, so its value renders emphasized. Labels follow the header contract
+   *  (`columnConfig.header`, `null` omits; `hideColumnHeaders` suppresses all). */
+  const renderPhoneCardField = (row: T, column: keyof T, columnIndex: number) => {
+    const { value: cellValue, isCustomRendered } = formatCellValue(row[column], column, row);
+    const header = columnConfig[column]?.header;
+    return (
+      <Box key={String(column)} sx={{ minWidth: 0, '& + &': { marginTop: 0.75 } }}>
+        {!hideColumnHeaders && header !== null && (
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}>
+            {header || StringUtil.humanizeCamel(column as string)}
+          </Typography>
+        )}
+        {isCustomRendered ? (
+          <Box sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>{cellValue}</Box>
+        ) : (
+          <Typography
+            sx={{
+              overflowWrap: 'anywhere',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              ...(columnIndex === 0 ? { fontWeight: 600 } : {}),
+            }}
+          >
+            {cellValue}
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  /** The phone card list: same body states and handlers as the table face, presented as
+   *  stacked hairline-divided cards that can never require horizontal scroll. */
+  const renderPhoneList = () => {
+    const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
+
+    return (
+      <Box data-table-phone-face sx={{ minWidth: 0 }}>
+        {bodyState === 'loading' && (
+          <Box className='loading-skeleton-table-body' sx={{ py: 3, display: 'flex', justifyContent: 'center' }}>
+            {skeleton ? skeleton : <CircularProgress />}
+          </Box>
+        )}
+        {bodyState === 'error' && (
+          <Box sx={{ py: 3, px: 2, textAlign: 'center' }}>
+            <Typography color='error'>Couldn't load rows.</Typography>
+            <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
+              {tableLoadErrorText(error)}
+            </Typography>
+          </Box>
+        )}
+        {bodyState === 'empty' && (
+          <Box sx={{ py: 3, px: 2, textAlign: 'center' }}>
+            {emptyTableComponent ? emptyTableComponent : <Typography>No rows to display.</Typography>}
+          </Box>
+        )}
+        {bodyState === 'rows' &&
+          rows.map((row, index) => {
+            index = rowsPerPage * page + index;
+            const isSelected = typeof selectedRows[index] !== 'undefined';
+            return (
+              <Box
+                data-table-phone-row
+                key={index}
+                onPointerDown={
+                  rowOnClick
+                    ? (event: React.PointerEvent) => {
+                        pointerDownAt.current = { x: event.clientX, y: event.clientY };
+                      }
+                    : undefined
+                }
+                onClick={
+                  rowOnClick
+                    ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick, navigate)
+                    : undefined
+                }
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  px: 2,
+                  py: 1.5,
+                  minWidth: 0,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  '&:last-of-type': { borderBottom: 'none' },
+                  ...(isSelected ? { backgroundColor: 'action.selected' } : {}),
+                  ...(rowOnClick ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
+                }}
+              >
+                {buttons && buttons.length > 0 && (
+                  <Checkbox
+                    checked={isSelected}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      toggleSelectRow(index, row);
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                    inputProps={{
+                      'aria-label': 'Select row',
+                    }}
+                    // pulls the checkbox's built-in padding out of the card's edge so the
+                    // glyph aligns with the card gutter and the first label's baseline
+                    sx={{ ml: -1, mt: -1 }}
+                  />
+                )}
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  {columns.map((column, columnIndex) => renderPhoneCardField(row, column, columnIndex))}
+                </Box>
+              </Box>
+            );
+          })}
+      </Box>
+    );
+  };
+
   const renderTableContainer = () => {
     const totalColumns = columns.length + (buttons && buttons.length > 0 ? 1 : 0);
     const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
@@ -451,8 +577,10 @@ export function Table<T>({
             }
             scrollableTarget={infScrollContainer}
           >
-            {renderTableContainer()}
+            {isPhone ? renderPhoneList() : renderTableContainer()}
           </InfiniteScroll>
+        ) : isPhone ? (
+          renderPhoneList()
         ) : (
           renderTableContainer()
         )}

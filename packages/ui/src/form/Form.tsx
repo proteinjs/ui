@@ -1,10 +1,22 @@
 import React from 'react';
-import { Alert, Button, Container, Grid, IconButton, Typography, LinearProgress, Stack } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Container,
+  Grid,
+  IconButton,
+  Typography,
+  LinearProgress,
+  Snackbar,
+  Stack,
+} from '@mui/material';
 import queryString from 'query-string';
 import { Field, FieldComponent, Fields } from './Field';
 import { FormButton, FormButtons } from './FormButton';
 import { withRouter, WithRouterProps } from '../router/withRouter';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { useFormFactor } from '../hooks/useFormFactor';
 
 export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   name?: string;
@@ -15,6 +27,8 @@ export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   onLoad?: (fields: F, buttons: B) => Promise<void>;
   onLoadProgressMessage?: string;
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
+  /** Injected by the exported wrapper (MOBILE_SUPPORT S1) — the phone-layout fork. */
+  isPhone?: boolean;
 } & Partial<WithRouterProps>;
 
 export type FormState<F extends Fields> = {
@@ -162,12 +176,12 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
           <Grid container>
             {this.Title()}
             {this.Documentation()}
-            {this.Status()}
             {this.Fields()}
             {this.Progress()}
             {this.Buttons()}
           </Grid>
         </form>
+        {this.Status()}
         {this.Confirmation()}
       </Container>
     );
@@ -193,6 +207,12 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private getContainerMaxWidth(): 'xs' | 'sm' {
+    // Phone: fields present single-column (getFieldRows collapses the layout), so the wider
+    // sm cap — which exists only for multi-column rows — would just stretch lone fields.
+    if (this.props.isPhone) {
+      return 'xs';
+    }
+
     if (this.props.fieldLayout) {
       // TODO validate that fields are not hidden
       if (this.props.fieldLayout.length < 2) {
@@ -256,32 +276,42 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 
     return (
       <Grid container justifyContent='flex-start' alignItems='flex-start'>
+        {/* No nested Container: its default gutters misaligned this slot with the
+            zero-gutter field grid (the same defect class the status toast fix removed). */}
         <Grid item xs={12}>
-          <Container>
-            <this.props.documentation />
-          </Container>
+          <this.props.documentation />
         </Grid>
       </Grid>
     );
   }
 
+  /**
+   * Button results present as the house toast — a floating bottom-center Snackbar wrapping a
+   * severity Alert — on both form factors. The previous inline Alert sat INSIDE the form card
+   * (wrapped in a nested default-gutter Container, misaligned with the zero-gutter field grid)
+   * and shifted the whole form down when it appeared.
+   */
   private Status() {
-    if (!this.state.status || !this.state.status.message) {
-      return null;
-    }
+    const status = this.state.status;
+    const dismiss = () => this.setState({ status: {} });
 
     return (
-      <Grid container>
-        <Grid item xs={12}>
-          <Container
-            sx={(theme) => ({
-              marginBottom: theme.spacing(1),
-            })}
-          >
-            <Alert severity={this.state.status.isError ? 'error' : 'success'}>{this.state.status.message}</Alert>
-          </Container>
-        </Grid>
-      </Grid>
+      <Snackbar
+        open={!!status?.message}
+        autoHideDuration={status?.isError ? 6000 : 4000}
+        onClose={(event, reason) => {
+          // Clickaway must not dismiss: an error toast should outlive an incidental tap.
+          if (reason === 'clickaway') {
+            return;
+          }
+          dismiss();
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={status?.isError ? 'error' : 'success'} onClose={dismiss}>
+          {status?.message}
+        </Alert>
+      </Snackbar>
     );
   }
 
@@ -298,6 +328,7 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
               container
               spacing={3}
               alignItems='center'
+              data-form-field-row
               sx={(theme) => ({
                 flexGrow: 1,
                 marginBottom: theme.spacing(3),
@@ -325,6 +356,26 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private getFieldRows(): FieldComponent<any, any>[][] {
+    const rows = this.buildFieldRows();
+
+    // Phone: single-column — every field takes its own full-width row, in layout order.
+    // Multi-column rows exist for desktop scanning width; on a phone they compress fields
+    // below usability and force horizontal overflow.
+    if (this.props.isPhone) {
+      const singleColumn: FieldComponent<any, any>[][] = [];
+      for (const row of rows) {
+        for (const fieldComponent of row) {
+          singleColumn.push([fieldComponent]);
+        }
+      }
+
+      return singleColumn;
+    }
+
+    return rows;
+  }
+
+  private buildFieldRows(): FieldComponent<any, any>[][] {
     const rows: FieldComponent<any, any>[][] = [];
     if (!this.state.fields) {
       return rows;
@@ -410,54 +461,91 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 
     return (
       <Grid container xs={12} justifyContent='center' alignItems='center' spacing={2}>
-        <Container>
+        {/* Box, not Container: default Container gutters misaligned the bar with the field grid. */}
+        <Box sx={{ width: '100%' }}>
           <LinearProgress variant='indeterminate' color='primary' />
-        </Container>
+        </Box>
       </Grid>
     );
   }
 
   private Buttons() {
+    const visibleButtons = Object.keys(this.props.buttons)
+      .map((buttonPropertyName) => this.props.buttons[buttonPropertyName])
+      .filter((button) => !button.accessibility?.hidden);
+
+    const buttonControl = (button: FormButton<F>, key: number) =>
+      button.style.icon ? (
+        <IconButton
+          key={key}
+          disabled={button.accessibility?.disabled || this.state.actionInFlight}
+          onClick={(event: any) => this.onClick(button)}
+        >
+          <button.style.icon />
+        </IconButton>
+      ) : (
+        <Button
+          key={key}
+          color={button.style.color}
+          variant={button.style.variant || 'contained'}
+          disabled={button.accessibility?.disabled || this.state.actionInFlight}
+          onClick={(event) => this.onClick(button)}
+        >
+          {button.name}
+        </Button>
+      );
+
+    // Phone: one wrapping action row. The desktop xs=6 halves give each side ~half a phone
+    // screen — three buttons overflowed it. Left-aligned buttons keep their lead position;
+    // gap replaces the per-button margin so wrapped lines stay aligned.
+    if (this.props.isPhone) {
+      return (
+        <Grid
+          container
+          sx={(theme) => ({
+            marginTop: theme.spacing(2),
+            marginBottom: theme.spacing(1),
+          })}
+        >
+          <Grid item xs={12}>
+            <Stack
+              direction='row'
+              data-form-buttons
+              sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', alignItems: 'center', width: '100%' }}
+            >
+              {visibleButtons
+                .filter((button) => button.style.align === 'left')
+                .map((button, index) => buttonControl(button, index))}
+              {visibleButtons
+                .filter((button) => button.style.align !== 'left')
+                .map((button, index) => buttonControl(button, visibleButtons.length + index))}
+            </Stack>
+          </Grid>
+        </Grid>
+      );
+    }
+
     const leftAlignedButtons: JSX.Element[] = [];
     const rightAlignedButtons: JSX.Element[] = [];
 
-    Object.keys(this.props.buttons)
-      .map((buttonPropertyName) => this.props.buttons[buttonPropertyName])
-      .filter((button) => !button.accessibility?.hidden)
-      .forEach((button, index) => {
-        const buttonElement = (
-          <Grid
-            key={index}
-            sx={(theme) => ({
-              marginLeft: theme.spacing(1),
-            })}
-          >
-            {button.style.icon ? (
-              <IconButton
-                disabled={button.accessibility?.disabled || this.state.actionInFlight}
-                onClick={(event: any) => this.onClick(button)}
-              >
-                <button.style.icon />
-              </IconButton>
-            ) : (
-              <Button
-                color={button.style.color}
-                variant={button.style.variant || 'contained'}
-                disabled={button.accessibility?.disabled || this.state.actionInFlight}
-                onClick={(event) => this.onClick(button)}
-              >
-                {button.name}
-              </Button>
-            )}
-          </Grid>
-        );
+    visibleButtons.forEach((button, index) => {
+      const buttonElement = (
+        <Grid
+          key={index}
+          sx={(theme) => ({
+            marginLeft: theme.spacing(1),
+          })}
+        >
+          {buttonControl(button, index)}
+        </Grid>
+      );
 
-        if (button.style.align === 'left') {
-          leftAlignedButtons.push(buttonElement);
-        } else {
-          rightAlignedButtons.push(buttonElement);
-        }
-      });
+      if (button.style.align === 'left') {
+        leftAlignedButtons.push(buttonElement);
+      } else {
+        rightAlignedButtons.push(buttonElement);
+      }
+    });
 
     return (
       <Grid
@@ -486,4 +574,11 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
 }
 
 type FormType = <F extends Fields, B extends FormButtons<F>>(props: Omit<FormProps<F, B>, 'classes'>) => JSX.Element;
-export const Form = withRouter(FormComponent) as FormType;
+
+/** Bridges the S1 form-factor hook into the class component (same shape as withRouter). */
+const FormWithFormFactor = (props: any) => {
+  const { isPhone } = useFormFactor();
+  return <FormComponent isPhone={isPhone} {...props} />;
+};
+
+export const Form = withRouter(FormWithFormFactor as unknown as typeof React.Component) as FormType;
