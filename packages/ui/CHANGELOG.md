@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.9.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.9.0...@proteinjs/ui@4.9.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* keep a failed table load's error state across parent re-renders ([f522706](https://github.com/proteinjs/ui/commit/f522706e01febcba18e000d4dcb9f9aa0d0ccddd))
+
+
+
+
+
 # [4.9.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.8.0...@proteinjs/ui@4.9.0) (2026-08-17)
 
 
