@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.10.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.9.1...@proteinjs/ui@4.10.0) (2026-08-19)
+
+
+### Features
+
+* phone presentation for admin surfaces — form-factor hook, Table card face, Form single-column + toast status (task [#53](https://github.com/proteinjs/ui/issues/53)) ([4909c36](https://github.com/proteinjs/ui/commit/4909c36954a8c06adf91b35f6c6e36a6a8b8196e))
+
+
+
+
+
 ## [4.9.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.9.0...@proteinjs/ui@4.9.1) (2026-08-18)
 
 
