@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.11.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.10.1...@proteinjs/ui@4.11.0) (2026-08-28)
+
+
+### Features
+
+* shared cell-value grammar for data tables + form field polish — cellValues presentations (quiet-dash empties, check/dash booleans, humanized timestamps with the precise absolute on hover, three-line clamped text, mono JSON snippets, status chips with tone dots), quiet column-label headers replacing the h6 shout, body2 cells, pointer cursor on clickable rows, phone cards omit empty fields (plus the omitEmptyOnCard contract for value-driven renderers), card titles at h6, and opt-in multiline/monospace text fields ([42b1166](https://github.com/proteinjs/ui/commit/42b1166c490a1a27e220f8c9e2f406865f629d64))
+
+
+
+
+
 ## [4.10.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.10.0...@proteinjs/ui@4.10.1) (2026-08-28)
 
 
