@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.10.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.10.0...@proteinjs/ui@4.10.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* record-table headers stick on scroll — TableContainer overflow was capturing the sticky scrollport while never scrolling vertically; make it visible so headers pin to the outer scroll box ([99c1aa2](https://github.com/proteinjs/ui/commit/99c1aa224e4ed5626d4c01c976e618c33ec1412d))
+
+
+
+
+
 # [4.10.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.9.1...@proteinjs/ui@4.10.0) (2026-08-19)
 
 
