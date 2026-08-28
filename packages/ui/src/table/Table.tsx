@@ -26,6 +26,13 @@ import { useTableData } from './tableData';
 import { InfiniteScroll } from './InfiniteScroll';
 import { hasTextSelectionInRow, PointerPosition, shouldRunRowClickAction } from './rowClickIntent';
 import { resolveTableBodyState, tableLoadErrorText } from './tableLoadState';
+import {
+  BooleanCellValue,
+  ClampedTextCellValue,
+  DateTimeCellValue,
+  EmptyCellValue,
+  JsonSnippetCellValue,
+} from './cellValues';
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
 import { useFormFactor } from '../hooks/useFormFactor';
 
@@ -37,6 +44,14 @@ export type ColumnConfig<T> = {
     renderer?: CustomRenderer<T, K>;
     /** If no header is provided, a default header will be used. Pass in `null` if you'd like the header to be omitted. */
     header?: string | React.ReactNode;
+    /**
+     * Phone card face only: when the RAW value is null/undefined/'' the field is omitted from
+     * the card entirely (no dangling label). For a VALUE-DRIVEN custom renderer (one that
+     * presents `value`, like RecordTable's type renderers) this is the honest card behavior;
+     * renderers that draw from the whole row must leave it unset — the value being empty says
+     * nothing about what they render. Default-rendered columns already omit empties.
+     */
+    omitEmptyOnCard?: boolean;
   };
 };
 
@@ -281,38 +296,63 @@ export function Table<T>({
     setSelectAll(selected);
   }
 
-  function formatCellValue(value: any, column: keyof T, row: T): { value: React.ReactNode; isCustomRendered: boolean } {
+  /**
+   * The default cell formatting, by VALUE TYPE (cellValues.tsx owns the presentations):
+   * empty values render a quiet dash, booleans a check/dash (never 'True'/'False' strings),
+   * moments/Dates humanized with the precise timestamp on hover, objects as ellipsized mono,
+   * and plain text stays text (`text` carries it so the faces can typography-wrap it —
+   * clamped on desktop cells, emphasized as the identity line on phone cards). `isEmpty`
+   * lets the phone card face omit the field instead of rendering a dangling label.
+   */
+  function formatCellValue(
+    value: any,
+    column: keyof T,
+    row: T
+  ): { value: React.ReactNode; isCustomRendered: boolean; isEmpty: boolean; text?: string } {
     const customRenderer = columnConfig[column]?.renderer;
     if (customRenderer) {
       return {
         value: customRenderer(value, row),
         isCustomRendered: true,
+        isEmpty: false,
       };
     }
 
-    // Default formatting logic
-    let formattedValue: React.ReactNode;
-    if (value == null) {
-      formattedValue = '';
-    } else if (typeof value === 'boolean') {
-      formattedValue = value ? 'True' : 'False';
-    } else if (moment.isMoment(value)) {
-      formattedValue = value.format('ddd, MMM Do YY, h:mm:ss a');
-    } else if (typeof value === 'object') {
-      formattedValue = JSON.stringify(value);
-    } else {
-      formattedValue = value.toString();
+    if (value == null || value === '') {
+      return { value: <EmptyCellValue />, isCustomRendered: false, isEmpty: true };
     }
 
-    return { value: formattedValue, isCustomRendered: false };
+    if (typeof value === 'boolean') {
+      return { value: <BooleanCellValue value={value} />, isCustomRendered: false, isEmpty: false };
+    }
+
+    if (moment.isMoment(value) || value instanceof Date) {
+      return { value: <DateTimeCellValue value={value} />, isCustomRendered: false, isEmpty: false };
+    }
+
+    if (typeof value === 'object') {
+      return { value: <JsonSnippetCellValue value={value} />, isCustomRendered: false, isEmpty: false };
+    }
+
+    const text = value.toString();
+    return { value: text, isCustomRendered: false, isEmpty: false, text };
   }
 
   /** One column's block on a phone card: quiet label over the value. The first column is the
    *  card's identity line, so its value renders emphasized. Labels follow the header contract
    *  (`columnConfig.header`, `null` omits; `hideColumnHeaders` suppresses all). */
   const renderPhoneCardField = (row: T, column: keyof T, columnIndex: number) => {
-    const { value: cellValue, isCustomRendered } = formatCellValue(row[column], column, row);
+    const { value: cellValue, isCustomRendered, isEmpty, text } = formatCellValue(row[column], column, row);
     const header = columnConfig[column]?.header;
+    // Empty fields don't render at all on a card: a label with nothing under it is noise,
+    // and the dash the desktop grid needs (column alignment) serves nothing in a stacked
+    // list. Custom-rendered fields render unless their config declares them value-driven
+    // (`omitEmptyOnCard`) and the raw value is empty — the consumer owns that call.
+    const rawValue = row[column];
+    const rawEmpty = rawValue == null || (rawValue as unknown) === '';
+    if ((!isCustomRendered && isEmpty) || (columnConfig[column]?.omitEmptyOnCard && rawEmpty)) {
+      return null;
+    }
     return (
       <Box key={String(column)} sx={{ minWidth: 0, '& + &': { marginTop: 0.75 } }}>
         {!hideColumnHeaders && header !== null && (
@@ -320,7 +360,7 @@ export function Table<T>({
             {header || StringUtil.humanizeCamel(column as string)}
           </Typography>
         )}
-        {isCustomRendered ? (
+        {isCustomRendered || text === undefined ? (
           <Box sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>{cellValue}</Box>
         ) : (
           <Typography
@@ -333,7 +373,7 @@ export function Table<T>({
               ...(columnIndex === 0 ? { fontWeight: 600 } : {}),
             }}
           >
-            {cellValue}
+            {text}
           </Typography>
         )}
       </Box>
@@ -463,7 +503,12 @@ export function Table<T>({
                 columns.map((column, index) => (
                   <TableCell key={index}>
                     {columnConfig[column]?.header !== null && (
-                      <Typography variant='h6'>
+                      // Column LABELS, not headings: the h6 the framework used to render here
+                      // shouted over the data it labeled.
+                      <Typography
+                        variant='body2'
+                        sx={{ fontSize: '0.75rem', lineHeight: '1rem', fontWeight: 600, color: 'text.secondary' }}
+                      >
                         {columnConfig[column]?.header || StringUtil.humanizeCamel(column as string)}
                       </Typography>
                     )}
@@ -512,6 +557,8 @@ export function Table<T>({
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
+                    // Clickable rows say so: the framework never signaled the row-click door.
+                    sx={rowOnClick ? { cursor: 'pointer' } : undefined}
                     onPointerDown={
                       rowOnClick
                         ? (event: React.PointerEvent) => {
@@ -541,10 +588,16 @@ export function Table<T>({
                       </TableCell>
                     )}
                     {columns.map((column, index) => {
-                      const { value: cellValue, isCustomRendered } = formatCellValue(row[column], column, row);
+                      const { value: cellValue, isCustomRendered, text } = formatCellValue(row[column], column, row);
                       return (
                         <TableCell key={index} {...columnConfig?.[column]?.cellProps}>
-                          {isCustomRendered ? cellValue : <Typography>{cellValue}</Typography>}
+                          {isCustomRendered || text === undefined ? (
+                            cellValue
+                          ) : (
+                            // Plain text sits on body2 and clamps at three lines: a long value
+                            // gets a bounded seat, never the whole row.
+                            <ClampedTextCellValue>{text}</ClampedTextCellValue>
+                          )}
                         </TableCell>
                       );
                     })}

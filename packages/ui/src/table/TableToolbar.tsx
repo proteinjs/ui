@@ -69,7 +69,8 @@ export const TableToolbar = (props: TableToolbarProps) => {
           </Typography>
         ) : (
           <div>
-            {typeof title !== 'undefined' && <Typography variant='h5'>{title}</Typography>}
+            {/* A card header, not a page heading: h6 sits the title with the quieted column labels. */}
+            {typeof title !== 'undefined' && <Typography variant='h6'>{title}</Typography>}
             {typeof props.description !== 'undefined' && <props.description />}
           </div>
         )}
