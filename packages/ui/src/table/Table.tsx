@@ -430,7 +430,21 @@ export function Table<T>({
     const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
 
     return (
-      <TableContainer sx={{ ...tableContainerSx }}>
+      <TableContainer
+        sx={[
+          /**
+           * MUI's TableContainer defaults to `overflow-x: auto`, which makes the container itself
+           * the sticky headers' containing scrollport — and it never scrolls vertically (the outer
+           * scroll Box below owns scrolling for both faces), so `stickyHeader` never engaged and
+           * column headers scrolled away with the rows. Overflow stays visible here (longhands, so
+           * the default `overflow-x` is overridden deterministically) so the header cells stick to
+           * the top of the outer scroll Box; that Box also absorbs a wide table's horizontal
+           * overflow.
+           */
+          { overflowX: 'visible', overflowY: 'visible' },
+          ...(Array.isArray(tableContainerSx) ? tableContainerSx : [tableContainerSx]),
+        ]}
+      >
         <MuiTable stickyHeader>
           <TableHead>
             <TableRow>
@@ -558,6 +572,7 @@ export function Table<T>({
       )}
       <Box
         ref={infScrollContainerRef}
+        data-table-scroll-container
         sx={[
           { width: '100%', flexGrow: 1, overflow: 'auto' },
           ...(Array.isArray(scrollContainerSx) ? scrollContainerSx : [scrollContainerSx]),
