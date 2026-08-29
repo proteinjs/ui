@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.12.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.11.0...@proteinjs/ui@4.12.0) (2026-08-29)
+
+
+### Features
+
+* reference-driven form + table rev — sectioned forms, labels outside the input, readonly values as text rows, one expand affordance for long content, borderless table rows ([1d9f9a5](https://github.com/proteinjs/ui/commit/1d9f9a5066d79ad0256210e677c6344cfb8026e1))
+
+
+
+
+
 # [4.11.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.10.1...@proteinjs/ui@4.11.0) (2026-08-28)
 
 
