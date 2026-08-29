@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.13.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.12.0...@proteinjs/ui@4.13.0) (2026-08-29)
+
+
+### Features
+
+* export InfiniteScroll — the table's load-more pager, for list surfaces composing the house infinite scroll around their own row grammar (one pager owner, any list) ([8493b06](https://github.com/proteinjs/ui/commit/8493b0666f79aa4123a487dd16b0dca542995d1a))
+
+
+
+
+
 # [4.12.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.11.0...@proteinjs/ui@4.12.0) (2026-08-29)
 
 
