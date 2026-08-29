@@ -34,6 +34,7 @@ import {
   JsonSnippetCellValue,
 } from './cellValues';
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
+import { TopScrollFade } from '../components/TopScrollFade';
 import { useFormFactor } from '../hooks/useFormFactor';
 
 /**
@@ -118,6 +119,13 @@ export type TableProps<T> = {
    * restyle. Off by default.
    */
   scrollTopButton?: boolean | ScrollTopButtonStyleProps;
+  /**
+   * Opt-in top-edge fade band on the table's scroll container (`TopScrollFade`): rows fade out
+   * under the container's top edge once content is scrolled off above, instead of clipping
+   * crisply. On the desktop table face the sticky header owns the edge (the band sits behind
+   * it); the cue carries the phone card face and headerless tables. Off by default.
+   */
+  topScrollFade?: boolean;
 };
 
 export function Table<T>({
@@ -142,6 +150,7 @@ export function Table<T>({
   skeleton,
   infiniteScrollLoader,
   scrollTopButton,
+  topScrollFade,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
   /**
@@ -661,6 +670,8 @@ export function Table<T>({
           ...(Array.isArray(scrollContainerSx) ? scrollContainerSx : [scrollContainerSx]),
         ]}
       >
+        {/* FIRST child of the scroll container (the band wires itself to parentElement). */}
+        {topScrollFade && <TopScrollFade />}
         {infiniteScroll ? (
           <InfiniteScroll
             next={handleFetchNextPage}

@@ -40,6 +40,7 @@ export * from './src/list/List';
 
 export * from './src/components/SearchInput';
 export * from './src/components/ScrollTopButton';
+export * from './src/components/TopScrollFade';
 export * from './src/components/ConfirmationDialog';
 
 export * from './src/formatters';

@@ -90,8 +90,9 @@ export function FieldExpandDialog({
           }
         />
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, marginTop: 1.75 }}>
-          {/* Sentence case, matching the form's own actions. */}
-          <Button variant='text' onClick={onCancel} sx={{ textTransform: 'none' }}>
+          {/* Sentence case, matching the form's own actions. Outlined secondary beside the
+              contained primary — the one dialog action convention (see ConfirmationDialog). */}
+          <Button variant='outlined' onClick={onCancel} sx={{ textTransform: 'none' }}>
             Cancel
           </Button>
           <Button variant='contained' color='primary' onClick={() => onDone(draft)} sx={{ textTransform: 'none' }}>

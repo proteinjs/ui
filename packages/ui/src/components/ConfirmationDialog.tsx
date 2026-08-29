@@ -40,8 +40,13 @@ export function ConfirmationDialog({
         </DialogContent>
       )}
       <DialogActions>
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button onClick={onConfirm} color='primary' variant='contained'>
+        {/* The dialog action pair: contained primary beside an outlined secondary — one
+            enclosed-button convention across dialogs, so a consumer theme's variant slots
+            restyle both deterministically. Sentence case, matching the form's own actions. */}
+        <Button onClick={onCancel} variant='outlined' sx={{ textTransform: 'none' }}>
+          Cancel
+        </Button>
+        <Button onClick={onConfirm} color='primary' variant='contained' sx={{ textTransform: 'none' }}>
           {confirmButtonText || 'Confirm'}
         </Button>
       </DialogActions>
