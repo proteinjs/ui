@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.14.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.13.0...@proteinjs/ui@4.14.0) (2026-08-29)
+
+
+### Features
+
+* TopScrollFade — the top-edge scroll fade for framework scrollers (admin round 3) — self-wired to its parent scroll container (the ScrollTopButton wiring contract), sticky zero-height 16px gradient from the surface's resting color, padding-compensated, behind pinned chrome (MUI sticky headers at 2) so opaque chrome owns the edge; Table grows opt-in topScrollFade beside scrollTopButton; dialog action pairs converge on the one enclosed-button convention (outlined Cancel beside contained primary, sentence case) so a consumer theme's variant slots restyle them deterministically ([60fe4ae](https://github.com/proteinjs/ui/commit/60fe4ae16852526a7eba7f86646931ec2e8d2bed))
+
+
+
+
+
 # [4.13.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.12.0...@proteinjs/ui@4.13.0) (2026-08-29)
 
 
