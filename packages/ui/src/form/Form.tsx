@@ -18,11 +18,21 @@ import { withRouter, WithRouterProps } from '../router/withRouter';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { useFormFactor } from '../hooks/useFormFactor';
 
+/**
+ * A quiet form section (the round-2 grouping grammar): an optional sentence-case label over a
+ * run of field rows. Sections after the first separate with a hairline; an unlabeled first
+ * section is the identity block (its content is self-evident, a header would be noise).
+ */
+export type FormFieldSection<F extends Fields> = {
+  label?: string;
+  fields: (keyof F)[] | (keyof F)[][];
+};
+
 export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   name?: string;
   documentation?: React.ComponentType;
   createFields: () => F;
-  fieldLayout?: (keyof F)[] | (keyof F)[][];
+  fieldLayout?: (keyof F)[] | (keyof F)[][] | FormFieldSection<F>[];
   buttons: B;
   onLoad?: (fields: F, buttons: B) => Promise<void>;
   onLoadProgressMessage?: string;
@@ -207,13 +217,26 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private getContainerMaxWidth(): 'xs' | 'sm' {
-    // Phone: fields present single-column (getFieldRows collapses the layout), so the wider
+    // Phone: fields present single-column (getFieldSections collapses the layout), so the wider
     // sm cap — which exists only for multi-column rows — would just stretch lone fields.
     if (this.props.isPhone) {
       return 'xs';
     }
 
     if (this.props.fieldLayout) {
+      // Sectioned layouts: the width question is the same — any multi-field row widens the form.
+      if (isSectionedLayout(this.props.fieldLayout)) {
+        for (const section of this.props.fieldLayout) {
+          for (const row of section.fields) {
+            if (Array.isArray(row) && row.length > 1) {
+              return 'sm';
+            }
+          }
+        }
+
+        return 'xs';
+      }
+
       // TODO validate that fields are not hidden
       if (this.props.fieldLayout.length < 2) {
         return 'xs';
@@ -258,12 +281,16 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
         justifyContent='flex-start'
         alignItems='flex-start'
         sx={(theme) => ({
-          marginTop: theme.spacing(1),
-          marginBottom: theme.spacing(3),
+          marginTop: theme.spacing(0.5),
+          marginBottom: theme.spacing(2.5),
         })}
       >
         <Grid item xs={12}>
-          <Typography variant='h5'>{this.props.name}</Typography>
+          {/* A card title, not a page heading: h6-sized at 600 sits with the quiet field labels
+              (the h5 it replaces shouted over the form). */}
+          <Typography variant='h6' sx={{ fontWeight: 600 }}>
+            {this.props.name}
+          </Typography>
         </Grid>
       </Grid>
     );
@@ -316,60 +343,150 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   private Fields() {
+    const sections = this.getFieldSections().filter((section) =>
+      section.rows.some((row) => this.isFieldRowVisible(row))
+    );
+
     return (
       <Grid container direction='column'>
-        {this.getFieldRows().map((fieldComponents, index) => {
-          if (!this.isFieldRowVisible(fieldComponents)) {
-            return null;
-          }
-
-          return (
-            <Grid
-              container
-              spacing={3}
-              alignItems='center'
-              data-form-field-row
-              sx={(theme) => ({
-                flexGrow: 1,
-                marginBottom: theme.spacing(3),
-              })}
-              key={index}
-            >
-              {fieldComponents
-                .filter((fieldComponent) => {
-                  if (fieldComponent.field.accessibility?.hidden) {
-                    return false;
+        {sections.map((section, sectionIndex) => (
+          <Box
+            key={sectionIndex}
+            data-form-section
+            sx={(theme) => ({
+              // Quiet section separation: sections after the first sit under a hairline.
+              ...(sectionIndex > 0
+                ? {
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    paddingTop: theme.spacing(2.25),
+                    marginTop: theme.spacing(0.5),
                   }
+                : {}),
+            })}
+          >
+            {section.label && (
+              <Typography
+                data-form-section-label
+                sx={{
+                  fontSize: '0.75rem',
+                  lineHeight: '1rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  color: 'text.secondary',
+                  marginBottom: 1.5,
+                }}
+              >
+                {section.label}
+              </Typography>
+            )}
+            {section.rows.map((fieldComponents, index) => {
+              if (!this.isFieldRowVisible(fieldComponents)) {
+                return null;
+              }
 
-                  return true;
-                })
-                .map((fieldComponent) => (
-                  <Grid item xs key={fieldComponent.field.name}>
-                    <fieldComponent.component field={fieldComponent.field} onChange={this.onChange.bind(this)} />
-                  </Grid>
-                ))}
-            </Grid>
-          );
-        })}
+              return (
+                <Grid
+                  container
+                  spacing={2.5}
+                  alignItems='flex-start'
+                  data-form-field-row
+                  sx={(theme) => ({
+                    flexGrow: 1,
+                    marginBottom: theme.spacing(2.5),
+                  })}
+                  key={index}
+                >
+                  {fieldComponents
+                    .filter((fieldComponent) => {
+                      if (fieldComponent.field.accessibility?.hidden) {
+                        return false;
+                      }
+
+                      return true;
+                    })
+                    .map((fieldComponent) => (
+                      <Grid item xs key={fieldComponent.field.name}>
+                        <fieldComponent.component field={fieldComponent.field} onChange={this.onChange.bind(this)} />
+                      </Grid>
+                    ))}
+                </Grid>
+              );
+            })}
+          </Box>
+        ))}
       </Grid>
     );
   }
 
-  private getFieldRows(): FieldComponent<any, any>[][] {
-    const rows = this.buildFieldRows();
+  /**
+   * The layout normalized to SECTIONS of field rows — the one shape Fields() renders. A flat
+   * layout (or Field.layout placement) is a single unlabeled section; FormFieldSection layouts
+   * keep their labels. Phone collapses every row to single-column WITHIN its section, so
+   * grouping survives the form factor.
+   */
+  private getFieldSections(): { label?: string; rows: FieldComponent<any, any>[][] }[] {
+    const sections = this.buildFieldSections();
 
     // Phone: single-column — every field takes its own full-width row, in layout order.
     // Multi-column rows exist for desktop scanning width; on a phone they compress fields
     // below usability and force horizontal overflow.
     if (this.props.isPhone) {
-      const singleColumn: FieldComponent<any, any>[][] = [];
-      for (const row of rows) {
-        for (const fieldComponent of row) {
-          singleColumn.push([fieldComponent]);
+      return sections.map((section) => {
+        const singleColumn: FieldComponent<any, any>[][] = [];
+        for (const row of section.rows) {
+          for (const fieldComponent of row) {
+            singleColumn.push([fieldComponent]);
+          }
         }
+
+        return { label: section.label, rows: singleColumn };
+      });
+    }
+
+    return sections;
+  }
+
+  private buildFieldSections(): { label?: string; rows: FieldComponent<any, any>[][] }[] {
+    if (!this.state.fields) {
+      return [];
+    }
+
+    if (this.props.fieldLayout && isSectionedLayout(this.props.fieldLayout)) {
+      return this.props.fieldLayout.map((section) => ({
+        label: section.label,
+        rows: this.buildRowsFromLayout(section.fields as string[] | string[][]),
+      }));
+    }
+
+    return [{ rows: this.buildFieldRows() }];
+  }
+
+  /** Rows from a flat layout list — each entry either a solo field or an explicit row. */
+  private buildRowsFromLayout(fieldLayout: string[] | string[][]): FieldComponent<any, any>[][] {
+    const rows: FieldComponent<any, any>[][] = [];
+    for (let i = 0; i < fieldLayout.length; i++) {
+      const entry = fieldLayout[i];
+      if (typeof entry === 'string') {
+        const fieldComponent = this.state.fields[entry];
+        fieldComponent.field.layout = { row: i, width: 12 };
+        rows.push([fieldComponent]);
+        continue;
       }
 
-      return singleColumn;
+      const columns = entry.length;
+      if (columns > 6) {
+        throw new Error(
+          `When using FormProps.fieldLayout, the maximum number of fields per row is 6, provided: ${columns}. For more granular layout control use Field.layout`
+        );
+      }
+
+      const currentRow: FieldComponent<any, any>[] = [];
+      for (const fieldPropertyName of entry) {
+        const fieldComponent = this.state.fields[fieldPropertyName];
+        fieldComponent.field.layout = { row: i, width: columns == 5 ? 2 : ((12 / columns) as 1) };
+        currentRow.push(fieldComponent);
+      }
+      rows.push(currentRow);
     }
 
     return rows;
@@ -381,63 +498,38 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
       return rows;
     }
 
-    if (this.props.fieldLayout) {
-      if (typeof this.props.fieldLayout[0] === 'string') {
-        for (let i = 0; i < this.props.fieldLayout.length; i++) {
-          const fieldPropertyName = this.props.fieldLayout[i] as string;
-          const fieldComponent = this.state.fields[fieldPropertyName];
-          fieldComponent.field.layout = { row: i, width: 12 };
-          rows.push([fieldComponent]);
-        }
-      } else {
-        for (let i = 0; i < this.props.fieldLayout.length; i++) {
-          const row = this.props.fieldLayout[i] as string[];
-          const columns = row.length;
-          if (columns > 6) {
-            throw new Error(
-              `When using FormProps.fieldLayout, the maximum number of fields per row is 6, provided: ${columns}. For more granular layout control use Field.layout`
-            );
-          }
+    if (this.props.fieldLayout && !isSectionedLayout(this.props.fieldLayout)) {
+      return this.buildRowsFromLayout(this.props.fieldLayout as string[] | string[][]);
+    }
 
-          const currentRow: FieldComponent<any, any>[] = [];
-          for (const fieldPropertyName of row) {
-            const fieldComponent = this.state.fields[fieldPropertyName];
-            fieldComponent.field.layout = { row: i, width: columns == 5 ? 2 : ((12 / columns) as 1) };
-            currentRow.push(fieldComponent);
-          }
-          rows.push(currentRow);
-        }
+    for (const fieldPropertyName in this.state.fields) {
+      const fieldComponent: FieldComponent<any, any> = this.state.fields[fieldPropertyName];
+      const field = fieldComponent.field;
+      if (!field.layout) {
+        throw new Error(
+          `Unless using FormProps.fieldLayout, Field.layout must be provided; layout not provided for field: ${field.name}`
+        );
       }
-    } else {
-      for (const fieldPropertyName in this.state.fields) {
-        const fieldComponent: FieldComponent<any, any> = this.state.fields[fieldPropertyName];
-        const field = fieldComponent.field;
-        if (!field.layout) {
-          throw new Error(
-            `Unless using FormProps.fieldLayout, Field.layout must be provided; layout not provided for field: ${field.name}`
-          );
-        }
 
-        if (typeof rows[field.layout.row] === 'undefined') {
-          rows[field.layout.row] = [];
-        }
+      if (typeof rows[field.layout.row] === 'undefined') {
+        rows[field.layout.row] = [];
+      }
 
-        if (field.layout.column && rows[field.layout.row].length >= field.layout.column) {
-          rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
-        } else {
-          rows[field.layout.row].push(fieldComponent);
-        }
+      if (field.layout.column && rows[field.layout.row].length >= field.layout.column) {
+        rows[field.layout.row].splice(field.layout.column - 1, 0, fieldComponent);
+      } else {
+        rows[field.layout.row].push(fieldComponent);
+      }
 
-        const rowWidth = rows[field.layout.row]
-          .map((fieldComponent) =>
-            fieldComponent.field.layout?.width ? (fieldComponent.field.layout.width as number) : 0
-          )
-          .reduce((accumulator, currentWidth) => accumulator + currentWidth);
-        if (rowWidth > 12) {
-          throw new Error(
-            `Width of row exceeds maximum width (12), row width: ${rowWidth}, row index: ${field.layout.row}`
-          );
-        }
+      const rowWidth = rows[field.layout.row]
+        .map((fieldComponent) =>
+          fieldComponent.field.layout?.width ? (fieldComponent.field.layout.width as number) : 0
+        )
+        .reduce((accumulator, currentWidth) => accumulator + currentWidth);
+      if (rowWidth > 12) {
+        throw new Error(
+          `Width of row exceeds maximum width (12), row width: ${rowWidth}, row index: ${field.layout.row}`
+        );
       }
     }
 
@@ -490,6 +582,9 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
           variant={button.style.variant || 'contained'}
           disabled={button.accessibility?.disabled || this.state.actionInFlight}
           onClick={(event) => this.onClick(button)}
+          // Sentence case: MUI upper-cases labels, which makes every form action shout over
+          // the quiet labels and values it sits under.
+          sx={{ textTransform: 'none' }}
         >
           {button.name}
         </Button>
@@ -571,6 +666,14 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
       </Grid>
     );
   }
+}
+
+/** Whether a fieldLayout is the sectioned shape (objects with `fields`) vs the flat row lists. */
+function isSectionedLayout<F extends Fields>(
+  fieldLayout: (keyof F)[] | (keyof F)[][] | FormFieldSection<F>[]
+): fieldLayout is FormFieldSection<F>[] {
+  const first = fieldLayout[0];
+  return typeof first === 'object' && first !== null && !Array.isArray(first) && 'fields' in first;
 }
 
 type FormType = <F extends Fields, B extends FormButtons<F>>(props: Omit<FormProps<F, B>, 'classes'>) => JSX.Element;

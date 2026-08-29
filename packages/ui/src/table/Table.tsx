@@ -36,6 +36,21 @@ import {
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
 import { useFormFactor } from '../hooks/useFormFactor';
 
+/**
+ * The round-2 cell grammar (reference-driven: Linear's borderless lists, Stripe's density):
+ * body rows carry NO borders — the hover band and a 10px vertical rhythm separate rows; the
+ * table's one hairline sits under the header. Cells sit at 10/16px (was MUI's 16/16), header
+ * cells at 6/16px. A consumer's `cellProps.sx` layers after these, so per-column overrides win.
+ */
+const bodyCellSx = { borderBottom: 'none', py: 1.25, px: 2 } as const;
+const headCellSx = {
+  py: 0.75,
+  px: 2,
+  borderBottom: '1px solid',
+  borderColor: 'divider',
+  backgroundColor: 'background.paper',
+} as const;
+
 type ColumnValue<T, K extends keyof T> = T[K];
 export type CustomRenderer<T, K extends keyof T> = (value: ColumnValue<T, K>, row: T) => React.ReactNode;
 export type ColumnConfig<T> = {
@@ -489,7 +504,10 @@ export function Table<T>({
           <TableHead>
             <TableRow>
               {buttons && buttons.length > 0 && (
-                <TableCell padding='checkbox'>
+                <TableCell
+                  padding='checkbox'
+                  sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}
+                >
                   <Checkbox
                     checked={selectAll}
                     onChange={(event, selected) => toggleSelectAll(selected)}
@@ -501,7 +519,7 @@ export function Table<T>({
               )}
               {!hideColumnHeaders &&
                 columns.map((column, index) => (
-                  <TableCell key={index}>
+                  <TableCell key={index} sx={headCellSx}>
                     {columnConfig[column]?.header !== null && (
                       // Column LABELS, not headings: the h6 the framework used to render here
                       // shouted over the data it labeled.
@@ -519,7 +537,12 @@ export function Table<T>({
           {bodyState === 'loading' && (
             <TableBody className='loading-skeleton-table-body'>
               <TableRow className='loading-skeleton-row'>
-                <TableCell colSpan={totalColumns} align='center' className='loading-skeleton-cell' sx={{ py: 3 }}>
+                <TableCell
+                  colSpan={totalColumns}
+                  align='center'
+                  className='loading-skeleton-cell'
+                  sx={{ py: 3, borderBottom: 'none' }}
+                >
                   {skeleton ? skeleton : <CircularProgress />}
                 </TableCell>
               </TableRow>
@@ -528,7 +551,7 @@ export function Table<T>({
           {bodyState === 'error' && (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={totalColumns} align='center' sx={{ py: 3 }}>
+                <TableCell colSpan={totalColumns} align='center' sx={{ py: 3, borderBottom: 'none' }}>
                   <Typography color='error'>Couldn't load rows.</Typography>
                   <Typography variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>
                     {tableLoadErrorText(error)}
@@ -540,7 +563,7 @@ export function Table<T>({
           {bodyState === 'empty' && (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={totalColumns} align='center'>
+                <TableCell colSpan={totalColumns} align='center' sx={{ borderBottom: 'none' }}>
                   {emptyTableComponent ? emptyTableComponent : <Typography>No rows to display.</Typography>}
                 </TableCell>
               </TableRow>
@@ -573,7 +596,7 @@ export function Table<T>({
                     }
                   >
                     {buttons && buttons.length > 0 && (
-                      <TableCell padding='checkbox'>
+                      <TableCell padding='checkbox' sx={{ borderBottom: 'none' }}>
                         <Checkbox
                           checked={isSelected}
                           onChange={(event) => {
@@ -589,8 +612,15 @@ export function Table<T>({
                     )}
                     {columns.map((column, index) => {
                       const { value: cellValue, isCustomRendered, text } = formatCellValue(row[column], column, row);
+                      const { sx: cellSx, ...cellRest } = columnConfig?.[column]?.cellProps ?? {};
                       return (
-                        <TableCell key={index} {...columnConfig?.[column]?.cellProps}>
+                        <TableCell
+                          key={index}
+                          // Base grammar first, the consumer's cellProps.sx after — per-column
+                          // overrides always win.
+                          sx={[bodyCellSx, ...(Array.isArray(cellSx) ? cellSx : [cellSx])]}
+                          {...cellRest}
+                        >
                           {isCustomRendered || text === undefined ? (
                             cellValue
                           ) : (

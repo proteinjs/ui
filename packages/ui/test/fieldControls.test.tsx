@@ -2,8 +2,9 @@
  * @jest-environment jsdom
  *
  * Field controls (task #53 part 2, items 3 and 7 seams):
- *  - readonly text fields use InputProps.readOnly, NOT disabled — a disabled input blocks text
- *    selection, so readonly values (ids, timestamps) could not be copied out of the form.
+ *  - readonly text fields render as a text ROW (round 2): no input chrome at all — the value
+ *    is selectable text with a copy control, so readonly values (ids, timestamps) stay
+ *    copyable without wearing an input border.
  *  - checkboxField renders a real checkbox and reports a boolean value.
  *  - dateField renders a native date input ('datetime-local' with includeTime).
  */
@@ -48,13 +49,30 @@ describe('field controls', () => {
     return onChange;
   };
 
-  it('readonly text fields are readOnly and NOT disabled, so their values stay selectable/copyable', async () => {
+  it('readonly text fields render as a text row — no input chrome, value present and copyable', async () => {
     await mount(textField({ name: 'id', value: 'record-123', accessibility: { readonly: true } }));
 
-    const input = container.querySelector('input')!;
-    expect(input.disabled).toBe(false);
-    expect(input.readOnly).toBe(true);
-    expect(input.value).toBe('record-123');
+    // No input element at all: the value is a text row, not a disabled/readOnly control.
+    expect(container.querySelector('input')).toBeNull();
+    const row = container.querySelector('[data-readonly-value-row]')!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('record-123');
+    expect(container.querySelector('button[aria-label="Copy Id"]')).not.toBeNull();
+  });
+
+  it('readonly text fields present their description inline (the relative-time suffix on timestamps)', async () => {
+    await mount(
+      textField({
+        name: 'created',
+        value: 'Aug 12, 2026, 9:14 AM',
+        description: '16 days ago',
+        accessibility: { readonly: true },
+      })
+    );
+
+    const row = container.querySelector('[data-readonly-value-row]')!;
+    expect(row.textContent).toContain('Aug 12, 2026, 9:14 AM');
+    expect(row.textContent).toContain('16 days ago');
   });
 
   it('editable text fields are neither disabled nor readOnly', async () => {

@@ -12,6 +12,9 @@ export * from './src/form/FormButton';
 export * from './src/form/fields/TextField';
 export * from './src/form/fields/CheckboxField';
 export * from './src/form/fields/DateField';
+export * from './src/form/fields/FieldShell';
+export * from './src/form/fields/ReadonlyValueRow';
+export * from './src/form/fields/FieldExpandDialog';
 
 export * from './src/form/container/FormPaper';
 export * from './src/form/container/FormPage';

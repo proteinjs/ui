@@ -38,18 +38,24 @@ export const TableToolbar = (props: TableToolbarProps) => {
   return (
     <Toolbar
       sx={() => {
+        // One compact height on all widths: MUI's 56→64px desktop jump reads as a page
+        // header; this is a card header.
+        const heightSx = { minHeight: 56, '@media (min-width: 600px)': { minHeight: 56 } };
         const defaultSx =
           selectedRows.length > 0
             ? theme.palette.mode === 'light'
               ? {
+                  ...heightSx,
                   color: theme.palette.info.main,
                   backgroundColor: lighten(theme.palette.info.light, 0.85),
                 }
               : {
+                  ...heightSx,
                   color: theme.palette.info.light,
                   backgroundColor: theme.palette.info.dark,
                 }
             : {
+                ...heightSx,
                 paddingLeft: theme.spacing(2),
                 paddingRight: theme.spacing(1),
               };

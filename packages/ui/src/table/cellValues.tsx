@@ -65,7 +65,9 @@ export function formatDateTimeCell(value: DateTimeCellInput): { text: string; fu
 
 /**
  * Timestamp: humanized (Today at 2:30 PM / Yesterday at… / MMM D, YYYY) with the full
- * absolute on hover — relative for the fast scan, absolute for precision.
+ * absolute on hover — relative for the fast scan, absolute for precision. Secondary ink:
+ * timestamps are meta, and a row should spend its primary ink on identity (round 2's
+ * fewer-competing-inks pass).
  */
 export function DateTimeCellValue({ value }: { value: DateTimeCellInput }) {
   const formatted = formatDateTimeCell(value);
@@ -74,7 +76,12 @@ export function DateTimeCellValue({ value }: { value: DateTimeCellInput }) {
   }
 
   return (
-    <Typography variant='body2' component='span' title={formatted.full} sx={{ whiteSpace: 'nowrap' }}>
+    <Typography
+      variant='body2'
+      component='span'
+      title={formatted.full}
+      sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}
+    >
       {formatted.text}
     </Typography>
   );
@@ -92,7 +99,7 @@ export function DateCellValue({ value }: { value: Date | string | number | null 
   }
 
   return (
-    <Typography variant='body2' component='span' sx={{ whiteSpace: 'nowrap' }}>
+    <Typography variant='body2' component='span' sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>
       {m.format('MMM D, YYYY')}
     </Typography>
   );
