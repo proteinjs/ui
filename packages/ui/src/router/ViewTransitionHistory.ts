@@ -1,8 +1,15 @@
 import type { Action, History, Location } from '@remix-run/router';
 import { flushSync } from 'react-dom';
 
-/** Direction vocabulary for a route transition — mirrors native navigation semantics. */
-export type RouteTransitionDirection = 'push' | 'pop';
+/**
+ * Direction vocabulary for a route transition. 'push' | 'pop' mirror native navigation
+ * semantics (directional root motion); 'morph' is a shared-element morph between two surfaces
+ * with NO directional root motion — the app's policy names it for commits where a named
+ * element on the departing page becomes a named element on the arriving one (the desktop
+ * home → draft-chat convergence). The router treats every verdict identically: run the commit
+ * inside a view transition and stamp the verdict for the theme to scope its rules on.
+ */
+export type RouteTransitionDirection = 'push' | 'pop' | 'morph';
 
 /** The history notification shape (@remix-run/router's Update — not exported from its root). */
 export interface HistoryUpdate {
@@ -43,7 +50,7 @@ export interface ViewTransitionLike {
   skipTransition?: () => void;
 }
 
-/** The stamp CSS keys off: html[data-route-transition='push'|'pop'] scopes the
+/** The stamp CSS keys off: html[data-route-transition='push'|'pop'|'morph'] scopes the
  *  ::view-transition-old/new(root) animations to router-driven transitions only. */
 export const ROUTE_TRANSITION_DATA_ATTR = 'routeTransition';
 

@@ -103,6 +103,26 @@ describe('decorateHistoryWithViewTransitions', () => {
     expect(getActiveViewTransition()).toBeNull();
   });
 
+  it("stamps a 'morph' verdict like any direction — the stamp is generic, the vocabulary is the seam's", async () => {
+    // A shared-element morph between surfaces (the desktop home → draft-chat convergence) is a
+    // third verdict beside push/pop: no directional root motion, but still a router-run view
+    // transition. The theme scopes its rules to html[data-route-transition="morph"].
+    let finish: () => void = () => {};
+    withStartViewTransition((cb) => {
+      cb();
+      return { finished: new Promise((resolve) => (finish = () => resolve(undefined))) };
+    });
+    const policy: RouteTransitionPolicy = () => 'morph';
+    const decorated = decorateHistoryWithViewTransitions(fakeHistory(), policy);
+    decorated.listen(() => {});
+    decorated.push('/chat');
+    expect(document.documentElement.dataset.routeTransition).toBe('morph');
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.documentElement.dataset.routeTransition).toBeUndefined();
+  });
+
   it('hands the policy the DEPARTING location, the new one, and the pop delta', () => {
     withStartViewTransition(() => ({ finished: Promise.resolve() }));
     const navs: { from: string; to: string; action: string; delta: number | null }[] = [];
