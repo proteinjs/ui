@@ -105,7 +105,11 @@ export function DateCellValue({ value }: { value: Date | string | number | null 
   );
 }
 
-/** Long text: body copy clamped at three lines so a blob can never take over a row. */
+/**
+ * Long text: body copy clamped at three lines so a blob can never take over a row. String
+ * content wraps at identifier humps first (see {@link withIdentifierBreaks}); `overflow-wrap:
+ * anywhere` stays the last resort for genuinely unbreakable runs (URLs, hashes).
+ */
 export function ClampedTextCellValue({ children, lines = 3 }: { children: React.ReactNode; lines?: number }) {
   return (
     <Typography
@@ -118,10 +122,82 @@ export function ClampedTextCellValue({ children, lines = 3 }: { children: React.
         overflowWrap: 'anywhere',
       }}
     >
-      {children}
+      {typeof children === 'string' ? withIdentifierBreaks(children) : children}
     </Typography>
   );
 }
+
+/** A whitespace-free run this long is treated as a name, not a word — short words never gain breaks. */
+const IDENTIFIER_MIN_LENGTH = 12;
+/**
+ * A hump segment up to this long renders as an unbreakable atom (`white-space: nowrap`), so the
+ * table's auto layout sizes the column to the longest segment instead of to one character (the
+ * anywhere fallback offers a break at every character, which is what shrank the Name column to
+ * "Truncat / e / Thou…"). Longer segments stay breakable — a pathological run must never widen a
+ * table past its card.
+ */
+const ATOM_MAX_LENGTH = 24;
+
+/**
+ * Soft break opportunities inside identifier-like tokens — camelCase / snake_case / dotted or
+ * slashed names (a migration's class name, a column name, a package path): a `<wbr>` before
+ * each hump and after each separator, so a narrow column wraps "BackfillUserStatusActive" as
+ * Backfill / User / Status / Active instead of mid-word ("Backfill / UserSt / atusA…", which is
+ * what `overflow-wrap: anywhere` alone produced). `<wbr>` carries no text: the cell's
+ * textContent, copy, and search are byte-identical. Prose is untouched — only whitespace-free
+ * runs of {@link IDENTIFIER_MIN_LENGTH}+ characters with internal humps or separators qualify.
+ * Written without regex lookbehind on purpose (Safari before 16.4 fails to PARSE such a
+ * literal, which would brick the whole bundle, not just this cell).
+ */
+export function withIdentifierBreaks(text: string): React.ReactNode {
+  const parts = text.split(/(\s+)/);
+  if (!parts.some((part) => part.length >= IDENTIFIER_MIN_LENGTH && hasBreakOpportunity(part))) {
+    return text;
+  }
+
+  const nodes: React.ReactNode[] = [];
+  parts.forEach((part, partIndex) => {
+    if (part.length < IDENTIFIER_MIN_LENGTH || /\s/.test(part) || !hasBreakOpportunity(part)) {
+      nodes.push(part);
+      return;
+    }
+
+    const atom = (segment: string, key: string) =>
+      segment.length <= ATOM_MAX_LENGTH ? (
+        <span key={key} style={{ whiteSpace: 'nowrap' }}>
+          {segment}
+        </span>
+      ) : (
+        segment
+      );
+    let segment = '';
+    for (let i = 0; i < part.length; i++) {
+      const char = part[i];
+      const previous = part[i - 1];
+      const humpBoundary = i > 0 && isUpper(char) && isLowerOrDigit(previous);
+      const afterSeparator = i > 0 && isSeparator(previous) && !isSeparator(char);
+      if (humpBoundary || afterSeparator) {
+        nodes.push(atom(segment, `${partIndex}-${i}-a`), <wbr key={`${partIndex}-${i}`} />);
+        segment = '';
+      }
+      segment += char;
+    }
+    nodes.push(atom(segment, `${partIndex}-end`));
+  });
+  return nodes;
+}
+
+const isUpper = (char: string) => char >= 'A' && char <= 'Z';
+const isLowerOrDigit = (char: string) => (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9');
+const isSeparator = (char: string) => char === '_' || char === '.' || char === '/' || char === '-';
+const hasBreakOpportunity = (token: string) => {
+  for (let i = 1; i < token.length; i++) {
+    if ((isUpper(token[i]) && isLowerOrDigit(token[i - 1])) || (isSeparator(token[i - 1]) && !isSeparator(token[i]))) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /** Structured values (objects/arrays): one ellipsized mono line, full value on hover. */
 export function JsonSnippetCellValue({ value }: { value: unknown }) {
