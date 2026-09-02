@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.15.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.14.0...@proteinjs/ui@4.15.0) (2026-09-02)
+
+
+### Features
+
+* **ui:** identifier-like cell text wraps at its humps, never mid-word (ClampedTextCellValue) ([034bcd0](https://github.com/proteinjs/ui/commit/034bcd0a19d250ae72c54675c3254b3e4bc947be))
+
+
+
+
+
 # [4.14.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.13.0...@proteinjs/ui@4.14.0) (2026-08-29)
 
 
