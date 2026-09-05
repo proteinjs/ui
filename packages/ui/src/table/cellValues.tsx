@@ -203,6 +203,8 @@ const hasBreakOpportunity = (token: string) => {
 export const STRUCTURED_CELL_COLLAPSED_LINES = 3;
 /** Nested arrays/objects summarize to this many items/keys before "+n more". */
 const STRUCTURED_SUMMARY_ITEMS = 4;
+/** The width a structured cell asks of the auto layout, so its column settles wide enough to read. */
+const STRUCTURED_CELL_MIN_WIDTH = 220;
 const STRUCTURED_TOOLTIP_CAP = 1000;
 
 /** One line of a structured value: a key (objects) or none (array items), and the value's one-line text. */
@@ -305,7 +307,9 @@ export function JsonSnippetCellValue({ value }: { value: unknown }) {
       data-structured-cell
       data-structured-cell-expanded={expanded ? 'true' : 'false'}
       title={json.length > STRUCTURED_TOOLTIP_CAP ? `${json.slice(0, STRUCTURED_TOOLTIP_CAP)}…` : json}
-      sx={{ minWidth: 0 }}
+      // The seat a structured cell claims from the auto layout (the columns settle from it): keys
+      // up to a long identifier plus a readable value — the old one-line snippet claimed 280.
+      sx={{ minWidth: STRUCTURED_CELL_MIN_WIDTH }}
     >
       {shown.map((entry, index) => (
         <Box
@@ -321,8 +325,10 @@ export function JsonSnippetCellValue({ value }: { value: unknown }) {
                 fontSize: '0.75rem',
                 lineHeight: 1.5,
                 color: 'text.secondary',
+                // The key is the datum's NAME: it keeps its full width (up to most of the line)
+                // and the value is what ellipsizes — the whole JSON is on the title.
                 flex: 'none',
-                maxWidth: '45%',
+                maxWidth: '60%',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
