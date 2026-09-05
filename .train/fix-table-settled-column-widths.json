@@ -1,0 +1,12 @@
+{
+  "branch": "fix/table-settled-column-widths",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/tableSettledColumns.test.tsx",
+    "packages/ui/test/structuredCellValue.test.tsx",
+    "packages/ui/test/tableDefaultCellValues.test.tsx",
+    "packages/ui/test/tableInfiniteScroll.test.tsx",
+    "packages/ui/test/tablePhoneFace.test.tsx"
+  ],
+  "removes": []
+}
