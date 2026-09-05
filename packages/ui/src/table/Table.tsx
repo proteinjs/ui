@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TableContainer,
@@ -175,6 +175,21 @@ export function Table<T>({
    * it. A ref rather than state: this must not re-render rows.
    */
   const pointerDownAt = useRef<PointerPosition | undefined>(undefined);
+  /**
+   * SETTLED COLUMN WIDTHS (founder, R7 round 3: "when you scroll down in record tables … it
+   * shifts around the data in the existing rows"): an auto-layout table re-derives every column
+   * from ALL its rows, so each page that lands re-distributes the widths and re-wraps rows that
+   * already fit. The desktop face measures its columns ONCE — from the first page of rows, in a
+   * layout effect before that paint — and pins them as a fixed layout (`<colgroup>` +
+   * `table-layout: fixed`) for the life of the data: later pages wrap inside the settled columns
+   * and never move a row above them. The pins release when the data changes (the loader's keys,
+   * the column set) or the scroller's width changes (a resize is a new layout; it settles again
+   * at the next paint), never on a page load. `undefined` = not settled (auto layout).
+   */
+  const [settledColumns, setSettledColumns] = useState<{ widths: number[]; scrollerWidth: number } | undefined>(
+    undefined
+  );
+  const tableRef = useRef<HTMLTableElement | null>(null);
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
     useTableData<T>(tableLoader, rowsPerPage, page, infiniteScroll, setRowCount, refetchOnWindowFocus);
@@ -204,9 +219,51 @@ export function Table<T>({
   useEffect(() => {
     resetQuery();
     setPage(0);
+    setSettledColumns(undefined);
     // resetQuery is intentionally not a dependency: this must run only when the loader's keys
     // change, and refetch-function identity is not a data change.
   }, [loaderDataKey, loaderDataQueryKey]);
+
+  // A different column set (or the checkbox column coming/going) is a different grid: release.
+  const columnSetKey = `${buttons && buttons.length > 0 ? 'checkbox|' : ''}${columns.map(String).join('|')}`;
+  useEffect(() => {
+    setSettledColumns(undefined);
+  }, [columnSetKey]);
+
+  const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
+
+  // Settle: the first rows paint in auto layout; their cells' widths become the pins BEFORE
+  // that paint is shown (a layout effect), so nothing visibly shifts at the settle either.
+  useLayoutEffect(() => {
+    if (isPhone || settledColumns || bodyState !== 'rows') {
+      return;
+    }
+    const firstRow = tableRef.current?.tBodies[0]?.rows[0];
+    const scroller = infScrollContainer;
+    if (!firstRow || !scroller) {
+      return;
+    }
+    const widths = Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width);
+    // No geometry (a non-visual environment) — nothing to pin; auto layout stays.
+    if (!widths.length || widths.some((width) => !(width > 0))) {
+      return;
+    }
+    setSettledColumns({ widths, scrollerWidth: scroller.getBoundingClientRect().width });
+  }, [isPhone, settledColumns, bodyState, infScrollContainer]);
+
+  // A resized scroller is a new layout: release the pins; the next paint settles them again.
+  useEffect(() => {
+    if (!settledColumns || !infScrollContainer || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (Math.abs(infScrollContainer.getBoundingClientRect().width - settledColumns.scrollerWidth) >= 1) {
+        setSettledColumns(undefined);
+      }
+    });
+    observer.observe(infScrollContainer);
+    return () => observer.disconnect();
+  }, [settledColumns, infScrollContainer]);
 
   useEffect(() => {
     setSelectedRows({});
@@ -407,8 +464,6 @@ export function Table<T>({
   /** The phone card list: same body states and handlers as the table face, presented as
    *  stacked hairline-divided cards that can never require horizontal scroll. */
   const renderPhoneList = () => {
-    const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
-
     return (
       <Box data-table-phone-face sx={{ minWidth: 0 }}>
         {bodyState === 'loading' && (
@@ -491,7 +546,6 @@ export function Table<T>({
 
   const renderTableContainer = () => {
     const totalColumns = columns.length + (buttons && buttons.length > 0 ? 1 : 0);
-    const bodyState = resolveTableBodyState({ isLoading, hasRows: rows.length > 0, error });
 
     return (
       <TableContainer
@@ -509,7 +563,21 @@ export function Table<T>({
           ...(Array.isArray(tableContainerSx) ? tableContainerSx : [tableContainerSx]),
         ]}
       >
-        <MuiTable stickyHeader>
+        <MuiTable
+          stickyHeader
+          ref={tableRef}
+          data-table-columns={settledColumns ? 'settled' : 'auto'}
+          // Settled: the pins below ARE the layout; a later page's longer value wraps inside its
+          // column instead of widening it (and narrowing its neighbours) under the rows above.
+          sx={settledColumns ? { tableLayout: 'fixed', width: '100%' } : undefined}
+        >
+          {settledColumns && (
+            <colgroup>
+              {settledColumns.widths.map((width, index) => (
+                <col key={index} style={{ width }} />
+              ))}
+            </colgroup>
+          )}
           <TableHead>
             <TableRow>
               {buttons && buttons.length > 0 && (

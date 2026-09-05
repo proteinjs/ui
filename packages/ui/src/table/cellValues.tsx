@@ -9,7 +9,7 @@ import { formatRelativeDate } from '../formatters';
  * renderers) share — one owner for how a TYPE of value presents in a data table, so every
  * consumer inherits the same grammar: quiet dashes for empty, a jade check / muted dash for
  * booleans (never emoji or 'True'/'False' strings), humanized times with the precise
- * timestamp on hover, clamped long text, ellipsized mono for structured blobs, and quiet
+ * timestamp on hover, clamped long text, structured values as row-sized content, and quiet
  * chips with a tone dot for status-like values.
  */
 
@@ -199,39 +199,176 @@ const hasBreakOpportunity = (token: string) => {
   return false;
 };
 
-/** Structured values (objects/arrays): one ellipsized mono line, full value on hover. */
+/** Lines a structured cell shows at rest — the same bound as clamped text (three lines a row). */
+export const STRUCTURED_CELL_COLLAPSED_LINES = 3;
+/** Nested arrays/objects summarize to this many items/keys before "+n more". */
+const STRUCTURED_SUMMARY_ITEMS = 4;
+const STRUCTURED_TOOLTIP_CAP = 1000;
+
+/** One line of a structured value: a key (objects) or none (array items), and the value's one-line text. */
+export type StructuredEntry = { key?: string; text: string };
+
+/**
+ * THE ENTRY GRAMMAR for a structured value (an object or array — an ObjectColumn, a JSON column,
+ * a blob a driver deserializes): the top level is the content, one line per key (or item); a
+ * nested value reads as its one-line summary — scalars as themselves, `—` for null, an array of
+ * scalars as its first items, an array of records as its count, an object as its key names —
+ * so the cell tells what is IN the value without being the value. A JSON string is read as the
+ * value it encodes; any other scalar is one line of text.
+ */
+export function structuredEntries(value: unknown): StructuredEntry[] {
+  const parsed = parseIfJson(value);
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) => ({ text: summarizeStructured(item) }));
+  }
+  if (parsed && typeof parsed === 'object') {
+    return Object.entries(parsed).map(([key, item]) => ({ key, text: summarizeStructured(item) }));
+  }
+  return [{ text: summarizeStructured(parsed) }];
+}
+
+const isScalar = (value: unknown): boolean =>
+  value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
+function summarizeStructured(value: unknown): string {
+  if (value == null) {
+    return '—';
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return '[ ]';
+    }
+    if (value.every(isScalar)) {
+      const shown = value.slice(0, STRUCTURED_SUMMARY_ITEMS).map(summarizeStructured);
+      const rest = value.length - shown.length;
+      return rest > 0 ? `${shown.join(', ')}, +${rest} more` : shown.join(', ');
+    }
+    return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
+      return '{ }';
+    }
+    const shown = keys.slice(0, STRUCTURED_SUMMARY_ITEMS);
+    const rest = keys.length - shown.length;
+    return `{ ${shown.join(', ')}${rest > 0 ? `, +${rest} more` : ''} }`;
+  }
+  return String(value);
+}
+
+function parseIfJson(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+    return value;
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function structuredJson(value: unknown): string {
+  try {
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Structured values (objects/arrays) as CONTENT, sized for a row (founder, R7 round 3: an object
+ * in a column "should display that as content, but leverage the content size scalability
+ * features of the ui to not be a problem if it's large"): the entry grammar above, one line per
+ * top-level key/item — quiet key, then the value's one-line text — collapsed to
+ * {@link STRUCTURED_CELL_COLLAPSED_LINES} lines at rest with the house in-place disclosure
+ * ("Show more (n)" / "Show less", the notification row's grammar) for the rest; the whole
+ * JSON on hover. The disclosure is its own control: it never fires the row's click. Nested
+ * values summarize (they never grow the cell); the record form is where a value opens in full.
+ */
 export function JsonSnippetCellValue({ value }: { value: unknown }) {
+  const [expanded, setExpanded] = React.useState(false);
   if (value == null) {
     return <EmptyCellValue />;
   }
 
-  let json: string;
-  try {
-    json = typeof value === 'string' ? value : JSON.stringify(value);
-  } catch {
-    json = String(value);
-  }
-
-  const tooltipCap = 1000;
+  const entries = structuredEntries(value);
+  const hidden = Math.max(0, entries.length - STRUCTURED_CELL_COLLAPSED_LINES);
+  const shown = expanded ? entries : entries.slice(0, STRUCTURED_CELL_COLLAPSED_LINES);
+  const json = structuredJson(parseIfJson(value));
   return (
-    <Typography
-      variant='body2'
-      component='span'
-      title={json.length > tooltipCap ? `${json.slice(0, tooltipCap)}…` : json}
-      sx={{
-        fontFamily: 'ui-monospace, Menlo, monospace',
-        fontSize: '0.8125rem',
-        color: 'text.secondary',
-        display: 'inline-block',
-        maxWidth: 280,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        verticalAlign: 'middle',
-      }}
+    <Box
+      data-structured-cell
+      data-structured-cell-expanded={expanded ? 'true' : 'false'}
+      title={json.length > STRUCTURED_TOOLTIP_CAP ? `${json.slice(0, STRUCTURED_TOOLTIP_CAP)}…` : json}
+      sx={{ minWidth: 0 }}
     >
-      {json}
-    </Typography>
+      {shown.map((entry, index) => (
+        <Box
+          key={index}
+          data-structured-cell-entry
+          sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}
+        >
+          {entry.key !== undefined && (
+            <Typography
+              component='span'
+              data-structured-cell-key
+              sx={{
+                fontSize: '0.75rem',
+                lineHeight: 1.5,
+                color: 'text.secondary',
+                flex: 'none',
+                maxWidth: '45%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {entry.key}
+            </Typography>
+          )}
+          <Typography
+            variant='body2'
+            component='span'
+            data-structured-cell-text
+            sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {entry.text}
+          </Typography>
+        </Box>
+      ))}
+      {hidden > 0 && (
+        <Box
+          component='button'
+          type='button'
+          data-structured-cell-toggle
+          aria-expanded={expanded}
+          onClick={(event: React.MouseEvent) => {
+            event.stopPropagation();
+            setExpanded((current) => !current);
+          }}
+          sx={{
+            font: 'inherit',
+            fontSize: '0.71875rem',
+            lineHeight: 1.5,
+            fontWeight: 500,
+            color: 'text.secondary',
+            background: 'none',
+            border: 0,
+            padding: 0,
+            marginTop: '2px',
+            cursor: 'pointer',
+            '&:hover': { color: 'text.primary' },
+          }}
+        >
+          {expanded ? 'Show less' : `Show more (${hidden})`}
+        </Box>
+      )}
+    </Box>
   );
 }
 

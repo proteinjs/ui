@@ -134,12 +134,14 @@ describe('Table default cell values', () => {
     expect(titled.getAttribute('title')).toBe(updated.format('ddd, MMM D YYYY, h:mm:ss A'));
   });
 
-  it('objects render one mono snippet with the JSON on the title', async () => {
+  it('objects render as content — one line per key — with the JSON on the title', async () => {
     await render();
     const cell = bodyCells()[5];
-    expect(cell.textContent).toBe('{"a":1}');
-    const snippet = cell.querySelector('[title]') as HTMLElement;
-    expect(snippet.getAttribute('title')).toBe('{"a":1}');
+    const entries = Array.from(cell.querySelectorAll('[data-structured-cell-entry]'));
+    expect(entries.map((entry) => entry.textContent)).toEqual(['a1']);
+    expect(cell.querySelector('[data-structured-cell-key]')?.textContent).toBe('a');
+    const structured = cell.querySelector('[title]') as HTMLElement;
+    expect(structured.getAttribute('title')).toBe('{"a":1}');
   });
 
   it('column headers are quiet labels — no h6 heading in the header row', async () => {
