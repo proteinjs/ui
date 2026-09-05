@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.15.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.0...@proteinjs/ui@4.15.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* a structured cell claims a readable seat from the auto layout (min 220px) and its keys keep their names — the value is what ellipsizes ([1ee1b83](https://github.com/proteinjs/ui/commit/1ee1b83479209986462f2dce99381ccdaf9d3339))
+* settled columns self-check every rows-paint — pins the browser renders stretched or squeezed (a measure taken across a moving layout) release and settle again before paint, bounded ([792d0ae](https://github.com/proteinjs/ui/commit/792d0ae5fc45b3a323b20ae297ed99ccd6769763))
+* table column widths settle on the first page and hold — a later page wraps inside the settled columns and never re-wraps the rows above it (colgroup pins + fixed layout; released on a new data set or a resize); structured values render as row-sized content (one line per key, collapsed to three with an in-place Show more), never one ellipsized blob ([b0ee964](https://github.com/proteinjs/ui/commit/b0ee964c875b0a35659da2497f7812bc378dab38))
+
+
+
+
+
 # [4.15.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.14.0...@proteinjs/ui@4.15.0) (2026-09-02)
 
 
