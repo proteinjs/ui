@@ -44,6 +44,8 @@ import { useFormFactor } from '../hooks/useFormFactor';
  * cells at 6/16px. A consumer's `cellProps.sx` layers after these, so per-column overrides win.
  */
 const bodyCellSx = { borderBottom: 'none', py: 1.25, px: 2 } as const;
+/** How many times a rows-paint may release stale pins before the table accepts them as they render. */
+const MAX_SETTLE_ATTEMPTS = 3;
 const headCellSx = {
   py: 0.75,
   px: 2,
@@ -234,8 +236,15 @@ export function Table<T>({
 
   // Settle: the first rows paint in auto layout; their cells' widths become the pins BEFORE
   // that paint is shown (a layout effect), so nothing visibly shifts at the settle either.
+  // Once settled, every rows-paint SELF-CHECKS the pins against what the browser renders: a
+  // measure taken across a layout that was still moving (a pane resizing under the first
+  // paint, a theme swap re-styling the cells) pins widths the fixed layout then stretches or
+  // squeezes to the table's width — the row reads differently from its pins. That is a stale
+  // measure, never the data: release and settle again (bounded, so a pathological layout can
+  // never loop), still before paint.
+  const settleAttempts = useRef(0);
   useLayoutEffect(() => {
-    if (isPhone || settledColumns || bodyState !== 'rows') {
+    if (isPhone || bodyState !== 'rows') {
       return;
     }
     const firstRow = tableRef.current?.tBodies[0]?.rows[0];
@@ -244,12 +253,24 @@ export function Table<T>({
       return;
     }
     const widths = Array.from(firstRow.cells).map((cell) => cell.getBoundingClientRect().width);
-    // No geometry (a non-visual environment) — nothing to pin; auto layout stays.
+    // No geometry (a non-visual environment) — nothing to pin or check; auto layout stays.
     if (!widths.length || widths.some((width) => !(width > 0))) {
       return;
     }
+    if (settledColumns) {
+      const stale =
+        widths.length !== settledColumns.widths.length ||
+        widths.some((width, index) => Math.abs(width - settledColumns.widths[index]) >= 1);
+      if (stale && settleAttempts.current < MAX_SETTLE_ATTEMPTS) {
+        settleAttempts.current += 1;
+        setSettledColumns(undefined);
+      } else if (!stale) {
+        settleAttempts.current = 0;
+      }
+      return;
+    }
     setSettledColumns({ widths, scrollerWidth: scroller.getBoundingClientRect().width });
-  }, [isPhone, settledColumns, bodyState, infScrollContainer]);
+  }, [isPhone, settledColumns, bodyState, infScrollContainer, rows]);
 
   // A resized scroller is a new layout: release the pins; the next paint settles them again.
   useEffect(() => {

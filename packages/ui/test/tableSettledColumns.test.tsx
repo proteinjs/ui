@@ -73,10 +73,14 @@ class FakeResizeObserver {
 }
 (globalThis as any).ResizeObserver = FakeResizeObserver;
 
-// ── The fake auto layout. ────────────────────────────────────────────────────────────────────
+// ── The fake layout: auto when unpinned (a cell is as wide as its column's longest text);
+//    FIXED when pinned (a cell renders its pin — times `stretch`, the browser's redistribution
+//    when the pins no longer sum to the table's width, i.e. a measure taken across a moving
+//    layout). ─────────────────────────────────────────────────────────────────────────────────
 const CHAR_PX = 8;
 let scrollerWidth = 800;
 let geometry = true;
+let stretch = 1;
 const originalRect = HTMLElement.prototype.getBoundingClientRect;
 beforeAll(() => {
   HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
@@ -90,6 +94,10 @@ beforeAll(() => {
     if (this instanceof HTMLTableCellElement) {
       const table = this.closest('table');
       const index = this.cellIndex;
+      const pin = table?.querySelectorAll('colgroup col')[index] as HTMLElement | undefined;
+      if (pin) {
+        return { ...rect, width: parseFloat(pin.style.width) * stretch } as DOMRect;
+      }
       let longest = 1;
       for (const row of Array.from(table?.tBodies[0]?.rows ?? [])) {
         longest = Math.max(longest, (row.cells[index]?.textContent ?? '').length);
@@ -147,6 +155,7 @@ describe('Table — column widths settle on the first page and hold', () => {
     ioInstances.length = 0;
     roInstances.length = 0;
     scrollerWidth = 800;
+    stretch = 1;
     geometry = true;
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -230,5 +239,20 @@ describe('Table — column widths settle on the first page and hold', () => {
     expect(rowCount()).toBe(10);
     expect(mode()).toBe('auto');
     expect(pins()).toEqual([]);
+  });
+
+  it('pins the browser no longer renders as such (a measure across a moving layout) are re-settled, before paint', async () => {
+    await render(new PagedLoader([pageOne, pageTwo]));
+    expect(pins()).toEqual(['24px', '16px']);
+
+    // The fixed layout now stretches the pinned columns (the pins stopped summing to the table's
+    // width): the next rows-paint reads a row that differs from its pins → release → settle
+    // again from what the layout renders now.
+    stretch = 1.5;
+    await fireSentinel();
+    expect(rowCount()).toBe(20);
+    expect(mode()).toBe('settled');
+    // Re-measured unpinned (auto) with both pages in the DOM, then pinned: 304 / 152.
+    expect(pins()).toEqual(['304px', '152px']);
   });
 });
