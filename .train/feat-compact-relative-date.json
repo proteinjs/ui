@@ -1,0 +1,6 @@
+{
+  "branch": "feat/compact-relative-date",
+  "packages": ["ui"],
+  "suites": ["packages/ui/test/formatRelativeDate.test.ts"],
+  "removes": []
+}
