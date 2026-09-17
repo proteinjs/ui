@@ -74,8 +74,7 @@ export type ColumnConfig<T> = {
 };
 
 type RowClickAction<T> =
-  | string
-  | ((row: T, event?: React.MouseEvent) => void | Promise<void> | string | Promise<string>);
+  string | ((row: T, event?: React.MouseEvent) => void | Promise<void> | string | Promise<string>);
 
 export type TableProps<T> = {
   title?: string;
@@ -188,9 +187,7 @@ export function Table<T>({
    * the column set) or the scroller's width changes (a resize is a new layout; it settles again
    * at the next paint), never on a page load. `undefined` = not settled (auto layout).
    */
-  const [settledColumns, setSettledColumns] = useState<{ widths: number[]; scrollerWidth: number } | undefined>(
-    undefined
-  );
+  const [settledColumns, setSettledColumns] = useState<{ widths: number[] } | undefined>(undefined);
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   const { rows, totalRows, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, resetQuery } =
@@ -269,16 +266,25 @@ export function Table<T>({
       }
       return;
     }
-    setSettledColumns({ widths, scrollerWidth: scroller.getBoundingClientRect().width });
+    setSettledColumns({ widths });
   }, [isPhone, settledColumns, bodyState, infScrollContainer, rows]);
 
   // A resized scroller is a new layout: release the pins; the next paint settles them again.
+  // The baseline is the scroller's width UNDER the pins, read here after the pinned commit. On a
+  // content-sized scroller (a shrink-to-fit card around the table) the pins themselves change
+  // that width — the auto table was as wide as its content, the pinned one fills its column —
+  // and the observer's first report (a ResizeObserver reports on observe) carries exactly that
+  // change. Keyed to the width from BEFORE the pins, the release fired on that first report, the
+  // next paint settled again, the new observer reported again: one whole table render per frame
+  // for as long as rows were on screen — and every toolbar act remounted each time, so a click
+  // on one could never land. Only a change after this baseline is a resize.
   useEffect(() => {
     if (!settledColumns || !infScrollContainer || typeof ResizeObserver === 'undefined') {
       return;
     }
+    const settledWidth = infScrollContainer.getBoundingClientRect().width;
     const observer = new ResizeObserver(() => {
-      if (Math.abs(infScrollContainer.getBoundingClientRect().width - settledColumns.scrollerWidth) >= 1) {
+      if (Math.abs(infScrollContainer.getBoundingClientRect().width - settledWidth) >= 1) {
         setSettledColumns(undefined);
       }
     });

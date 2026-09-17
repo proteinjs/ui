@@ -56,8 +56,13 @@ class FakeIntersectionObserver {
 }
 (globalThis as any).IntersectionObserver = FakeIntersectionObserver;
 
-// ── ResizeObserver stub: records the observed scroller; a resize is fired by hand. ───────────
+// ── ResizeObserver stub, browser-faithful: observe() DELIVERS AN INITIAL OBSERVATION (the real
+//    API reports the target's current size as soon as it is observed); a later resize is fired
+//    by hand. Initial deliveries are capped per test so an implementation that re-observes in a
+//    loop fails an assertion instead of hanging the runner. ─────────────────────────────────────
 const roInstances: Array<{ callback: () => void; targets: Element[] }> = [];
+let initialObservations = 0;
+const MAX_INITIAL_OBSERVATIONS = 30;
 class FakeResizeObserver {
   private entry: { callback: () => void; targets: Element[] };
   constructor(callback: () => void) {
@@ -66,6 +71,10 @@ class FakeResizeObserver {
   }
   observe(target: Element) {
     this.entry.targets.push(target);
+    if (initialObservations < MAX_INITIAL_OBSERVATIONS) {
+      initialObservations += 1;
+      this.entry.callback();
+    }
   }
   disconnect() {
     this.entry.targets = [];
@@ -81,6 +90,19 @@ const CHAR_PX = 8;
 let scrollerWidth = 800;
 let geometry = true;
 let stretch = 1;
+/**
+ * A CONTENT-SIZED scroller (a shrink-to-fit card around the table): unpinned, the scroller is
+ * exactly as wide as the auto-layout table; pinned (`width: 100%` + fixed layout), the table
+ * fills the column and the scroller with it — the pins change the scroller's own width.
+ */
+let contentSizedScroller = false;
+const autoCellWidth = (table: HTMLTableElement | null, index: number) => {
+  let longest = 1;
+  for (const row of Array.from(table?.tBodies[0]?.rows ?? [])) {
+    longest = Math.max(longest, (row.cells[index]?.textContent ?? '').length);
+  }
+  return longest * CHAR_PX;
+};
 const originalRect = HTMLElement.prototype.getBoundingClientRect;
 beforeAll(() => {
   HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
@@ -89,6 +111,16 @@ beforeAll(() => {
       return rect as DOMRect;
     }
     if (this.hasAttribute('data-table-scroll-container')) {
+      const table = this.querySelector('table') as HTMLTableElement | null;
+      if (contentSizedScroller && table && !table.querySelector('colgroup')) {
+        const firstRow = table.tBodies[0]?.rows[0];
+        const cells = firstRow ? firstRow.cells.length : 0;
+        let width = 0;
+        for (let index = 0; index < cells; index++) {
+          width += autoCellWidth(table, index);
+        }
+        return { ...rect, width } as DOMRect;
+      }
       return { ...rect, width: scrollerWidth } as DOMRect;
     }
     if (this instanceof HTMLTableCellElement) {
@@ -98,11 +130,7 @@ beforeAll(() => {
       if (pin) {
         return { ...rect, width: parseFloat(pin.style.width) * stretch } as DOMRect;
       }
-      let longest = 1;
-      for (const row of Array.from(table?.tBodies[0]?.rows ?? [])) {
-        longest = Math.max(longest, (row.cells[index]?.textContent ?? '').length);
-      }
-      return { ...rect, width: longest * CHAR_PX } as DOMRect;
+      return { ...rect, width: autoCellWidth(table, index) } as DOMRect;
     }
     return rect as DOMRect;
   };
@@ -154,9 +182,11 @@ describe('Table — column widths settle on the first page and hold', () => {
   beforeEach(() => {
     ioInstances.length = 0;
     roInstances.length = 0;
+    initialObservations = 0;
     scrollerWidth = 800;
     stretch = 1;
     geometry = true;
+    contentSizedScroller = false;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -254,5 +284,30 @@ describe('Table — column widths settle on the first page and hold', () => {
     expect(mode()).toBe('settled');
     // Re-measured unpinned (auto) with both pages in the DOM, then pinned: 304 / 152.
     expect(pins()).toEqual(['304px', '152px']);
+  });
+
+  /**
+   * THE REPRO: a content-sized scroller. Pinning is what changes the scroller's width (the
+   * table goes from its content width to the column's), so a release keyed to the width the
+   * scroller had BEFORE the pins fires on the observer's very first report — release, settle,
+   * observe, release … one whole table render per frame, forever, and every toolbar act
+   * remounted each time (a click could never land on the create button). The width change the
+   * pins themselves cause is never a resize: the observer baselines under the pins.
+   */
+  it('a content-sized scroller settles ONCE and holds — the pins never release themselves', async () => {
+    contentSizedScroller = true;
+    await render(new PagedLoader([pageOne, pageTwo]));
+    expect(rowCount()).toBe(10);
+    expect(mode()).toBe('settled');
+    expect(pins()).toEqual(['24px', '16px']);
+    // One settle, one observer, one initial report — not a cycle per paint.
+    expect(initialObservations).toBe(1);
+    expect(roInstances.filter((entry) => entry.targets.length > 0)).toHaveLength(1);
+
+    // A genuine resize after that still releases and re-settles, exactly once.
+    await fireResize(600);
+    expect(mode()).toBe('settled');
+    expect(initialObservations).toBe(2);
+    expect(roInstances.filter((entry) => entry.targets.length > 0)).toHaveLength(1);
   });
 });

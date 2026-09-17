@@ -88,7 +88,7 @@ export const TableToolbar = (props: TableToolbarProps) => {
       />
       {content && content}
       <div>
-        <Buttons />
+        <SeatButtons buttons={buttons} selectedRows={selectedRows} onButtonClick={onButtonClick} />
       </div>
       {pendingConfirmation && pendingConfirmation.button.confirm && (
         <ConfirmationDialog
@@ -103,32 +103,51 @@ export const TableToolbar = (props: TableToolbarProps) => {
       )}
     </Toolbar>
   );
+};
 
-  function Buttons() {
-    if (!buttons) {
-      return null;
-    }
+/**
+ * The action seat. A component in its own right, declared once at module level: a component
+ * type minted inside the toolbar's render is a new type on every render, and React unmounts and
+ * remounts it each time — the seat's buttons lost their element identity (a click under way, a
+ * tooltip, the focus) whenever the table re-rendered around them.
+ */
+function SeatButtons(props: {
+  buttons?: TableButton<any>[];
+  selectedRows: any[];
+  onButtonClick: (button: TableButton<any>, rows: any[]) => void;
+}) {
+  const { buttons, selectedRows, onButtonClick } = props;
+  if (!buttons) {
+    return null;
+  }
 
-    if (selectedRows.length > 0) {
-      return buttons
-        .filter((button) => button.visibility.showWhenRowsSelected)
+  if (selectedRows.length > 0) {
+    return (
+      <>
+        {buttons
+          .filter((button) => button.visibility.showWhenRowsSelected)
+          .map((button, index) => (
+            <Tooltip key={index} title={button.name}>
+              <IconButton aria-label={button.name} onClick={() => onButtonClick(button, selectedRows)}>
+                <button.icon />
+              </IconButton>
+            </Tooltip>
+          ))}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {buttons
+        .filter((button) => button.visibility.showWhenNoRowsSelected)
         .map((button, index) => (
           <Tooltip key={index} title={button.name}>
-            <IconButton aria-label={button.name} onClick={(event) => onButtonClick(button, selectedRows)}>
+            <IconButton aria-label={button.name} onClick={() => onButtonClick(button, [])}>
               <button.icon />
             </IconButton>
           </Tooltip>
-        ));
-    }
-
-    return buttons
-      .filter((button) => button.visibility.showWhenNoRowsSelected)
-      .map((button, index) => (
-        <Tooltip key={index} title={button.name}>
-          <IconButton aria-label={button.name} onClick={(event) => onButtonClick(button, [])}>
-            <button.icon />
-          </IconButton>
-        </Tooltip>
-      ));
-  }
-};
+        ))}
+    </>
+  );
+}
