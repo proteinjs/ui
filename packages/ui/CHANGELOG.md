@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.15.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.1...@proteinjs/ui@4.15.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* settled table columns hold on a content-sized scroller; the toolbar seat keeps its buttons across re-renders ([9c3abf5](https://github.com/proteinjs/ui/commit/9c3abf56dda32e709b49b2b1f74b36eaefa4d601))
+
+
+
+
+
 ## [4.15.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.0...@proteinjs/ui@4.15.1) (2026-09-05)
 
 
