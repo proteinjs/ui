@@ -1,2 +1,0 @@
-{ "branch": "fix/record-table-create-navigates", "packages": ["ui"],
-  "suites": ["packages/ui/test/tableSettledColumns.test.tsx", "packages/ui/test/tableToolbarSeatIdentity.test.tsx"], "removes": [] }
