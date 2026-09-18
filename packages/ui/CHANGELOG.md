@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.16.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.2...@proteinjs/ui@4.16.0) (2026-09-18)
+
+
+### Features
+
+* **ui:** page container styles resolve against the form factor ([313b271](https://github.com/proteinjs/ui/commit/313b271277deccd4a75cda985cc8377d7a6229d3))
+
+
+
+
+
 ## [4.15.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.1...@proteinjs/ui@4.15.2) (2026-09-17)
 
 
