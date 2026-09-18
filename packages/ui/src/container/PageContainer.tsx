@@ -1,8 +1,9 @@
 import React from 'react';
-import { AppBar, Toolbar, Box, IconButton, Typography, AppBarProps, ToolbarProps, Theme, SxProps } from '@mui/material';
+import { AppBar, Toolbar, Box, IconButton, Typography, AppBarProps, ToolbarProps } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
 import { Page } from '../router/Page';
+import { useFormFactor } from '../hooks/useFormFactor';
 import { createUrlParams } from '../router/createUrlParams';
 import { LinkOrDialog, NavMenu, NavMenuItem } from './NavMenu';
 import { AccountIconButton, AccountIconButtonProps } from './AccountIconButton';
@@ -24,7 +25,8 @@ interface AccountIconButtonWithNavigateProps extends AccountIconButtonProps {
 export interface CustomPageContainerProps {
   page: Page;
   children: React.ReactNode;
-  pageContainerSxProps: ((theme: Theme) => SxProps) | undefined;
+  /** The page's own declaration (`Page.pageContainerSxProps`); the custom container resolves it with the theme and the form factor it lays out on. */
+  pageContainerSxProps: Page['pageContainerSxProps'];
   loginClicked: boolean;
   setLoginClicked: React.Dispatch<React.SetStateAction<boolean>>;
   auth?: {
@@ -108,6 +110,8 @@ export function PageContainer(props: PageContainerProps) {
   } = props;
   const [loginClicked, setLoginClicked] = React.useState(false);
   const [navMenuOpen, setNavMenuOpen] = React.useState(false);
+  // The form factor the page's container styles resolve against (Page.pageContainerSxProps).
+  const formFactor = useFormFactor();
 
   React.useEffect(() => {
     if (auth?.canViewPage(page)) {
@@ -151,7 +155,7 @@ export function PageContainer(props: PageContainerProps) {
           return defaultStyles;
         }
 
-        const resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme));
+        const resolvedStyles = Object.assign({}, defaultStyles, page.pageContainerSxProps(theme, formFactor));
 
         return resolvedStyles;
       }}

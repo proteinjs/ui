@@ -2,6 +2,7 @@ import React from 'react';
 import { SxProps, Theme } from '@mui/material';
 import { Loadable, SourceRepository } from '@proteinjs/reflection';
 import { NavigateFunction } from 'react-router-dom';
+import { FormFactor } from '../hooks/useFormFactor';
 
 export const getPages = () => SourceRepository.get().objects<Page>('@proteinjs/ui/Page');
 
@@ -30,5 +31,15 @@ export interface Page extends Loadable {
      */
     permission?: string;
   };
-  pageContainerSxProps?: (theme: Theme) => SxProps;
+  /**
+   * Styles for the container that hosts this page, resolved against the active theme and the
+   * viewer's form factor (`useFormFactor` — the same layout fork the page's own component forks
+   * on). A page whose presentation differs by form factor declares its container's styles per
+   * posture here — the ground it paints edge to edge, say — so the container and the page never
+   * disagree on them. Containers hand the form factor they lay out on (`PageContainer` does, and a
+   * `CustomPageContainer` that forks its layout on the form factor hands the same value); a page
+   * that forks on it may rely on it. A method signature on purpose: a page may declare the form
+   * factor required.
+   */
+  pageContainerSxProps?(theme: Theme, formFactor?: FormFactor): SxProps;
 }
