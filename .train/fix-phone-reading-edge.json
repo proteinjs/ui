@@ -1,0 +1,2 @@
+{ "branch": "fix/phone-reading-edge", "packages": ["ui"],
+  "suites": ["packages/ui/test/tableReadingEdge.test.tsx"], "removes": [] }
