@@ -1,3 +1,5 @@
+import { EmittedStyles } from './EmittedStyles';
+
 /**
  * Measures a READING EDGE from the rendered styles: how far an element's content starts from the
  * inline-start side of a root, at a given viewport width.
@@ -6,7 +8,8 @@
  * emotion injects every rule the components emit, and inline styles sit on the elements. The edge
  * of a block-flow chain is the sum of each box's margin, border and padding on the inline-start
  * side, from the root's first descendant down to the element itself — which is what this reads,
- * evaluating `min-width` media blocks against the viewport width it was given.
+ * evaluating `min-width` media blocks against the viewport width it was given. The rules come
+ * from `EmittedStyles`, the one reader of what the components emitted.
  *
  * It refuses what it cannot resolve (a percentage, a calc, an `auto` margin that would centre a
  * capped box) instead of reading it as zero, so a green result is a measured one.
@@ -26,6 +29,20 @@ export class ReadingEdge {
     }
 
     return edge;
+  }
+
+  /** One box's own declared length (`padding-right`, `min-height`, …) at this viewport width, in pixels. */
+  pixels(box: Element, property: string): number {
+    const declared = this.declared(box, property);
+    if (declared === '' || declared === '0') {
+      return 0;
+    }
+
+    if (!/^-?\d+(\.\d+)?px$/.test(declared)) {
+      throw new Error(`ReadingEdge: cannot resolve ${property}: '${declared}' without layout`);
+    }
+
+    return parseFloat(declared);
   }
 
   private insetOf(box: Element): number {
@@ -54,23 +71,10 @@ export class ReadingEdge {
     return 0;
   }
 
-  private pixels(box: Element, property: string): number {
-    const declared = this.declared(box, property);
-    if (declared === '' || declared === '0') {
-      return 0;
-    }
-
-    if (!/^-?\d+(\.\d+)?px$/.test(declared)) {
-      throw new Error(`ReadingEdge: cannot resolve ${property}: '${declared}' without layout`);
-    }
-
-    return parseFloat(declared);
-  }
-
   /**
-   * The cascaded value of one longhand: every matching rule in source order (emotion's selectors
-   * are single generated classes, so source order IS the cascade), then the inline style. A
-   * scratch declaration expands the shorthands (`padding: 0 16px`, `border: 1px solid`).
+   * The cascaded value of one longhand: every matching rule that applies at this width, in source
+   * order, then the inline style. A scratch declaration expands the shorthands (`padding: 0 16px`,
+   * `border: 1px solid`).
    */
   private declared(box: Element, property: string): string {
     const scratch = document.createElement('div').style;
@@ -89,30 +93,9 @@ export class ReadingEdge {
   }
 
   private rulesFor(box: Element): CSSStyleRule[] {
-    const matching: CSSStyleRule[] = [];
-    const collect = (rules: CSSRuleList) => {
-      for (const rule of Array.from(rules)) {
-        const media = (rule as CSSMediaRule).media;
-        if (media) {
-          if (this.mediaApplies(media.mediaText)) {
-            collect((rule as CSSMediaRule).cssRules);
-          }
-          continue;
-        }
-
-        const styleRule = rule as CSSStyleRule;
-        if (styleRule.selectorText && this.matches(box, styleRule.selectorText)) {
-          matching.push(styleRule);
-        }
-      }
-    };
-    for (const styleElement of Array.from(document.querySelectorAll('style'))) {
-      if (styleElement.sheet) {
-        collect(styleElement.sheet.cssRules);
-      }
-    }
-
-    return matching;
+    return EmittedStyles.matching(box)
+      .filter((emitted) => emitted.media.every((mediaText) => this.mediaApplies(mediaText)))
+      .map((emitted) => emitted.rule);
   }
 
   /** Width queries are evaluated against the viewport; any other media feature does not apply. */
@@ -128,14 +111,5 @@ export class ReadingEdge {
     }
 
     return false;
-  }
-
-  private matches(box: Element, selectorText: string): boolean {
-    try {
-      return box.matches(selectorText);
-    } catch {
-      // A selector jsdom cannot parse (a vendor pseudo-element) targets no box this reads.
-      return false;
-    }
   }
 }

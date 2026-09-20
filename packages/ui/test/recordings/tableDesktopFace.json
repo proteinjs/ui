@@ -1,0 +1,245 @@
+{
+  "recordedFrom": "7b30a78",
+  "states": {
+    "light/unselected": {
+      "toolbarRules": [
+        {
+          "media": [],
+          "declarations": "position: relative; display: flex; -webkit-align-items: center; -webkit-box-align: center; -ms-flex-align: center; align-items: center; padding-left: 16px; padding-right: 8px; min-height: 56px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "padding-left: 24px; padding-right: 24px;"
+        },
+        {
+          "media": [
+            "(min-width:0px)",
+            "(orientation: landscape)"
+          ],
+          "declarations": "min-height: 48px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "min-height: 64px;"
+        },
+        {
+          "media": [
+            "(min-width: 600px)"
+          ],
+          "declarations": "min-height: 56px;"
+        }
+      ],
+      "titleCellStyle": "margin-left: 4px; flex: 0 0 auto;",
+      "edges": {
+        "390": {
+          "seatText": 20,
+          "toolbarPaddingLeft": 16,
+          "toolbarPaddingRight": 8,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "600": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "1440": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        }
+      }
+    },
+    "light/selected": {
+      "toolbarRules": [
+        {
+          "media": [],
+          "declarations": "position: relative; display: flex; -webkit-align-items: center; -webkit-box-align: center; -ms-flex-align: center; align-items: center; padding-left: 16px; padding-right: 16px; min-height: 56px; color: #0288d1; background-color: rgb(217, 242, 253);"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "padding-left: 24px; padding-right: 24px;"
+        },
+        {
+          "media": [
+            "(min-width:0px)",
+            "(orientation: landscape)"
+          ],
+          "declarations": "min-height: 48px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "min-height: 64px;"
+        },
+        {
+          "media": [
+            "(min-width: 600px)"
+          ],
+          "declarations": "min-height: 56px;"
+        }
+      ],
+      "titleCellStyle": "margin-left: 4px; flex: 0 0 auto;",
+      "edges": {
+        "390": {
+          "seatText": 20,
+          "toolbarPaddingLeft": 16,
+          "toolbarPaddingRight": 16,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "600": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "1440": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        }
+      }
+    },
+    "dark/unselected": {
+      "toolbarRules": [
+        {
+          "media": [],
+          "declarations": "position: relative; display: flex; -webkit-align-items: center; -webkit-box-align: center; -ms-flex-align: center; align-items: center; padding-left: 16px; padding-right: 8px; min-height: 56px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "padding-left: 24px; padding-right: 24px;"
+        },
+        {
+          "media": [
+            "(min-width:0px)",
+            "(orientation: landscape)"
+          ],
+          "declarations": "min-height: 48px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "min-height: 64px;"
+        },
+        {
+          "media": [
+            "(min-width: 600px)"
+          ],
+          "declarations": "min-height: 56px;"
+        }
+      ],
+      "titleCellStyle": "margin-left: 4px; flex: 0 0 auto;",
+      "edges": {
+        "390": {
+          "seatText": 20,
+          "toolbarPaddingLeft": 16,
+          "toolbarPaddingRight": 8,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "600": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "1440": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        }
+      }
+    },
+    "dark/selected": {
+      "toolbarRules": [
+        {
+          "media": [],
+          "declarations": "position: relative; display: flex; -webkit-align-items: center; -webkit-box-align: center; -ms-flex-align: center; align-items: center; padding-left: 16px; padding-right: 16px; min-height: 56px; color: #4fc3f7; background-color: #0288d1;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "padding-left: 24px; padding-right: 24px;"
+        },
+        {
+          "media": [
+            "(min-width:0px)",
+            "(orientation: landscape)"
+          ],
+          "declarations": "min-height: 48px;"
+        },
+        {
+          "media": [
+            "(min-width:600px)"
+          ],
+          "declarations": "min-height: 64px;"
+        },
+        {
+          "media": [
+            "(min-width: 600px)"
+          ],
+          "declarations": "min-height: 56px;"
+        }
+      ],
+      "titleCellStyle": "margin-left: 4px; flex: 0 0 auto;",
+      "edges": {
+        "390": {
+          "seatText": 20,
+          "toolbarPaddingLeft": 16,
+          "toolbarPaddingRight": 16,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "600": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        },
+        "1440": {
+          "seatText": 28,
+          "toolbarPaddingLeft": 24,
+          "toolbarPaddingRight": 24,
+          "toolbarMinHeight": 56,
+          "headCell": 16,
+          "bodyCell": 16
+        }
+      }
+    }
+  }
+}

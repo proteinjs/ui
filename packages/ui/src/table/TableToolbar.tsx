@@ -3,6 +3,7 @@ import { TableButton } from './TableButton';
 import { IconButton, Toolbar, ToolbarProps, Tooltip, Typography, lighten, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { useFormFactor } from '../hooks/useFormFactor';
 import { TABLE_READING_EDGE } from './tableReadingEdge';
 
 export type TableToolbarProps = {
@@ -18,6 +19,12 @@ export const TableToolbar = (props: TableToolbarProps) => {
   const { title, selectedRows, content, buttons, sx } = props;
   const navigate = useNavigate();
   const theme = useTheme();
+  /**
+   * The phone posture reads ONE edge: on a full-bleed phone page the table's side is the screen's,
+   * so the title (or the selection count in its seat) starts where the card rows under it start.
+   * The desktop posture keeps the framework toolbar's own gutters and the title's 4px inset.
+   */
+  const { isPhone } = useFormFactor();
   /**
    * A button with `confirm` routes here on click: its action and the rows it would act on wait
    * in this state until the dialog's confirm runs them; cancel discards them.
@@ -40,16 +47,18 @@ export const TableToolbar = (props: TableToolbarProps) => {
     <Toolbar
       sx={() => {
         // One compact height on all widths: MUI's 56→64px desktop jump reads as a page
-        // header; this is a card header. One reading edge on all widths and in both states too:
-        // the title (or the selection count in its seat) starts where the rows start. MUI re-pads
-        // the toolbar to 24px from 600px up inside a media block, which outranks a plain
-        // padding — so, like the height, the edge is restated inside that block.
-        const readingEdge = theme.spacing(TABLE_READING_EDGE);
-        const seatSx = {
+        // header; this is a card header.
+        const heightSx = { minHeight: 56, '@media (min-width: 600px)': { minHeight: 56 } };
+        // The phone seat, in both states. MUI re-pads the toolbar to 24px from 600px up inside a
+        // media block, which outranks a plain padding and which a phone held sideways is wide
+        // enough to match — so, like the height, the phone's edge is restated inside that block.
+        const phoneEdge = theme.spacing(TABLE_READING_EDGE);
+        const phoneSeatSx = {
           minHeight: 56,
-          paddingLeft: readingEdge,
-          '@media (min-width: 600px)': { minHeight: 56, paddingLeft: readingEdge },
+          paddingLeft: phoneEdge,
+          '@media (min-width: 600px)': { minHeight: 56, paddingLeft: phoneEdge },
         };
+        const seatSx = isPhone ? phoneSeatSx : heightSx;
         const defaultSx =
           selectedRows.length > 0
             ? theme.palette.mode === 'light'
@@ -63,16 +72,23 @@ export const TableToolbar = (props: TableToolbarProps) => {
                   color: theme.palette.info.light,
                   backgroundColor: theme.palette.info.dark,
                 }
-            : {
-                ...seatSx,
-                paddingRight: theme.spacing(1),
-              };
+            : isPhone
+              ? {
+                  ...phoneSeatSx,
+                  paddingRight: theme.spacing(1),
+                }
+              : {
+                  ...heightSx,
+                  paddingLeft: theme.spacing(2),
+                  paddingRight: theme.spacing(1),
+                };
 
         return sx ? { ...defaultSx, ...sx } : defaultSx;
       }}
     >
       <div
         style={{
+          marginLeft: isPhone ? undefined : 4,
           flex: '0 0 auto',
         }}
       >
