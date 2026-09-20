@@ -3,6 +3,7 @@ import { TableButton } from './TableButton';
 import { IconButton, Toolbar, ToolbarProps, Tooltip, Typography, lighten, useTheme } from '@mui/material';
 import { useNavigate } from 'react-router';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { TABLE_READING_EDGE } from './tableReadingEdge';
 
 export type TableToolbarProps = {
   title?: string;
@@ -39,24 +40,31 @@ export const TableToolbar = (props: TableToolbarProps) => {
     <Toolbar
       sx={() => {
         // One compact height on all widths: MUI's 56→64px desktop jump reads as a page
-        // header; this is a card header.
-        const heightSx = { minHeight: 56, '@media (min-width: 600px)': { minHeight: 56 } };
+        // header; this is a card header. One reading edge on all widths and in both states too:
+        // the title (or the selection count in its seat) starts where the rows start. MUI re-pads
+        // the toolbar to 24px from 600px up inside a media block, which outranks a plain
+        // padding — so, like the height, the edge is restated inside that block.
+        const readingEdge = theme.spacing(TABLE_READING_EDGE);
+        const seatSx = {
+          minHeight: 56,
+          paddingLeft: readingEdge,
+          '@media (min-width: 600px)': { minHeight: 56, paddingLeft: readingEdge },
+        };
         const defaultSx =
           selectedRows.length > 0
             ? theme.palette.mode === 'light'
               ? {
-                  ...heightSx,
+                  ...seatSx,
                   color: theme.palette.info.main,
                   backgroundColor: lighten(theme.palette.info.light, 0.85),
                 }
               : {
-                  ...heightSx,
+                  ...seatSx,
                   color: theme.palette.info.light,
                   backgroundColor: theme.palette.info.dark,
                 }
             : {
-                ...heightSx,
-                paddingLeft: theme.spacing(2),
+                ...seatSx,
                 paddingRight: theme.spacing(1),
               };
 
@@ -65,7 +73,6 @@ export const TableToolbar = (props: TableToolbarProps) => {
     >
       <div
         style={{
-          marginLeft: 4,
           flex: '0 0 auto',
         }}
       >

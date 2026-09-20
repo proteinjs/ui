@@ -22,6 +22,7 @@ import { StringUtil } from '@proteinjs/util';
 import { TableLoader } from './TableLoader';
 import { TableButton } from './TableButton';
 import { TableToolbar } from './TableToolbar';
+import { TABLE_READING_EDGE } from './tableReadingEdge';
 import { useTableData } from './tableData';
 import { InfiniteScroll } from './InfiniteScroll';
 import { hasTextSelectionInRow, PointerPosition, shouldRunRowClickAction } from './rowClickIntent';
@@ -43,12 +44,12 @@ import { useFormFactor } from '../hooks/useFormFactor';
  * table's one hairline sits under the header. Cells sit at 10/16px (was MUI's 16/16), header
  * cells at 6/16px. A consumer's `cellProps.sx` layers after these, so per-column overrides win.
  */
-const bodyCellSx = { borderBottom: 'none', py: 1.25, px: 2 } as const;
+const bodyCellSx = { borderBottom: 'none', py: 1.25, px: TABLE_READING_EDGE } as const;
 /** How many times a rows-paint may release stale pins before the table accepts them as they render. */
 const MAX_SETTLE_ATTEMPTS = 3;
 const headCellSx = {
   py: 0.75,
-  px: 2,
+  px: TABLE_READING_EDGE,
   borderBottom: '1px solid',
   borderColor: 'divider',
   backgroundColor: 'background.paper',
@@ -535,7 +536,7 @@ export function Table<T>({
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: 1,
-                  px: 2,
+                  px: TABLE_READING_EDGE,
                   py: 1.5,
                   minWidth: 0,
                   borderBottom: '1px solid',
