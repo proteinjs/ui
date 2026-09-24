@@ -74,7 +74,8 @@ export type ColumnConfig<T> = {
 };
 
 type RowClickAction<T> =
-  string | ((row: T, event?: React.MouseEvent) => void | Promise<void> | string | Promise<string>);
+  | string
+  | ((row: T, event?: React.MouseEvent) => void | Promise<void> | string | Promise<string>);
 
 export type TableProps<T> = {
   title?: string;
@@ -223,8 +224,12 @@ export function Table<T>({
     // change, and refetch-function identity is not a data change.
   }, [loaderDataKey, loaderDataQueryKey]);
 
+  // Row selection exists to serve an act on the selected rows: the selection column (row
+  // checkboxes, select-all — both faces) renders only when an act works on a selection. A table
+  // whose only act is a create draws none: selecting could only hide the create and offer nothing.
+  const selectable = !!buttons?.some((button) => button.visibility.showWhenRowsSelected);
   // A different column set (or the checkbox column coming/going) is a different grid: release.
-  const columnSetKey = `${buttons && buttons.length > 0 ? 'checkbox|' : ''}${columns.map(String).join('|')}`;
+  const columnSetKey = `${selectable ? 'checkbox|' : ''}${columns.map(String).join('|')}`;
   useEffect(() => {
     setSettledColumns(undefined);
   }, [columnSetKey]);
@@ -545,7 +550,7 @@ export function Table<T>({
                   ...(rowOnClick ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
                 }}
               >
-                {buttons && buttons.length > 0 && (
+                {selectable && (
                   <Checkbox
                     checked={isSelected}
                     onChange={(event) => {
@@ -572,7 +577,7 @@ export function Table<T>({
   };
 
   const renderTableContainer = () => {
-    const totalColumns = columns.length + (buttons && buttons.length > 0 ? 1 : 0);
+    const totalColumns = columns.length + (selectable ? 1 : 0);
 
     return (
       <TableContainer
@@ -607,7 +612,7 @@ export function Table<T>({
           )}
           <TableHead>
             <TableRow>
-              {buttons && buttons.length > 0 && (
+              {selectable && (
                 <TableCell
                   padding='checkbox'
                   sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}
@@ -699,7 +704,7 @@ export function Table<T>({
                         : undefined
                     }
                   >
-                    {buttons && buttons.length > 0 && (
+                    {selectable && (
                       <TableCell padding='checkbox' sx={{ borderBottom: 'none' }}>
                         <Checkbox
                           checked={isSelected}
