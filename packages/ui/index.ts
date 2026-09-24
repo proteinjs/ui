@@ -1,4 +1,7 @@
 export * from './src/hooks/useFormFactor';
+// The page-wide sheet history stack (a phone sheet is a history entry while open: back closes it).
+// Hosted here beside the form-factor fork so framework surfaces and consumer kits share ONE stack.
+export * from './src/hooks/useSheetHistory';
 
 export * from './src/router/Router';
 export * from './src/router/withRouter';
@@ -42,5 +45,6 @@ export * from './src/components/SearchInput';
 export * from './src/components/ScrollTopButton';
 export * from './src/components/TopScrollFade';
 export * from './src/components/ConfirmationDialog';
+export * from './src/components/StatusToast';
 
 export * from './src/formatters';

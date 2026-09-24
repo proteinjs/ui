@@ -74,8 +74,8 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
       return <ReadonlyValueRow label={label} value={value} description={field.description} monospace={monospace} />;
     }
 
-    // Every multiline field carries the ONE expand affordance; over the inline bound the
-    // field is editable only through it.
+    // Every multiline field carries the ONE expand affordance — a read of the whole value, with
+    // Copy; over the inline bound the field is editable only through it (its Edit act).
     const overInlineBound = multiline && value.length > INLINE_EDIT_MAX_CHARS;
     const expandDialog = multiline && (
       <FieldExpandDialog
@@ -83,7 +83,8 @@ export function textField<F extends Fields>(props: TextFieldProps<string, F>): F
         label={label}
         value={value}
         monospace={monospace}
-        onCancel={() => setExpandOpen(false)}
+        editable={!field.accessibility?.readonly}
+        onClose={() => setExpandOpen(false)}
         onDone={(newValue) => {
           setExpandOpen(false);
           commitValue(newValue);

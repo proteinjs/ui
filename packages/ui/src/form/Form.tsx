@@ -1,21 +1,11 @@
 import React from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Container,
-  Grid,
-  IconButton,
-  Typography,
-  LinearProgress,
-  Snackbar,
-  Stack,
-} from '@mui/material';
+import { Box, Button, Container, Grid, IconButton, Typography, LinearProgress, Stack } from '@mui/material';
 import queryString from 'query-string';
 import { Field, FieldComponent, Fields } from './Field';
 import { FormButton, FormButtons } from './FormButton';
 import { withRouter, WithRouterProps } from '../router/withRouter';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { StatusToast } from '../components/StatusToast';
 import { useFormFactor } from '../hooks/useFormFactor';
 
 /**
@@ -313,33 +303,12 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   /**
-   * Button results present as the house toast — a floating bottom-center Snackbar wrapping a
-   * severity Alert — on both form factors. The previous inline Alert sat INSIDE the form card
-   * (wrapped in a nested default-gutter Container, misaligned with the zero-gutter field grid)
-   * and shifted the whole form down when it appeared.
+   * Button results present as the house toast (`StatusToast`) on both form factors. The previous
+   * inline Alert sat INSIDE the form card (wrapped in a nested default-gutter Container, misaligned
+   * with the zero-gutter field grid) and shifted the whole form down when it appeared.
    */
   private Status() {
-    const status = this.state.status;
-    const dismiss = () => this.setState({ status: {} });
-
-    return (
-      <Snackbar
-        open={!!status?.message}
-        autoHideDuration={status?.isError ? 6000 : 4000}
-        onClose={(event, reason) => {
-          // Clickaway must not dismiss: an error toast should outlive an incidental tap.
-          if (reason === 'clickaway') {
-            return;
-          }
-          dismiss();
-        }}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={status?.isError ? 'error' : 'success'} onClose={dismiss}>
-          {status?.message}
-        </Alert>
-      </Snackbar>
-    );
+    return <StatusToast status={this.state.status} onDismiss={() => this.setState({ status: {} })} />;
   }
 
   private Fields() {
