@@ -2,6 +2,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  QueryClient,
   UseQueryResult,
   UseMutationResult,
   useInfiniteQuery,
@@ -160,10 +161,10 @@ export const useInfiniteScrollTableQuery = <T>(
 };
 
 /**
- * THE mutation → cache-refresh pattern for loader-backed data: on success, invalidate the
- * loader's `dataKey`, which prefix-matches every cached query over the data set — offset
- * pages (`useTableData`) and cursor windows (`useCursorWindows`) alike — and refetches the
- * active ones in place.
+ * THE mutation → cache-refresh pattern for loader-backed data: on success, settle the loader's
+ * data set (`settleLoaderData`) — every cached query over it, offset pages (`useTableData`) and
+ * cursor windows (`useCursorWindows`) alike, re-reads in place from a read issued after the
+ * write answered.
  */
 export const useTableMutation = <TVariables = unknown>(
   loader: KeyedDataLoader | null | undefined,
@@ -180,7 +181,7 @@ export const useTableMutation = <TVariables = unknown>(
     {
       onSuccess: (): void => {
         if (loader?.reactQueryKeys) {
-          queryClient.invalidateQueries({ queryKey: [loader.reactQueryKeys.dataKey] });
+          void settleLoaderData(queryClient, loader.reactQueryKeys.dataKey);
         }
       },
       onError: (error: Error): void => {
@@ -189,3 +190,20 @@ export const useTableMutation = <TVariables = unknown>(
     }
   );
 };
+
+/**
+ * THE SETTLE — a mutation's last step over a loader's data set: invalidate `[dataKey]`, which
+ * prefix-matches every cached query over the data set, and READ FRESH. A read still in flight when
+ * the write answers was issued before the write answered, so it carries the rows as they stood
+ * before the act — the deleted row still there, the edited row as it was. react-query v3 serves a
+ * refetch asked for while a fetch runs by folding it into that running fetch (`cancelRefetch` off,
+ * the v3 default — v4 turned it on for exactly this), so a plain invalidation ADOPTED such a read:
+ * it landed over the act's rows (and over any optimistic row the caller wrote), and no fresh read
+ * followed until the next focus, mount or reload. Such a read comes from a focus return during the
+ * round trip, a second observer of the data set mounting, or a pager's next-page read. With
+ * `cancelRefetch` the running read is dropped and the data set is read after the write answered —
+ * the rows on screen after a mutation are rows served after the mutation.
+ */
+function settleLoaderData(queryClient: QueryClient, dataKey: string): Promise<void> {
+  return queryClient.invalidateQueries({ queryKey: [dataKey] }, { cancelRefetch: true });
+}
