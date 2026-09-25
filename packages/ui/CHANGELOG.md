@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.18.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.17.0...@proteinjs/ui@4.18.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ui:** a table mutation settles on a fresh read — a read in flight from before the write answered is dropped, never adopted ([ce1062c](https://github.com/proteinjs/ui/commit/ce1062c5800c874a737ee2f5bf8331885e2c847e))
+
+
+### Features
+
+* **ui:** settleQueries — one exported settle for a write over cached reads: the read in flight is dropped, the queries are read fresh ([ce9c50f](https://github.com/proteinjs/ui/commit/ce9c50f9a6d602003e532ff46458006681baf0ac))
+
+
+
+
+
 # [4.17.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.16.0...@proteinjs/ui@4.17.0) (2026-09-25)
 
 
