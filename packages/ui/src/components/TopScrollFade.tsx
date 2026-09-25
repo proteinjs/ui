@@ -5,8 +5,8 @@ import { Box } from '@mui/material';
  * The content-cutoff cue at the TOP of a scrolling container: a small gradient band that
  * appears once content is scrolled off above, fading rows out under the container's top edge
  * instead of clipping them crisply. The scroll-container grammar app shells pair with
- * `ScrollTopButton` (founder ruling, admin round 3 — the record surfaces' scrollers adopt the
- * house scroll-container behavior).
+ * `ScrollTopButton` (the rule since 2026-08-29: the record surfaces' scrollers adopt the house
+ * scroll-container behavior).
  *
  * Mount it as the FIRST CHILD of the overflow element — it wires itself to `parentElement`.
  * Sticky and zero-height, so it pins to the scrollport without taking layout space; the band

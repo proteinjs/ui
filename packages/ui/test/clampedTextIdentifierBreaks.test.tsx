@@ -1,8 +1,8 @@
 /**
  * @jest-environment jsdom
  *
- * Identifier-like text in a table cell wraps at its humps, never mid-word (founder finding
- * 2026-09-02, the Migrations table's new Name column: "BackfillUserStatusActive" rendered as
+ * Identifier-like text in a table cell wraps at its humps, never mid-word (the finding of
+ * 2026-09-02, a Migrations table's new Name column: "BackfillUserStatusActive" rendered as
  * "Backfill / UserSt / atusA…" in a narrow column — the clamped cell's `overflow-wrap:
  * anywhere` last resort was the only break opportunity a class name offered). Contract as a
  * rendered OUTCOME: camelCase / snake_case / dotted tokens carry `<wbr>` opportunities before
@@ -51,10 +51,10 @@ describe('ClampedTextCellValue identifier break opportunities', () => {
 
   it('each hump segment is an unbreakable atom, so a column is never narrower than its longest segment', async () => {
     // Without this the table's auto layout, seeing a break opportunity at every character
-    // (the anywhere fallback), sized the Name column one character wide: "Truncat / e / Thou…".
-    const cell = await render('TruncateThoughtCache');
+    // (the anywhere fallback), sized the Name column one character wide: "Truncat / e / Sear…".
+    const cell = await render('TruncateSearchCache');
     const atoms = Array.from(cell.querySelectorAll('span')).filter((span) => span.style.whiteSpace === 'nowrap');
-    expect(atoms.map((atom) => atom.textContent)).toEqual(['Truncate', 'Thought', 'Cache']);
+    expect(atoms.map((atom) => atom.textContent)).toEqual(['Truncate', 'Search', 'Cache']);
     // A pathological hump-less run inside an identifier stays breakable (no atom past the cap).
     const long = await render(`Backfill_${'a'.repeat(40)}`);
     const longAtoms = Array.from(long.querySelectorAll('span')).filter((span) => span.style.whiteSpace === 'nowrap');
@@ -65,8 +65,8 @@ describe('ClampedTextCellValue identifier break opportunities', () => {
     const cell = await render('agent_edit_note_title');
     expect(cell.textContent).toBe('agent_edit_note_title');
     expect(cell.querySelectorAll('wbr')).toHaveLength(3);
-    const dotted = await render('@n3xa/app-server/BackfillOnboardingState');
-    expect(dotted.textContent).toBe('@n3xa/app-server/BackfillOnboardingState');
+    const dotted = await render('@scope/app-server/BackfillOnboardingState');
+    expect(dotted.textContent).toBe('@scope/app-server/BackfillOnboardingState');
     expect(dotted.querySelectorAll('wbr').length).toBeGreaterThanOrEqual(4);
   });
 
@@ -77,8 +77,8 @@ describe('ClampedTextCellValue identifier break opportunities', () => {
   });
 
   it('an identifier inside prose still gains its break (copy stays identical)', async () => {
-    const cell = await render('Truncate the thought_cache_table now');
-    expect(cell.textContent).toBe('Truncate the thought_cache_table now');
+    const cell = await render('Truncate the search_cache_table now');
+    expect(cell.textContent).toBe('Truncate the search_cache_table now');
     expect(cell.querySelectorAll('wbr')).toHaveLength(2);
   });
 });

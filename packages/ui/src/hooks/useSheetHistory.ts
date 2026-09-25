@@ -59,13 +59,13 @@ export interface SheetHistoryOptions {
  * a queued history.back() resolves against the position CURRENT AT THE CALL, not at the time
  * the traversal task executes. A pushState issued between the back() call and its landing
  * does NOT shift where the back lands — the landing pops PAST the fresh entry, stranding it.
- * This is why a close may never share a task with a sibling open's push (the round-18 bug:
- * + sheet close queued back(); the model sheet pushed synchronously; the landing left the
- * model sheet's entry non-current and the sweep closed it instantly).
+ * This is why a close may never share a task with a sibling open's push (the round-18 bug: a
+ * menu sheet's close queued back(); a picker sheet pushed synchronously; the landing left the
+ * picker sheet's entry non-current and the sweep closed it instantly).
  *
  * RACES (the known risk class) and how each is prevented — all coordination lives in ONE
  * page-wide coordinator (single popstate listener, shared entry-ownership registry):
- * - Close→open HANDOFF (one sheet closes, another opens, same task — the + sheet's child
+ * - Close→open HANDOFF (one sheet closes, another opens, same task — a menu sheet's child
  *   pickers): consumption is deferred to a microtask; an open arriving before the flush
  *   TRANSFERS the closer's live entry to the opener via replaceState (marker swap, same
  *   idx/usr/key) — zero traversals, zero popstates, no race window at all.
@@ -86,9 +86,9 @@ export interface SheetHistoryOptions {
  *   navigation's pushState lands before the close flush runs, the marker is no longer the
  *   current entry, and we DISOWN it instead of back()ing over the user's navigation; the
  *   buried marker is passed through whenever it is landed on — back from the navigation
- *   lands on the page beneath, forward from that page lands on the navigation again (founder
- *   R10 2026-09-18, the phone browser's settings sheet → Broadcasts: the forward swipe used to
- *   bounce BACK off the buried marker onto home). A navigation
+ *   lands on the page beneath, forward from that page lands on the navigation again (the rule
+ *   since 2026-09-18, a phone browser's menu sheet → the page its row opens: the forward swipe
+ *   used to bounce BACK off the buried marker onto the page beneath). A navigation
  *   racing into the sub-frame window BETWEEN the flushed back() and its landing is stranded
  *   forward by call-time traversal semantics (see above) — unrecoverable at this layer,
  *   microtask-narrow, known, accepted. The hijack branch in handlePop covers engines that
@@ -269,7 +269,7 @@ export class SheetHistoryCoordinator {
   /** The one popstate handler. Bound so `window.addEventListener('popstate', handlePop)`
    *  and the test fakes can take it directly.
    *
-   *  ORDER OF BUSINESS (founder hang, 2026-09-13 — the row-menu sheet's close handler threw
+   *  ORDER OF BUSINESS (the hang of 2026-09-13 — a row-menu sheet's close handler threw
    *  inside this sweep and the sweep died mid-loop: the sheets beneath kept entries the stack
    *  no longer held, the ghost rule never ran, deferred opens never pushed, parked closes never
    *  resumed): the coordinator's OWN bookkeeping — disowning every popped-past entry, the ghost
@@ -339,19 +339,18 @@ export class SheetHistoryCoordinator {
   /**
    * THE GHOST RULE'S ROAD: a landing on a marker entry no live instance owns continues the
    * traversal in ITS OWN DIRECTION — back past a dead marker onto the page beneath; forward past
-   * a marker buried under a navigation onto that navigation. Founder R10 2026-09-18, the phone
-   * browser: "from the home page open broadcasts (or other things from the settings menu on
-   * mobile), left edge swipe back to home. right edge swipe forward doesn't return to the
-   * broadcasts page" — the settings sheet's row closes the sheet and pushes the page in one
-   * handler, so the sheet's marker stays buried beneath the page ([home, marker, Broadcasts]);
-   * the rule read every ghost landing as a back road, and the forward swipe onto the marker was
-   * bounced BACK onto home. Direction = the UA's position against the position last observed
-   * here (every landing, every own push, every close flush): a router push in between can only
-   * raise the position above the last observation, never carry it across a surviving ghost (a
-   * push beneath a ghost truncates the ghost), so the comparison is exact. Forward only when an
-   * entry exists beyond the ghost — the top of the stack is never a ghost park. Without the UA
-   * position (no Navigation API) the road is back in every direction: the pre-2026-09 rule, the
-   * safe side, the named case.
+   * a marker buried under a navigation onto that navigation. The rule since 2026-09-18, on a
+   * phone browser: open a page from a menu sheet, swipe back from the left edge, then swipe
+   * forward from the right edge — forward returns to that page. The sheet's row closes the sheet
+   * and pushes the page in one handler, so the sheet's marker stays buried beneath the page
+   * ([home, marker, page]); the rule read every ghost landing as a back road, and the forward
+   * swipe onto the marker was bounced BACK onto home. Direction = the UA's position against the
+   * position last observed here (every landing, every own push, every close flush): a router push
+   * in between can only raise the position above the last observation, never carry it across a
+   * surviving ghost (a push beneath a ghost truncates the ghost), so the comparison is exact.
+   * Forward only when an entry exists beyond the ghost — the top of the stack is never a ghost
+   * park. Without the UA position (no Navigation API) the road is back in every direction: the
+   * pre-2026-09 rule, the safe side, the named case.
    */
   private traversePast(): void {
     const position = this.env.traversal();

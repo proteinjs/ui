@@ -11,7 +11,7 @@ export interface InfiniteScrollProps {
    * (The previous react-infinite-scroll-component integration rendered its loader whenever
    * `hasMore` was true — with a single React element as children the library's has-children
    * check is always false — so an idle table promised "Loading..." forever while fetching
-   * nothing: the n3xa5 Migrations stall shape, one page of rows + a perpetual loader.)
+   * nothing: the stalled-pager shape, one page of rows + a perpetual loader.)
    */
   isFetching: boolean;
   loader: ReactNode;

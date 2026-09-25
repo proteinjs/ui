@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * The record-table pager (the n3xa5 Migrations stall, plans/OPS_TOOLING.md rev-28 addendum 2):
+ * The record-table pager (the stalled Migrations pager of 2026-08-11):
  * a >10-row table rendered exactly one page with a PERPETUAL "Loading..." — the old
  * react-infinite-scroll-component integration rendered its loader whenever `hasMore` was true
  * (single-element children defeat its has-children check) while its scroll listener was bound
@@ -60,7 +60,7 @@ const fireSentinel = async () => {
 };
 
 type Row = { description: string; status: string };
-const ROW_COUNT = 23; // the brent-dev-2 migration-table shape: >2 pages at 10/page
+const ROW_COUNT = 23; // a migration table's shape: >2 pages at 10/page
 const allRows: Row[] = Array.from({ length: ROW_COUNT }, (_, i) => ({
   description: `Migration ${i + 1}`,
   status: 'success',
@@ -123,7 +123,7 @@ describe('Table infinite scroll — the pager pages and the loader tells the tru
   const loaderShown = () => /Loading\.\.\./.test(container.textContent ?? '');
   const sentinel = () => container.querySelector('[data-infinite-scroll-sentinel]');
 
-  it('THE n3xa5 REPRO SHAPE: one page rendered, more rows exist, nothing fetching — no perpetual "Loading..."', async () => {
+  it('THE REPRO SHAPE: one page rendered, more rows exist, nothing fetching — no perpetual "Loading..."', async () => {
     const loader = new ScriptedLoader();
     await mount(loader);
 

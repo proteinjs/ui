@@ -178,8 +178,8 @@ export function Table<T>({
    */
   const pointerDownAt = useRef<PointerPosition | undefined>(undefined);
   /**
-   * SETTLED COLUMN WIDTHS (founder, R7 round 3: "when you scroll down in record tables … it
-   * shifts around the data in the existing rows"): an auto-layout table re-derives every column
+   * SETTLED COLUMN WIDTHS (the rule since 2026-09-05: scrolling down a record table never shifts
+   * the data in the rows already read): an auto-layout table re-derives every column
    * from ALL its rows, so each page that lands re-distributes the widths and re-wraps rows that
    * already fit. The desktop face measures its columns ONCE — from the first page of rows, in a
    * layout effect before that paint — and pins them as a fixed layout (`<colgroup>` +

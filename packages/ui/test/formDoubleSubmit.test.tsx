@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Double-submit guard (admin record surfaces, task #53 part 2, item 1): Form showed progress
+ * Double-submit guard (admin record surfaces): Form showed progress
  * during a button's in-flight promise but never disabled the buttons, so two rapid clicks on
  * Save/Create/Delete ran the service call twice. Contract: while a button action is in flight,
  * buttons are disabled and a second click is a no-op — a click acts exactly once (outcome:

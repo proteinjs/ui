@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * The shared back-to-top affordance (Task #60): one visual/behavioral system for long lists,
+ * The shared back-to-top affordance: one visual/behavioral system for long lists,
  * consumed by Table behind an opt-in prop. Contract under test, as OUTCOMES:
  *  1. THRESHOLD: the button is inert until the scroller passes `showAfterPx`, active after,
  *     and inert again when the user returns to the top.
@@ -9,8 +9,8 @@
  *     scroller's position, not "a handler was called").
  *  3. TABLE WIRING: `scrollTopButton` is opt-in — absent by default, and when enabled it is
  *     wired to Table's own scroll container.
- *  4. CONTROLLED MODE: surfaces with their own trigger/action (chat's jump-to-bottom, the
- *     thought editor's tour-yielding back-to-top) drive `visible`/`onClick` — the controlled
+ *  4. CONTROLLED MODE: surfaces with their own trigger/action (a message log's jump-to-bottom, a
+ *     document editor's tour-yielding back-to-top) drive `visible`/`onClick` — the controlled
  *     value wins over any internal threshold watching, and the override action runs on click.
  */
 import React from 'react';
@@ -123,7 +123,7 @@ describe('ScrollTopButton — threshold and click outcomes', () => {
   });
 
   it('controlled mode: `visible` wins over the threshold, `onClick` replaces the default action', async () => {
-    // The chat shape: shown while away from the bottom (even at scrollTop 0), and activation
+    // The message-log shape: shown while away from the bottom (even at scrollTop 0), and activation
     // runs the surface's own scroll behavior instead of scroll-to-top.
     let scrolledByOverride = false;
     await act(async () => {

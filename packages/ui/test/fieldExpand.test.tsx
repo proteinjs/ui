@@ -4,9 +4,9 @@
  * Long-content fields: every multiline field carries ONE expand affordance ("Open"); values over
  * the inline bound (INLINE_EDIT_MAX_CHARS) render as a clamped preview instead of an inline editor.
  *
- * Open is a READ (founder, 2026-09-24: "when you open things like output in the migration form,
- * that full-screen view keeps the kb open and you can't close it … the kb is covering the buttons
- * at the bottom"; "there should probably be copy buttons on views like that"):
+ * Open is a READ (the rule since 2026-09-24: opening a long value — a migration's output in its
+ * form — never raises the keyboard over the viewer's controls or leaves the viewer unclosable,
+ * and a viewer like that carries a Copy control):
  *  - opening raises no keyboard — the viewer's content is a read-only pane of selectable text, and
  *    nothing inside it (or left behind it) holds an input's focus;
  *  - its controls sit in a top bar the keyboard can never cover: Close, and Copy (the whole value

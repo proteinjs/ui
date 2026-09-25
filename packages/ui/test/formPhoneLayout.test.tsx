@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Form's phone layout (task #53: admin surfaces work on mobile). Below the phone line the form
+ * Form's phone layout (admin surfaces work on mobile). Below the phone line the form
  * presents single-column: every field takes its own full-width row (a 2-col fieldLayout
  * collapses in order), the container narrows to the xs cap, and the action row becomes ONE
  * wrapping stack (the desktop xs=6 halves overflowed a 375px screen with three buttons).

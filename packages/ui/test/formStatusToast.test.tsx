@@ -1,10 +1,10 @@
 /**
  * @jest-environment jsdom
  *
- * The form's status message is a TOAST (task #53 rider: "Started migration" rendered as an
+ * The form's status message is a TOAST (since 2026-08-18: "Started migration" rendered as an
  * inline Alert inside the form card, inset by a nested Container's default gutters and
  * crowding the first field). House toast idiom — a floating Snackbar anchored bottom-center
- * wrapping a severity Alert (the OpsCockpit/ThoughtPage pattern) — on BOTH form factors:
+ * wrapping a severity Alert — on BOTH form factors:
  *  1. A button's returned message renders inside a bottom-center Snackbar, NOT inline in the
  *     form body (no layout shift when status appears).
  *  2. A thrown button error renders the same toast with error severity.

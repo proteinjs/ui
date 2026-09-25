@@ -49,15 +49,15 @@ export const ROUTE_TRANSITION_DATA_ATTR = 'routeTransition';
 
 let activeViewTransition: ViewTransitionLike | null = null;
 
-/** The in-flight router view transition, if any — T1 sequencing reads this (e.g. defer a
+/** The in-flight router view transition, if any — sequencing reads this (e.g. defer a
  *  composer autofocus until `finished` so the keyboard rises after the morph lands). */
 export function getActiveViewTransition(): ViewTransitionLike | null {
   return activeViewTransition;
 }
 
 /**
- * Decorates a history's `listen` so route commits can ride the View Transitions API
- * (MOBILE_POLISH T2). This is THE choke point: every navigation in an app — scattered
+ * Decorates a history's `listen` so route commits can ride the View Transitions API.
+ * This is THE choke point: every navigation in an app — scattered
  * navigate() pushes/replaces AND browser back/forward popstates — dispatches through the
  * router's single history listener, so wrapping the dispatch here catches all of them with
  * zero call-site migration.

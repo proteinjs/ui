@@ -1,11 +1,11 @@
 /**
  * @jest-environment jsdom
  *
- * SETTLED COLUMN WIDTHS (founder, R7 round 3: "when you scroll down in record tables and the
- * tables continue to have different sizes of data, it shifts around the data in the existing
- * rows (like a name column that originally had its whole name on one line … may end up taking
- * up multiple lines as you keep scrolling)"): an auto-layout table re-derives every column from
- * ALL its rows, so each page that lands re-distributes the widths under the rows already read.
+ * SETTLED COLUMN WIDTHS (the rule since 2026-09-05: scrolling down a record table whose rows
+ * differ in size never shifts the data in the rows already read — a name column that held its
+ * whole name on one line never re-wraps it onto several as more pages land): an auto-layout
+ * table re-derives every column from ALL its rows, so each page that lands re-distributes the
+ * widths under the rows already read.
  *
  * Contract, at the cause layer (the base Table's desktop face):
  *  1. The first page of rows SETTLES the columns: the cells' measured widths become a fixed

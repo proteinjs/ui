@@ -13,7 +13,7 @@ export type AppOptions = {
   /** Rendered for unmatched routes. Routed through `pageContainer` like any other page. */
   pageNotFound?: React.ComponentType<PageComponentProps>;
   /**
-   * Optional route-transition policy (MOBILE_POLISH T2): when provided, route commits the
+   * Optional route-transition policy: when provided, route commits the
    * policy approves run inside document.startViewTransition (see ViewTransitionHistory).
    * The router is the ONE place every navigation dispatches, so this is the app's single
    * transition seam. Absent → byte-identical to the plain BrowserRouter this replaced.
@@ -31,7 +31,7 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   // NOTE: no CssBaseline here — this Router renders OUTSIDE any app ThemeProvider, so a baseline
   // at this level styles <body> with MUI's DEFAULT theme (light text color, white background,
   // Roboto). Every `color: inherit` in the app then bottoms out at light-mode black even in dark
-  // mode. The app's ThemeProvider owns the baseline (see @n3xah/util-ui ThemeProvider).
+  // mode. The app's own ThemeProvider owns the baseline.
   return (
     <div>
       <HistoryRouter routeTransitions={props.options.routeTransitions}>

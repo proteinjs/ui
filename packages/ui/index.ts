@@ -30,7 +30,8 @@ export * from './src/container/DefaultUnauthorizedPage';
 export * from './src/table/Table';
 export * from './src/table/cellValues';
 // The table's load-more pager, exported for list surfaces that compose the house infinite
-// scroll around their own row grammar (the ops Browse widget) — one pager owner, any list.
+// scroll around their own row grammar (e.g. a browse view over records) — one pager owner,
+// any list.
 export * from './src/table/InfiniteScroll';
 export * from './src/table/TableButton';
 export * from './src/table/TableLoader';

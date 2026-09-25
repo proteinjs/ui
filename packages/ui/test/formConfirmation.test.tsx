@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Confirmation gating at the Form layer (task #53 part 2, item 2): a FormButton that declares
+ * Confirmation gating at the Form layer: a FormButton that declares
  * `confirm` must not act on click — the click opens a ConfirmationDialog, and only the dialog's
  * confirm runs the button's onClick/redirect. Cancel is a full no-op (no service call AND no
  * redirect — the reason this gate lives in Form: onClick-level confirmation could not stop the

@@ -164,7 +164,7 @@ describe('useCursorWindows + useTableMutation contract', () => {
 
   it('one dataKey invalidation (useTableMutation) refetches every loaded window of every query over the data set', async () => {
     let corpus = [row(70), row(60), row(50), row(40), row(30), row(20), row(10)];
-    // Two queries over ONE data set — home's list windows and pins tiles.
+    // Two queries over ONE data set — a list's windows and a pinned-items strip.
     const listLoader = new FakeCorpusLoader({ dataKey: 'content', dataQueryKey: 'list' }, () => corpus);
     const pinsLoader = new FakeCorpusLoader({ dataKey: 'content', dataQueryKey: 'pins' }, () =>
       corpus.filter((r) => r.at >= 50)

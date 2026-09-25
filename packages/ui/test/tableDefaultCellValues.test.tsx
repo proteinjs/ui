@@ -59,7 +59,7 @@ type Row = {
 };
 
 const updated = moment('2026-05-04 14:30:00', 'YYYY-MM-DD HH:mm:ss');
-const rows: Row[] = [{ name: 'brent+test', verified: true, retired: false, token: null, updated, payload: { a: 1 } }];
+const rows: Row[] = [{ name: 'user+test', verified: true, retired: false, token: null, updated, payload: { a: 1 } }];
 
 class StaticLoader implements TableLoader<Row> {
   reactQueryKeys = { dataKey: `default-cells-${Date.now()}-${Math.random()}`, dataQueryKey: 'all' };

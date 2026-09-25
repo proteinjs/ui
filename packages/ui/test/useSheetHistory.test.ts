@@ -261,7 +261,7 @@ describe('SheetHistoryCoordinator', () => {
     expect(history.stack).toHaveLength(2);
   });
 
-  it('same-task close→open handoff TRANSFERS the entry via replaceState — zero traversals (round 18: + sheet child pickers)', () => {
+  it('same-task close→open handoff TRANSFERS the entry via replaceState — zero traversals (round 18: a menu sheet and its child pickers)', () => {
     const { history, sheet } = harness();
     const plus = sheet();
     const model = sheet();
@@ -399,12 +399,12 @@ describe('SheetHistoryCoordinator', () => {
     expect(s.closes()).toBe(0);
   });
 
-  it('FORWARD past a buried marker lands on the navigation beyond it (founder R10 2026-09-18: home → settings sheet → Broadcasts → back → forward must return to Broadcasts)', () => {
+  it('FORWARD past a buried marker lands on the navigation beyond it (the rule since 2026-09-18: home → a menu sheet → the page its row opens → back → forward returns to that page)', () => {
     const { history, sheet } = harness();
     const s = sheet();
     s.open(); // [home, sheet]
-    // The settings sheet's Broadcasts row: close + navigate in one handler — the push lands first.
-    history.pushState(routerEntry(2)); // [home, sheet(buried), broadcasts]
+    // The menu sheet's row: close + navigate in one handler — the push lands first.
+    history.pushState(routerEntry(2)); // [home, sheet(buried), page]
     s.close();
     history.flush();
     expect(history.position).toBe(2);
@@ -413,7 +413,7 @@ describe('SheetHistoryCoordinator', () => {
     history.flush();
     expect(history.position).toBe(0);
     // The OS forward gesture lands on the same buried marker — the traversal continues FORWARD onto
-    // Broadcasts, never bounced back onto home (pre-fix: position 0, the founder's dead forward swipe).
+    // the page, never bounced back onto home (pre-fix: position 0, the dead forward swipe).
     history.userGo(1);
     history.flush();
     expect(history.position).toBe(2);
@@ -480,7 +480,7 @@ describe('SheetHistoryCoordinator', () => {
     expect(s.closes()).toBe(1);
   });
   it('a sheet whose onClose THROWS on the user back never skips the sweep of the sheets beneath it (bookkeeping completes, every closer is told, the error still surfaces)', () => {
-    // The founder's hang (2026-09-13): the row-menu sheet's close handler threw inside the
+    // The hang of 2026-09-13: a row-menu sheet's close handler threw inside the
     // coordinator's popstate sweep, and the sweep ABORTED at the throw — the remaining sheets kept
     // entries the stack no longer held, and the ghost rule / deferred opens / parked closes after
     // the loop never ran. The consumer's bug must surface (rethrown), but the coordinator's own

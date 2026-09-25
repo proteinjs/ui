@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Field controls (task #53 part 2, items 3 and 7 seams):
+ * Field controls:
  *  - readonly text fields render as a text ROW (round 2): no input chrome at all — the value
  *    is selectable text with a copy control, so readonly values (ids, timestamps) stay
  *    copyable without wearing an input border.

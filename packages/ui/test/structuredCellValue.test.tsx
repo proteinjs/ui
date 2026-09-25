@@ -1,9 +1,9 @@
 /**
  * @jest-environment jsdom
  *
- * Structured values as CONTENT (founder, R7 round 3: an object in a column "should display that
- * as content, but leverage the content size scalability features of the ui to not be a problem
- * if it's large"). Contract:
+ * Structured values as CONTENT (the rule since 2026-09-05: an object in a column displays as
+ * content, and the ui's content-size scalability keeps a large one from being a problem).
+ * Contract:
  *  1. The entry grammar: one line per top-level key (or array item); nested values read as a
  *     one-line summary (scalars, `—`, the first items of a scalar array, an array's count, an
  *     object's key names); a JSON string is read as its value.

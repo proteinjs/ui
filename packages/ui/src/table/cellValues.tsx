@@ -283,9 +283,9 @@ function structuredJson(value: unknown): string {
 }
 
 /**
- * Structured values (objects/arrays) as CONTENT, sized for a row (founder, R7 round 3: an object
- * in a column "should display that as content, but leverage the content size scalability
- * features of the ui to not be a problem if it's large"): the entry grammar above, one line per
+ * Structured values (objects/arrays) as CONTENT, sized for a row (the rule since 2026-09-05: an
+ * object in a column displays as content, and the ui's content-size scalability keeps a large
+ * one from being a problem): the entry grammar above, one line per
  * top-level key/item — quiet key, then the value's one-line text — collapsed to
  * {@link STRUCTURED_CELL_COLLAPSED_LINES} lines at rest with the house in-place disclosure
  * ("Show more (n)" / "Show less", the notification row's grammar) for the rest; the whole

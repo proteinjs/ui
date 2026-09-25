@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Confirmation gating at the TableToolbar layer (task #53 part 2, item 2): a TableButton that
+ * Confirmation gating at the TableToolbar layer: a TableButton that
  * declares `confirm` must not act on click — the toolbar opens a ConfirmationDialog and only its
  * confirm runs the button's onClick, on the rows captured at click time. This is the seam behind
  * the record table's bulk-delete, which previously deleted the selected rows immediately.

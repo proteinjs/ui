@@ -38,14 +38,14 @@ export interface ScrollTopButtonProps extends ScrollTopButtonStyleProps {
   /**
    * Controlled visibility: when provided, the internal threshold watcher is skipped and this
    * value alone drives show/hide. For surfaces whose show condition isn't a top threshold —
-   * chat's jump-to-bottom shows when the reader is away from the bottom; the thought editor
-   * yields to its edits-tour card.
+   * a message log's jump-to-bottom shows when the reader is away from the bottom; a document
+   * editor yields to a tour card.
    */
   visible?: boolean;
   /**
    * Override the activate action (default: smooth-scroll `scrollContainer` to top). For
-   * surfaces with their own scroll behavior — chat's eased scroll-to-bottom that also re-pins
-   * stream following.
+   * surfaces with their own scroll behavior — a message log's eased scroll-to-bottom that also
+   * re-pins stream following.
    */
   onClick?: () => void;
 }
@@ -60,9 +60,9 @@ export interface ScrollTopButtonProps extends ScrollTopButtonStyleProps {
  * per convention: 44px touch target around the 36px visual circle, safe-area-inset aware,
  * pressed state.
  *
- * Surfaces whose trigger or action isn't a top threshold (chat's jump-to-bottom, the thought
- * editor's tour-yielding back-to-top) control `visible`/`onClick` and keep the shared geometry,
- * motion, and positioning — one visual system, no per-surface variants.
+ * Surfaces whose trigger or action isn't a top threshold (a message log's jump-to-bottom, a
+ * document editor's tour-yielding back-to-top) control `visible`/`onClick` and keep the shared
+ * geometry, motion, and positioning — one visual system, no per-surface variants.
  */
 export function ScrollTopButton({
   scrollContainer,

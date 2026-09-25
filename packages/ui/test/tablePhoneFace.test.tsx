@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * Table's phone card face (task #53: admin surfaces work on mobile). Below the phone line the
+ * Table's phone card face (admin surfaces work on mobile). Below the phone line the
  * Table presents rows as a stacked card list — the house list-row idiom — instead of a
  * horizontally-overflowing MUI table. Same machinery both faces: one loader pipeline, one
  * toolbar, one selection model, one row-click intent guard. Contracts as rendered OUTCOMES:
@@ -10,7 +10,7 @@
  *  2. Tap on a card runs rowOnClick with the row (the record-form door).
  *  3. Selection survives the face swap: with buttons configured, each card carries a checkbox;
  *     checking one flips the toolbar into its selected state.
- *  4. The honest error state (#117) renders on the phone face too.
+ *  4. The honest error state renders on the phone face too.
  *  5. Desktop (fine pointer / wide window): the MUI table face renders unchanged — the phone
  *     face is unreachable (desktop-invariance is structural, not incidental).
  */
@@ -146,7 +146,7 @@ describe('Table phone card face', () => {
     expect(container.textContent).toContain('1 rows selected');
   });
 
-  it('renders the honest load-error state on the phone face (#117 pin)', async () => {
+  it('renders the honest load-error state on the phone face', async () => {
     const loader = new StaticLoader();
     loader.failLoads = true;
     await render({}, loader);

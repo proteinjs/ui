@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * The top-edge scroll fade (founder ruling, admin round 3 — record scrollers adopt the house
+ * The top-edge scroll fade (the rule since 2026-08-29: record scrollers adopt the house
  * scroll-container behavior). Contract under test, as OUTCOMES:
  *  1. SELF-WIRING: mounted as the first child of an overflow element, the band drives its own
  *     visibility from THAT element's scroll position — hidden at rest, shown once content is
