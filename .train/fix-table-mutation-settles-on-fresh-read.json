@@ -3,6 +3,7 @@
   "packages": ["ui"],
   "suites": [
     "packages/ui/test/tableMutationSettlesOnFreshRead.test.tsx",
+    "packages/ui/test/settleQueries.test.ts",
     "packages/ui/test/cursorWindows.test.tsx",
     "packages/ui/test/list.test.tsx",
     "packages/ui/test/tableInfiniteScroll.test.tsx",
