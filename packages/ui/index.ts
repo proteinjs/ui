@@ -42,6 +42,9 @@ export * from './src/table/rowClickIntent';
 
 export * from './src/list/List';
 
+// The settle: a write's last step over cached reads drops the read in flight and reads fresh.
+export * from './src/query/settleQueries';
+
 export * from './src/components/SearchInput';
 export * from './src/components/ScrollTopButton';
 export * from './src/components/TopScrollFade';
