@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.17.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.16.0...@proteinjs/ui@4.17.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ui:** row selection renders only when an act works on a selection — a table whose only act is a create draws no checkboxes on either face ([2dc0de5](https://github.com/proteinjs/ui/commit/2dc0de508e9b86dcbdf1ec00c3d077146e49aca1))
+
+
+### Features
+
+* **ui:** the long-value viewer opens as a read — the value in a pane of selectable text, no input and so no keyboard; Close, Copy (the house toast confirms) and Edit in a top bar the keyboard never covers; on the phone a full-height sheet that back closes ([945ec81](https://github.com/proteinjs/ui/commit/945ec8124afeb8ae45fc8db8f49abcb747271e9a))
+* **ui:** the sheet history stack lives here — useSheetHistory, one page-wide coordinator (a phone sheet is a history entry while open: back closes it), beside the form-factor fork so framework surfaces and consumer kits share one stack ([ca1ef92](https://github.com/proteinjs/ui/commit/ca1ef92e517dcfb77e1daa6e083a0fd169fee604))
+
+
+
+
+
 # [4.16.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.15.2...@proteinjs/ui@4.16.0) (2026-09-18)
 
 
