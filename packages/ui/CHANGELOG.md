@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.18.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.18.0...@proteinjs/ui@4.18.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **ui:** the not-signed-in redirect replaces the page in history instead of pushing the login page over it ([2ae6681](https://github.com/proteinjs/ui/commit/2ae668148fb387e55742a72c2ef84d97099a635b))
+
+
+
+
+
 # [4.18.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.17.0...@proteinjs/ui@4.18.0) (2026-09-25)
 
 
