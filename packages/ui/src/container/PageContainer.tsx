@@ -122,7 +122,12 @@ export function PageContainer(props: PageContainerProps) {
       console.log(`User not logged in, redirecting to login`);
       if (typeof auth?.login === 'string') {
         const p = qualifiedPath(auth.login);
-        navigate(p);
+        // REPLACE, not push: the login page takes the place of the page the visitor could not see
+        // (it rendered nothing) instead of sitting one history entry after it. Pushed, the login
+        // page stays one back-forward entry behind the app once they sign in, where a back gesture
+        // restores it — a signed-in person landing on the login form. Replaced, back from the login
+        // page returns to where they were before, and a signed-in person's history never carries it.
+        navigate(p, { replace: true });
       }
     }
   }, [page]);
