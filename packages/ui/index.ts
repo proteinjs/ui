@@ -50,5 +50,9 @@ export * from './src/components/ScrollTopButton';
 export * from './src/components/TopScrollFade';
 export * from './src/components/ConfirmationDialog';
 export * from './src/components/StatusToast';
+// The two seams a consumer application plugs its own chrome into: the modal shell every framework
+// modal surface presents in, and the status-notice door every framework notice is said through.
+export * from './src/components/ModalShell';
+export * from './src/components/StatusNotice';
 
 export * from './src/formatters';

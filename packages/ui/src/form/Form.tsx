@@ -5,7 +5,7 @@ import { Field, FieldComponent, Fields } from './Field';
 import { FormButton, FormButtons } from './FormButton';
 import { withRouter, WithRouterProps } from '../router/withRouter';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
-import { StatusToast } from '../components/StatusToast';
+import { StatusNoticeDoor, useStatusNotice } from '../components/StatusNotice';
 import { useFormFactor } from '../hooks/useFormFactor';
 
 /**
@@ -29,10 +29,14 @@ export type FormProps<F extends Fields, B extends FormButtons<F>> = {
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | false;
   /** Injected by the exported wrapper (MOBILE_SUPPORT S1) — the phone-layout fork. */
   isPhone?: boolean;
+  /**
+   * Injected by the exported wrapper: the status-notice door a button's result is said through —
+   * the application's toast when it supplied a presenter, else the framework's own.
+   */
+  notice: StatusNoticeDoor;
 } & Partial<WithRouterProps>;
 
 export type FormState<F extends Fields> = {
-  status?: { message?: string; isError?: boolean };
   fields: F;
   progress?: { visible?: boolean; message?: string };
   onLoadExecuted?: boolean;
@@ -86,7 +90,6 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
     }
 
     this.setState({
-      status: {},
       fields: newFields,
       progress: { visible: false },
       onLoadExecuted: true,
@@ -138,10 +141,10 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
         try {
           const successMessage = await button.onClick(this.state.fields, this.props.buttons);
           if (successMessage) {
-            this.setState({ status: { message: successMessage, isError: false } });
+            this.props.notice.present({ message: successMessage, isError: false });
           }
         } catch (error: any) {
-          this.setState({ status: { message: error.message, isError: true } });
+          this.props.notice.present({ message: error.message, isError: true });
           console.error(`Error when clicking button: ${button.name}`, error);
         }
         this.setState({ progress: { visible: false } });
@@ -303,12 +306,13 @@ export class FormComponent<F extends Fields, B extends FormButtons<F>> extends R
   }
 
   /**
-   * Button results present as the house toast (`StatusToast`) on both form factors. The previous
-   * inline Alert sat INSIDE the form card (wrapped in a nested default-gutter Container, misaligned
-   * with the zero-gutter field grid) and shifted the whole form down when it appeared.
+   * Button results present as a toast on both form factors — the application's own through the
+   * status-notice door, else the framework's (`StatusToast`, rendered here). The previous inline
+   * Alert sat INSIDE the form card (wrapped in a nested default-gutter Container, misaligned with
+   * the zero-gutter field grid) and shifted the whole form down when it appeared.
    */
   private Status() {
-    return <StatusToast status={this.state.status} onDismiss={() => this.setState({ status: {} })} />;
+    return this.props.notice.host;
   }
 
   private Fields() {
@@ -645,12 +649,15 @@ function isSectionedLayout<F extends Fields>(
   return typeof first === 'object' && first !== null && !Array.isArray(first) && 'fields' in first;
 }
 
-type FormType = <F extends Fields, B extends FormButtons<F>>(props: Omit<FormProps<F, B>, 'classes'>) => JSX.Element;
+type FormType = <F extends Fields, B extends FormButtons<F>>(
+  props: Omit<FormProps<F, B>, 'classes' | 'notice'>
+) => JSX.Element;
 
-/** Bridges the S1 form-factor hook into the class component (same shape as withRouter). */
+/** Bridges the S1 form-factor hook and the status-notice door into the class component (same shape as withRouter). */
 const FormWithFormFactor = (props: any) => {
   const { isPhone } = useFormFactor();
-  return <FormComponent isPhone={isPhone} {...props} />;
+  const notice = useStatusNotice();
+  return <FormComponent isPhone={isPhone} notice={notice} {...props} />;
 };
 
 export const Form = withRouter(FormWithFormFactor as unknown as typeof React.Component) as FormType;

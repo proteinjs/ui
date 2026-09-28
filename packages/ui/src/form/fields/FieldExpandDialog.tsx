@@ -1,29 +1,18 @@
 import React from 'react';
-import {
-  Box,
-  Button,
-  Dialog,
-  IconButton,
-  Slide,
-  Stack,
-  TextField as MuiTextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { TransitionProps } from '@mui/material/transitions';
-import { Close, ContentCopy, Edit } from '@mui/icons-material';
+import { Box, Button, TextField as MuiTextField, Typography } from '@mui/material';
+import { ContentCopy, Edit } from '@mui/icons-material';
 import { useFormFactor } from '../../hooks/useFormFactor';
-import { useSheetHistory } from '../../hooks/useSheetHistory';
-import { StatusToast, StatusToastMessage } from '../../components/StatusToast';
+import { ModalShellControl, useModalShell } from '../../components/ModalShell';
+import { useStatusNotice } from '../../components/StatusNotice';
 
 const MONOSPACE = 'ui-monospace, Menlo, monospace';
 
 /**
  * The ONE surface a long field value opens into (every multiline field's "Open" lands here), and
  * opening it is a READ: the value in a pane of selectable text — no input, so no keyboard rides in
- * with it (the focus trap takes focus off whatever held it behind) — under a top bar the
+ * with it (the shell's focus trap takes focus off whatever held it behind) — under a top bar the
  * keyboard can never cover: the field's label and length, Copy (the whole value to the clipboard,
- * confirmed by the house toast), Edit when the field is editable, and Close.
+ * confirmed by a status notice), Edit when the field is editable, and the shell's Close.
  *
  * Editing is a choice: Edit turns the pane into the editor, and only then does the keyboard come
  * up (typing is the act now); the bar trades Copy and Edit for Done, which hands the draft back to
@@ -31,9 +20,10 @@ const MONOSPACE = 'ui-monospace, Menlo, monospace';
  * ({@link INLINE_EDIT_MAX_CHARS}) are editable only here — the inline face stays a cheap clamped
  * preview no matter how large the value gets.
  *
- * Escape closes it; on the phone the viewer is the screen — a full-height sheet — and a history
- * entry while open (`useSheetHistory`), so the back gesture and the app's own back close it
- * instead of leaving the page beneath.
+ * The viewer presents in the modal shell (`useModalShell`): the application's own — its dialog
+ * paper, its phone sheet with the swipe-down gesture and the back-to-close entry — or the
+ * framework's default. It says "Copied" through the status-notice door (`useStatusNotice`): the
+ * application's toast when it supplied one, else the framework's own.
  */
 export function FieldExpandDialog({
   open,
@@ -50,16 +40,17 @@ export function FieldExpandDialog({
   monospace?: boolean;
   /** Whether the viewer offers Edit (a read-only field's value is read and copied, never edited). */
   editable: boolean;
-  /** Close without committing (Close, Escape, the backdrop, back). */
+  /** Close without committing (Close, Escape, the backdrop, back, a swipe down). */
   onClose: () => void;
   onDone: (value: string) => void;
 }) {
-  const { isPhone, isCoarsePointer } = useFormFactor();
+  const { isPhone } = useFormFactor();
+  const Shell = useModalShell();
+  const notice = useStatusNotice();
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(value);
-  const [toast, setToast] = React.useState<StatusToastMessage>();
 
-  // Every open is a read of the stored value. The dialog's focus trap moves focus into the viewer
+  // Every open is a read of the stored value. The shell's focus trap moves focus into the viewer
   // on open, off whatever held it behind (the inline editor being typed in), and the read posture
   // holds no input to take it — so the keyboard never rides in with the viewer.
   React.useLayoutEffect(() => {
@@ -67,8 +58,6 @@ export function FieldExpandDialog({
       setEditing(false);
     }
   }, [open]);
-
-  useSheetHistory({ open, onClose, enabled: isPhone });
 
   const startEditing = () => {
     setDraft(value);
@@ -78,60 +67,34 @@ export function FieldExpandDialog({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(value);
-      setToast({ message: 'Copied' });
+      notice.present({ message: 'Copied' });
     } catch {
       // No clipboard here (a permission, an insecure page): say so — the text itself stays selectable.
-      setToast({ message: `Couldn't copy — select the text instead`, isError: true });
+      notice.present({ message: `Couldn't copy — select the text instead`, isError: true });
     }
   };
+
+  if (!open) {
+    return null;
+  }
 
   const shown = editing ? draft : value;
 
   return (
-    <Dialog
-      open={open}
+    <Shell
       onClose={onClose}
-      fullWidth
+      title={label}
       maxWidth='md'
-      fullScreen={isPhone}
-      {...(isPhone ? { TransitionComponent: SheetSlideUp } : {})}
-      PaperProps={
-        {
-          'data-field-viewer': '',
-          sx: {
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            // The phone sheet: the whole screen below a sliver of the app (the top inset clears the
-            // display cutout), top-only radius — the house sheet grammar. Desktop keeps the
-            // theme's dialog paper.
-            ...(isPhone
-              ? {
-                  mt: 'auto',
-                  height: 'calc(100% - env(safe-area-inset-top, 0px) - 12px)',
-                  borderRadius: '16px 16px 0 0',
-                }
-              : {}),
-          },
-        } as React.ComponentProps<typeof Dialog>['PaperProps']
+      meta={
+        <Typography
+          data-field-viewer-length
+          sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}
+        >
+          {shown.length.toLocaleString()} characters
+        </Typography>
       }
-    >
-      <Stack
-        data-field-viewer-bar
-        direction='row'
-        alignItems='center'
-        spacing={1.25}
-        sx={{ px: isPhone ? 2 : 2.5, pt: 2, pb: 1.5, flexShrink: 0 }}
-      >
-        <Stack direction='row' alignItems='baseline' spacing={1} sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant='subtitle1' sx={{ fontWeight: 600 }} noWrap>
-            {label}
-          </Typography>
-          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
-            {shown.length.toLocaleString()} characters
-          </Typography>
-        </Stack>
-        {editing ? (
+      actions={
+        editing ? (
           <Button
             variant='contained'
             size='small'
@@ -142,20 +105,21 @@ export function FieldExpandDialog({
           </Button>
         ) : (
           <>
-            <ViewerControl label='Copy' isCoarsePointer={isCoarsePointer} onClick={copy}>
+            <ModalShellControl label='Copy' onClick={copy}>
               <ContentCopy sx={{ fontSize: 18 }} />
-            </ViewerControl>
+            </ModalShellControl>
             {editable && (
-              <ViewerControl label='Edit' isCoarsePointer={isCoarsePointer} onClick={startEditing}>
+              <ModalShellControl label='Edit' onClick={startEditing}>
                 <Edit sx={{ fontSize: 18 }} />
-              </ViewerControl>
+              </ModalShellControl>
             )}
           </>
-        )}
-        <ViewerControl label='Close' isCoarsePointer={isCoarsePointer} onClick={onClose}>
-          <Close sx={{ fontSize: 20 }} />
-        </ViewerControl>
-      </Stack>
+        )
+      }
+      // The pane (or the editor) is the viewer's own scroller: the shell's content area is a
+      // column with no padding of its own, so the pane's scroll top is the sheet's drag claim.
+      contentSx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+    >
       {editing ? (
         <MuiTextField
           autoFocus
@@ -172,6 +136,7 @@ export function FieldExpandDialog({
           }}
           sx={{
             px: isPhone ? 2 : 2.5,
+            pt: 2,
             pb: 2,
             ...(isPhone
               ? {
@@ -195,9 +160,9 @@ export function FieldExpandDialog({
             flex: '1 1 auto',
             minHeight: 0,
             overflowY: 'auto',
-            overscrollBehaviorY: 'contain',
-            borderTop: 1,
-            borderColor: 'divider',
+            // No local bounce / scroll chaining: a downward pan at scroll top belongs to the
+            // sheet's drag claim on the phone, never to rubber-banding.
+            overscrollBehaviorY: isPhone ? 'none' : 'contain',
             px: isPhone ? 2 : 2.5,
             py: 2,
             whiteSpace: 'pre-wrap',
@@ -214,58 +179,7 @@ export function FieldExpandDialog({
           {value}
         </Box>
       )}
-      <StatusToast status={toast} onDismiss={() => setToast(undefined)} />
-    </Dialog>
-  );
-}
-
-/** The phone sheet rises from the bottom edge. */
-const SheetSlideUp = React.forwardRef(function SheetSlideUp(
-  props: TransitionProps & { children: React.ReactElement },
-  ref: React.Ref<unknown>
-) {
-  return <Slide direction='up' ref={ref} {...props} />;
-});
-
-/**
- * One top-bar control: an icon button named for its act (the accessible name and, on fine pointers,
- * the tooltip). On coarse pointers the 28px glyph box carries a 44px hit area.
- */
-function ViewerControl({
-  label,
-  isCoarsePointer,
-  onClick,
-  children,
-}: {
-  label: string;
-  isCoarsePointer: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip title={isCoarsePointer ? '' : label}>
-      <IconButton
-        aria-label={label}
-        onClick={onClick}
-        sx={{
-          p: 0,
-          width: 28,
-          height: 28,
-          flexShrink: 0,
-          borderRadius: 999,
-          color: 'text.secondary',
-          '&:hover': { borderRadius: 999, bgcolor: 'action.hover' },
-          ...(isCoarsePointer
-            ? {
-                position: 'relative',
-                overflow: 'visible',
-                '&::after': { content: '""', position: 'absolute', inset: -8 },
-              }
-            : {}),
-        }}
-      >
-        {children}
-      </IconButton>
-    </Tooltip>
+      {notice.host}
+    </Shell>
   );
 }

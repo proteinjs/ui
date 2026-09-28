@@ -56,6 +56,7 @@ describe('form sections', () => {
             fieldLayout={fieldLayout}
             buttons={buttons}
             isPhone={isPhone}
+            notice={{ present: () => undefined, host: null }}
           />
         </MemoryRouter>
       );

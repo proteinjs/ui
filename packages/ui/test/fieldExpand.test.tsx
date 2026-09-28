@@ -13,7 +13,11 @@
  *    to the clipboard, confirmed by the house toast "Copied");
  *  - Escape, and on the phone the back gesture (the viewer is a history entry while open), close it;
  *  - an editable field's value is edited by choice — Edit turns the pane into the editor; Done
- *    commits the draft through the field's onChange, the close control discards it.
+ *    commits the draft through the field's onChange, the close control discards it;
+ *  - a control returns to rest after its act (the rule since 2026-09-27: on a touch screen the
+ *    tapped element stays in :hover until the next touch, so a hover wash that is not scoped to
+ *    devices that hover reads as a pressed control that never cleared — Copy, which leaves the
+ *    viewer open, showed it).
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -284,6 +288,59 @@ describe('field expand — the long-value viewer', () => {
     await click(openButton()!);
     await settle();
     expect((viewer()!.querySelector('[data-field-viewer-pane]') as HTMLElement).textContent).toBe('keep me');
+  });
+
+  /**
+   * The background a control's own :hover rules leave on a device that cannot hover — the touch
+   * cascade modelled over the CSSOM: rules in document order, a `(hover: hover)` group skipped, a
+   * `(hover: none)` group and unconditioned rules applied. (jsdom computes no :hover itself.)
+   */
+  const touchHoverBackground = (element: Element): string => {
+    const classes = Array.from(element.classList);
+    let background = '';
+    const walk = (list: CSSRuleList, media: string[]) => {
+      for (const rule of Array.from(list)) {
+        if (rule instanceof CSSMediaRule) {
+          walk(rule.cssRules, [...media, rule.media.mediaText]);
+        } else if ((rule as CSSGroupingRule).cssRules) {
+          walk((rule as CSSGroupingRule).cssRules, media);
+        } else {
+          const style = rule as CSSStyleRule;
+          const selector = style.selectorText ?? '';
+          if (!selector.includes(':hover') || !classes.some((cls) => selector.includes(`.${cls}`))) {
+            continue;
+          }
+          if (media.some((condition) => /hover:\s*hover/.test(condition))) {
+            continue;
+          }
+          const value = style.style.getPropertyValue('background-color');
+          if (value) {
+            background = value;
+          }
+        }
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      walk((sheet as CSSStyleSheet).cssRules, []);
+    }
+    return background;
+  };
+
+  it('a tapped Copy returns to rest: on a touch screen its hover wash never applies', async () => {
+    phoneMode = true;
+    const long = 'w'.repeat(INLINE_EDIT_MAX_CHARS + 10);
+    await mount(textField({ name: 'output', label: 'Output', value: long, multiline: true }));
+
+    await click(container.querySelector('[data-field-preview]')!);
+    await settle();
+    const copy = control('Copy')!;
+    await click(copy);
+    await settle(50);
+
+    // The viewer stays open after Copy, so the control is still on screen: whatever the touch
+    // cascade leaves on it is what the eye sees until the next touch.
+    expect(viewer()).toBeDefined();
+    expect(['', 'transparent']).toContain(touchHoverBackground(copy));
   });
 
   it('a read-only field’s viewer offers Copy and Close, never Edit', async () => {
