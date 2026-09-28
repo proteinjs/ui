@@ -38,6 +38,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: CI glue self-test (MintServed.js)
+        # node:test, needs no install; fails the job before any minute is spent on install/build.
+        run: node --test .github/scripts/MintServed.test.js
   
       - name: Setup NPM authentication
         run: |
@@ -98,3 +102,19 @@ jobs:
           npx lerna publish --yes --no-private
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+
+      - name: Wait for the registry to serve the mint
+        # `lerna publish` returns when the registry has ACCEPTED the tarball, not when it SERVES the
+        # new version to a resolver: the packument a `npm i` reads lags the accept by seconds to
+        # minutes, so a consumer that raises its floor to this version the moment the run is green
+        # gets E404 / ETARGET until the registry catches up. MintServed.js polls `npm view
+        # <name>@<version> version` for every tag this run's `lerna publish` made (the tags at HEAD),
+        # 10 s apart on one 5-minute clock, one "served after N s" line per package — the run
+        # concludes only once the registry serves the mint (or the wait's deadline passes), so a
+        # consumer waiting on this run can take the floor at once. A package still not served at the
+        # deadline is a WARNING line and exit 1 (`|| [ $? -eq 1 ]`: only a timeout goes on; git or npm
+        # unrunnable stops the step). Best-effort by design (continue-on-error): the package is
+        # published either way, and a registry still not serving it is the log's warning, not a red job.
+        if: steps.tip.outputs.is_tip == 'true'
+        continue-on-error: true
+        run: node .github/scripts/MintServed.js || [ $? -eq 1 ]
