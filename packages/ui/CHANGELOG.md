@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.19.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.18.1...@proteinjs/ui@4.19.0) (2026-09-28)
+
+
+### Features
+
+* **ui:** the modal-shell and status-notice seams — framework modal surfaces present in the application's shell, framework notices say themselves through its toast ([c5c3ab3](https://github.com/proteinjs/ui/commit/c5c3ab360a6b056b75b4cf1f52d602ac8fd6716a))
+
+
+
+
+
 ## [4.18.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.18.0...@proteinjs/ui@4.18.1) (2026-09-28)
 
 
