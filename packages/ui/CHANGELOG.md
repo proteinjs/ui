@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.19.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.19.0...@proteinjs/ui@4.19.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **ui:** the route view transition handles its own ready rejection ([edbef9f](https://github.com/proteinjs/ui/commit/edbef9f7de192962b3ec5314d77131a94d608b69))
+
+
+
+
+
 # [4.19.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.18.1...@proteinjs/ui@4.19.0) (2026-09-28)
 
 
