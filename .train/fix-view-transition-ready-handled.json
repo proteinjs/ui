@@ -1,0 +1,1 @@
+{ "branch": "fix/view-transition-ready-handled", "packages": ["ui"], "suites": ["packages/ui/test/viewTransitionHistory.test.ts"], "removes": [] }
