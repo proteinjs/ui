@@ -40,6 +40,9 @@ type DocumentWithViewTransition = Document & {
 /** Structural subset of the DOM ViewTransition (lib.dom may predate the API). */
 export interface ViewTransitionLike {
   finished: Promise<unknown>;
+  /** Resolves once the snapshots are captured and the animation can start; rejects when the
+   *  browser skips the transition instead (see the handler in the decorator). */
+  ready?: Promise<unknown>;
   skipTransition?: () => void;
 }
 
@@ -109,6 +112,13 @@ export function decorateHistoryWithViewTransitions(history: History, policy: Rou
       flushSync(() => listener(update));
     });
     activeViewTransition = viewTransition;
+    // The browser skips a transition — the document is hidden, a newer transition starts, the
+    // capture times out or fails, skipTransition() is called — by rejecting `ready` with an
+    // InvalidStateError while it still runs the update callback and resolves `finished`. A skip
+    // is the transition's normal outcome and nothing else reads `ready`, so the seam that
+    // started it takes the rejection here; otherwise it surfaces as an unhandledrejection.
+    // `finished` is left as is: it rejects only when the update callback itself threw.
+    void viewTransition.ready?.catch(() => {});
     void viewTransition.finished.finally(() => {
       if (activeViewTransition === viewTransition) {
         activeViewTransition = null;

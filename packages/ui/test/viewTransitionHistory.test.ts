@@ -9,7 +9,7 @@ import {
   RouteTransitionPolicy,
 } from '../src/router/ViewTransitionHistory';
 
-type StartViewTransition = (cb: () => void) => { finished: Promise<unknown> };
+type StartViewTransition = (cb: () => void) => { finished: Promise<unknown>; ready?: Promise<unknown> };
 
 /** Minimal fake history: listen registers ONE listener; push/pop drive it like the real
  *  @remix-run/router (location updates BEFORE the notification). */
@@ -48,6 +48,22 @@ function fakeHistory() {
     },
   } as unknown as History;
   return history;
+}
+
+/** A rejected promise that records whether a rejection handler was ever registered on it —
+ *  the handled state the runtime consults before raising unhandledrejection. `catch` reaches
+ *  `then` by a live lookup, so the override sees both. */
+function recordingRejection(reason: unknown): Promise<unknown> & { handled: boolean } {
+  const promise = Promise.reject(reason) as Promise<unknown> & { handled: boolean };
+  promise.handled = false;
+  const then = promise.then;
+  promise.then = ((onFulfilled, onRejected) => {
+    if (onRejected) {
+      promise.handled = true;
+    }
+    return then.call(promise, onFulfilled, onRejected);
+  }) as typeof promise.then;
+  return promise;
 }
 
 const withStartViewTransition = (impl: StartViewTransition | undefined) => {
@@ -135,6 +151,32 @@ describe('decorateHistoryWithViewTransitions', () => {
     decorated.go(-1); // the dispatch right after the flagged popstate
     decorated.push('/next'); // flag must not leak to later navigations
     expect(flags).toEqual([true, false]);
+  });
+
+  it('handles the ready rejection itself when the browser skips the transition, and still commits the route', async () => {
+    // A hidden document (or a newer transition, a capture timeout, a skipTransition() call)
+    // makes the API skip the transition: `ready` rejects with an InvalidStateError while the
+    // update callback still runs and `finished` resolves. That rejection belongs to the seam
+    // that started the transition — nothing else ever reads `ready`, so left alone it surfaces
+    // as an unhandledrejection the page never asked for.
+    const ready = recordingRejection(
+      new DOMException('Transition was aborted because of invalid state. Document hidden', 'InvalidStateError')
+    );
+    withStartViewTransition((cb) => {
+      cb();
+      return { finished: Promise.resolve(), ready };
+    });
+    const seen: string[] = [];
+    const decorated = decorateHistoryWithViewTransitions(fakeHistory(), () => 'push');
+    decorated.listen((u) => seen.push(u.location.pathname));
+    decorated.push('/detail');
+    expect(seen).toEqual(['/detail']);
+    // A macrotask lets the runtime report the rejection if nothing handled it — the runner
+    // fails this case on that report — and lets the finished chain settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ready.handled).toBe(true);
+    expect(document.documentElement.dataset.routeTransition).toBeUndefined();
+    expect(getActiveViewTransition()).toBeNull();
   });
 
   it('delegates live action/location to the underlying history', () => {
