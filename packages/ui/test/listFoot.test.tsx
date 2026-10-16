@@ -160,6 +160,7 @@ describe('List foot — told exactly when the next window is on its way', () => 
         renderRow={testRow}
         skeleton={<div data-test-skeleton />}
         renderFoot={testFoot}
+        scrollTopButton
       />
     );
     await flush();
@@ -184,6 +185,13 @@ describe('List foot — told exactly when the next window is on its way', () => 
     const sentinel = container.querySelector('[data-list-sentinel]')!;
     expect(lastRow.compareDocumentPosition(foot()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(foot()!.compareDocumentPosition(sentinel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // THE BACK-TO-TOP STRIP SITS AHEAD OF THE FOOT (the live finding on the phone, 2026-10-16): the
+    // strip is sticky inside the scroller and RESTS at its flow position once the reader is at the
+    // tail, with the button floating 36px up from it — a foot placed after the strip's resting place
+    // had the button sitting exactly over the spinner. Ahead of the foot, the button keeps its old
+    // resting band over the last row and the foot shows clear below it.
+    const strip = container.querySelector('button[aria-label="Back to top"]')!.parentElement!;
+    expect(strip.compareDocumentPosition(foot()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // 4. The short last window lands: the rows, the honest bottom, the sentinel retired.
     await act(async () => {

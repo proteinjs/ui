@@ -53,8 +53,8 @@ export interface ListProps<T> {
    */
   scrollTopButton?: boolean | ScrollTopButtonStyleProps;
   /**
-   * The list's foot — rendered inside the shell after the rows and ahead of the sentinel, once rows
-   * exist, with the pager's state: `fetchingNextWindow` is true only while a NEXT window is in flight
+   * The list's foot — rendered inside the shell after the rows (and after the back-to-top strip, so
+   * the button never rests over it) and ahead of the sentinel, once rows exist, with the pager's state: `fetchingNextWindow` is true only while a NEXT window is in flight
    * (never the first window — the skeleton's — and never a background refetch of the loaded windows);
    * `hasMore` while windows remain. Called on every state, so a consumer's loading row can time its own
    * appearance across the fetch's edges (a show delay, a minimum hold); return null to draw nothing.
@@ -223,8 +223,10 @@ export function List<T>({
             </Box>
           ))
         : rows.map((row, index) => <React.Fragment key={rowId(row)}>{renderRow(row, index)}</React.Fragment>)}
-      {renderFoot?.({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
-      {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} />}
+      {/* The back-to-top strip AHEAD of the foot: sticky inside the scroller, it rests at its flow
+          position once the reader is at the tail, the button floating up from it — placed after the
+          foot it sat exactly over a loading row's spinner (the phone, 2026-10-16). Ahead, the button
+          keeps its resting band over the last row and the foot shows clear below it. */}
       {scrollTopButton && (
         <ScrollTopButton
           scrollContainer={scrollHost}
@@ -232,6 +234,8 @@ export function List<T>({
           hostSx={stickyHostSx(scrollTopStyleProps?.hostSx)}
         />
       )}
+      {renderFoot?.({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
+      {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} />}
     </Box>
   );
 }
