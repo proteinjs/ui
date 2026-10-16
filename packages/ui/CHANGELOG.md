@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.20.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.19.1...@proteinjs/ui@4.20.0) (2026-10-16)
+
+
+### Bug Fixes
+
+* the back-to-top strip sits ahead of List's foot — sticky inside the scroller, the strip rests at its flow position once the reader is at the tail with the button floating 36px up from it, so a foot placed after it had the button exactly over the loading row's spinner (the lane's phone proof, 2026-10-16: light and dark alike). Ahead of the foot the button keeps its resting band over the last row and the foot shows clear below it; the sentinel stays last. listFoot.test.tsx pins the order (red at the old order: the strip's position relative to the foot read 0). ([7f62a82](https://github.com/proteinjs/ui/commit/7f62a82aecf5a40016527183180722d3de338e7e))
+
+
+### Features
+
+* List tells its foot when the next window is on its way — a renderFoot slot on List (rendered inside the shell after the rows and ahead of the sentinel, with { hasMore, fetchingNextWindow }) and isFetchingNextWindow on useCursorWindows (react-query's isFetchingNextPage: the sentinel's pull alone — never the first window, which the skeleton owns, never a background refetch of the loaded windows, which isFetching also covers). The slot is called on every state so a consumer's loading row can time its own presence across the fetch's edges (a show delay, a minimum hold). Founder prod finding 2026-10-16: no spinner at the bottom of the home rows while more load; the consumers are util-ui's LoadingMoreRow (feat/load-more-row) on Home's rows (space feat/home-loading-row) and the bell. Test listFoot.test.tsx, red-first (TS2322: renderFoot absent at the pre-change List); bite: the signal flipped to isFetching → the refetch case fails. ([9b7ce09](https://github.com/proteinjs/ui/commit/9b7ce093e7eaee8c1d70b7616b2b609f2a00e917))
+
+
+
+
+
 ## [4.19.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.19.0...@proteinjs/ui@4.19.1) (2026-09-29)
 
 
