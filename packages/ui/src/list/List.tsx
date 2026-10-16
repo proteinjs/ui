@@ -52,12 +52,26 @@ export interface ListProps<T> {
    * has no scrollable ancestor and the button stays retired.
    */
   scrollTopButton?: boolean | ScrollTopButtonStyleProps;
+  /**
+   * The list's foot — rendered inside the shell after the rows and ahead of the sentinel, once rows
+   * exist, with the pager's state: `fetchingNextWindow` is true only while a NEXT window is in flight
+   * (never the first window — the skeleton's — and never a background refetch of the loaded windows);
+   * `hasMore` while windows remain. Called on every state, so a consumer's loading row can time its own
+   * appearance across the fetch's edges (a show delay, a minimum hold); return null to draw nothing.
+   */
+  renderFoot?: (state: ListFootState) => ReactNode;
   /** The root container (wraps rows and sentinel; slots render bare). */
   sx?: BoxProps['sx'];
   /** Each group's container. */
   groupSx?: BoxProps['sx'];
   /** The rows container inside each group (e.g. between-row dividers that must skip the header). */
   groupRowsSx?: BoxProps['sx'];
+}
+
+/** What the foot slot is told: whether windows remain, and whether the next one is on its way. */
+export interface ListFootState {
+  hasMore: boolean;
+  fetchingNextWindow: boolean;
 }
 
 /** One consecutive run of rows sharing a group key. */
@@ -145,13 +159,14 @@ export function List<T>({
   enabled,
   refetchOnWindowFocus,
   scrollTopButton,
+  renderFoot,
   sx,
   groupSx,
   groupRowsSx,
 }: ListProps<T>): React.ReactElement {
   // rows is undefined until the first window ever resolves (the skeleton state); afterwards
   // stale rows persist through refetches and query-identity changes (stale-while-revalidate).
-  const { rows, fetchNextWindow, hasMore, error } = useCursorWindows(loader, windowSize, {
+  const { rows, fetchNextWindow, hasMore, isFetchingNextWindow, error } = useCursorWindows(loader, windowSize, {
     rowId,
     enabled,
     refetchOnWindowFocus,
@@ -208,6 +223,7 @@ export function List<T>({
             </Box>
           ))
         : rows.map((row, index) => <React.Fragment key={rowId(row)}>{renderRow(row, index)}</React.Fragment>)}
+      {renderFoot?.({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
       {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} />}
       {scrollTopButton && (
         <ScrollTopButton

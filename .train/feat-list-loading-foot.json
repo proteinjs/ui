@@ -1,0 +1,6 @@
+{
+  "branch": "feat/list-loading-foot",
+  "packages": ["ui"],
+  "suites": ["packages/ui/test/listFoot.test.tsx"],
+  "removes": []
+}

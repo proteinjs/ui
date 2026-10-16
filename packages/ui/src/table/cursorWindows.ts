@@ -72,7 +72,15 @@ export interface CursorWindowsResult<T> {
   hasMore: boolean;
   /** Re-read every loaded window from the top with freshly derived cursors; one atomic swap. */
   refresh: () => void;
+  /** Any fetch in flight — the first window, a next window, or a refetch of the loaded windows. */
   isFetching: boolean;
+  /**
+   * A NEXT window is in flight — the sentinel's pull, and only that: false during the first window
+   * (the caller's skeleton state) and during a background refetch of the loaded windows (`isFetching`
+   * covers both). The signal a list's loading foot draws on: true exactly while rows are about to be
+   * appended below the ones on screen.
+   */
+  isFetchingNextWindow: boolean;
   /**
    * The query's error (null while healthy). Pairs with `rows` for slot decisions: an error with
    * `rows` undefined means nothing ever loaded (`List`'s errorState); once rows have resolved
@@ -93,19 +101,15 @@ export function useCursorWindows<T>(
   options: UseCursorWindowsOptions<T> = {}
 ): CursorWindowsResult<T> {
   const { queryKey, queryFn, getNextPageParam } = buildCursorWindowsQuery(loader, windowSize);
-  const { data, error, fetchNextPage, hasNextPage, isFetching, isPreviousData, refetch } = useInfiniteQuery<
-    CursorWindow<T>,
-    Error,
-    CursorWindow<T>,
-    CursorWindowsQueryKey
-  >(queryKey, queryFn, {
-    getNextPageParam,
-    // A query-identity change (new dataQueryKey) keeps showing the previous rows until the
-    // new first window lands — stale-while-revalidate, no skeleton flash on filter changes.
-    keepPreviousData: true,
-    refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
-    enabled: options.enabled ?? true,
-  });
+  const { data, error, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage, isPreviousData, refetch } =
+    useInfiniteQuery<CursorWindow<T>, Error, CursorWindow<T>, CursorWindowsQueryKey>(queryKey, queryFn, {
+      getNextPageParam,
+      // A query-identity change (new dataQueryKey) keeps showing the previous rows until the
+      // new first window lands — stale-while-revalidate, no skeleton flash on filter changes.
+      keepPreviousData: true,
+      refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
+      enabled: options.enabled ?? true,
+    });
 
   const rowId = options.rowId;
   const rows = useMemo(() => (data ? flattenWindows(data.pages, rowId) : undefined), [data, rowId]);
@@ -127,6 +131,7 @@ export function useCursorWindows<T>(
     hasMore: !!hasNextPage && !isPreviousData,
     refresh,
     isFetching,
+    isFetchingNextWindow: isFetchingNextPage,
     error,
   };
 }
