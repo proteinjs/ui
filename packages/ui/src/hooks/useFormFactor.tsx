@@ -1,4 +1,5 @@
-import { useMediaQuery, useTheme } from '@mui/material';
+import { useTheme } from '@mui/material';
+import { useSharedMediaQuery } from './mediaQueryRegistry';
 
 export interface FormFactor {
   /** Layout fork — see the useFormFactor doc for the predicate. */
@@ -41,8 +42,12 @@ export interface FormFactor {
  * suppression, hit-slop, press-state feedback via `palette.action.press`). True on
  * tablets as well as phones — exactly why it is a separate axis from `isPhone`.
  *
- * Media queries are read synchronously on first render (`noSsr`; this is a pure client
- * SPA), so a phone never paints a desktop frame first (no-transient-states bar).
+ * Media queries are read synchronously on first render (this is a pure client SPA), so a
+ * phone never paints a desktop frame first (no-transient-states bar), and they are read
+ * through the shared registry (`useSharedMediaQuery`): one MediaQueryList and one `change`
+ * listener per query for the whole page, however many components call this hook — a long
+ * list whose every row forks here several times over costs two subscriptions, not two per
+ * component per row.
  */
 export const useFormFactor = (): FormFactor => {
   const theme = useTheme();
@@ -50,10 +55,10 @@ export const useFormFactor = (): FormFactor => {
   // Comma = OR: matches when EITHER dimension is below the line (the smaller-dimension
   // rule above). The -0.05 epsilon mirrors MUI's `breakpoints.down`, so exactly-600 is
   // not phone-class.
-  const isPhoneWindow = useMediaQuery(`(max-width: ${phoneLinePx - 0.05}px), (max-height: ${phoneLinePx - 0.05}px)`, {
-    noSsr: true,
-  });
-  const isCoarsePointer = useMediaQuery('(pointer: coarse)', { noSsr: true });
+  const isPhoneWindow = useSharedMediaQuery(
+    `(max-width: ${phoneLinePx - 0.05}px), (max-height: ${phoneLinePx - 0.05}px)`
+  );
+  const isCoarsePointer = useSharedMediaQuery('(pointer: coarse)');
 
   return { isPhone: isCoarsePointer && isPhoneWindow, isCoarsePointer };
 };

@@ -1,4 +1,5 @@
 export * from './src/hooks/useFormFactor';
+export * from './src/hooks/mediaQueryRegistry';
 // The page-wide sheet history stack (a phone sheet is a history entry while open: back closes it).
 // Hosted here beside the form-factor fork so framework surfaces and consumer kits share ONE stack.
 export * from './src/hooks/useSheetHistory';
