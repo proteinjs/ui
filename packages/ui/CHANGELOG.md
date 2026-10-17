@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.21.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.0...@proteinjs/ui@4.21.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* the media query registry re-queries when the host's matchMedia is swapped ([3798552](https://github.com/proteinjs/ui/commit/3798552a5f47896a50206e205ac31937bbe71f0d))
+* useCursorWindows takes notifyOnChangeProps, in its own vocabulary ([f5252ec](https://github.com/proteinjs/ui/commit/f5252ec0695fd27f4f99cc3f4a1d4dc4829ae1cd))
+* useFormFactor shares one MediaQueryList per query across every caller ([4828585](https://github.com/proteinjs/ui/commit/4828585c4b7f9064c805082a5f42bfe38689335c))
+
+
+
+
+
 # [4.21.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.20.1...@proteinjs/ui@4.21.0) (2026-10-17)
 
 
