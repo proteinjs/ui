@@ -41,6 +41,9 @@ export * from './src/table/cursorWindows';
 export * from './src/table/rowClickIntent';
 
 export * from './src/list/List';
+export * from './src/list/PrependSafeScroller';
+export * from './src/list/PrependReservoir';
+export * from './src/list/ScrollRest';
 
 // The settle: a write's last step over cached reads drops the read in flight and reads fresh.
 export * from './src/query/settleQueries';
