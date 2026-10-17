@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { QueryFunctionContext, useInfiniteQuery } from 'react-query';
+import { InfiniteQueryObserverResult, QueryFunctionContext, useInfiniteQuery } from 'react-query';
 import { CursorLoader, CursorValue, CursorWindow } from './CursorLoader';
 
 export type CursorWindowsQueryKey = [string, string];
@@ -51,11 +51,32 @@ export const flattenWindows = <T>(windows: CursorWindow<T>[], rowId?: (row: T) =
   return rows;
 };
 
+/** The results of `useCursorWindows` a caller can limit its re-renders to (see `notifyOnChangeProps`). */
+export type CursorWindowsNotifyProp = 'rows' | 'error' | 'isFetching' | 'isFetchingNextWindow' | 'hasMore';
+
+/** Each result, as the query props whose change moves it. */
+const QUERY_PROPS_BY_RESULT: { [prop in CursorWindowsNotifyProp]: Array<keyof InfiniteQueryObserverResult> } = {
+  rows: ['data'],
+  error: ['error'],
+  isFetching: ['isFetching'],
+  isFetchingNextWindow: ['isFetchingNextPage'],
+  hasMore: ['hasNextPage', 'isPreviousData'],
+};
+
 export interface UseCursorWindowsOptions<T> {
   /** Row identity for cross-window de-duplication (see `flattenWindows`). Pass a stable function. */
   rowId?: (row: T) => string | number;
   refetchOnWindowFocus?: boolean;
   enabled?: boolean;
+  /**
+   * The results whose change re-renders the caller — react-query's `notifyOnChangeProps`, in this hook's own
+   * vocabulary. Omit and every change does (the pager's shape: `List` reads them all). A SECOND observer on a
+   * list's query that reads only the rows and the error — a reach face beside the `List` that pages — passes
+   * `['rows', 'error']` and sleeps through the fetch-state flips of every window landing and refetch, which
+   * otherwise re-render it twice per landing. A query that never resolved re-reads with its error cleared, so
+   * `'error'` alone still tells such an observer a retry began.
+   */
+  notifyOnChangeProps?: ReadonlyArray<CursorWindowsNotifyProp>;
 }
 
 export interface CursorWindowsResult<T> {
@@ -89,6 +110,19 @@ export interface CursorWindowsResult<T> {
   error: Error | null;
 }
 
+/** The query props a result list listens on, each once. */
+const queryPropsOf = (results: ReadonlyArray<CursorWindowsNotifyProp>): Array<keyof InfiniteQueryObserverResult> => {
+  const props: Array<keyof InfiniteQueryObserverResult> = [];
+  results.forEach((result) => {
+    QUERY_PROPS_BY_RESULT[result].forEach((prop) => {
+      if (!props.includes(prop)) {
+        props.push(prop);
+      }
+    });
+  });
+  return props;
+};
+
 /**
  * THE consumer seam for `CursorLoader`s: accumulates cursor windows through react-query's
  * infinite-query cache, keyed on the loader's `reactQueryKeys` — so a `useTableMutation`
@@ -109,6 +143,7 @@ export function useCursorWindows<T>(
       keepPreviousData: true,
       refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
       enabled: options.enabled ?? true,
+      ...(options.notifyOnChangeProps ? { notifyOnChangeProps: queryPropsOf(options.notifyOnChangeProps) } : {}),
     });
 
   const rowId = options.rowId;
