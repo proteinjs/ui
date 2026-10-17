@@ -34,8 +34,10 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
   /**
    * Asked when the viewport is within `leadViewports` client heights of the loaded start and no ask is in flight:
    * the consumer fetches the next older rows and lands them at the start of `items`. The gate reopens when rows
-   * land at the start, when `loading` turns from true to false, or when a returned promise settles — so a read
-   * that brings nothing reopens it only through `loading` or the promise; pass one of them.
+   * land at the start or when `loading` turns from true to false; a returned promise's settle reopens it two
+   * frames later if no commit did (a read that brought nothing and no `loading`) — never in the settle itself,
+   * which precedes the rows' commit. A read that brings nothing reopens the gate only through `loading` or the
+   * promise; pass one of them.
    */
   onNeedMore?: () => void | Promise<unknown>;
   /** True while the consumer's fetch is in flight: renders `loadingRow` at the reservoir's foot. */
@@ -133,6 +135,15 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     [scrollerRef]
   );
 
+  /** A settled ask's fallback reopen, cancelled by the commit that reopens the gate instead. */
+  const settleFallback = useRef(0);
+  const cancelSettleFallback = useCallback(() => {
+    if (settleFallback.current !== 0) {
+      cancelAnimationFrame(settleFallback.current);
+      settleFallback.current = 0;
+    }
+  }, []);
+
   /** The gate: ask once while the viewport is inside the lead with rows remaining above and no ask in flight. */
   const askIfNeeded = useCallback(() => {
     const current = engine.current;
@@ -148,12 +159,26 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     landedSinceAsk.current = false;
     const result = ask();
     if (result && typeof (result as Promise<unknown>).then === 'function') {
-      const reopen = () => {
-        askInFlight.current = false;
+      // The settle runs in the microtask BEFORE the rows' commit: reopening here would let a scroll event in that
+      // gap ask again with the consumer's cursor still at the old page. The commit reopens the gate; the settle
+      // only arms a fallback for a read that brings nothing and no `loading` — two frames, past any commit.
+      const settled = () => {
+        cancelSettleFallback();
+        let frames = 2;
+        const tick = () => {
+          if (--frames > 0) {
+            settleFallback.current = requestAnimationFrame(tick);
+            return;
+          }
+          settleFallback.current = 0;
+          askInFlight.current = false;
+          askIfNeeded();
+        };
+        settleFallback.current = requestAnimationFrame(tick);
       };
-      (result as Promise<unknown>).then(reopen, reopen);
+      (result as Promise<unknown>).then(settled, settled);
     }
-  }, []);
+  }, [cancelSettleFallback]);
 
   /** A reconcile step is owed: at the next rest, not in this task. */
   const requestReconcile = useCallback(() => {
@@ -299,10 +324,11 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     }
     if (landedSinceAsk.current) {
       landedSinceAsk.current = false;
+      cancelSettleFallback();
       askInFlight.current = false;
     }
     askIfNeeded();
-  }, [items, askIfNeeded]);
+  }, [items, askIfNeeded, cancelSettleFallback]);
 
   // The consumer's count or seed changed: the target moves — a reconcile at the rest; the gate re-judged, not
   // reopened (a count that arrives before its rows must not ask twice).
@@ -321,17 +347,19 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     const was = previousLoading.current;
     previousLoading.current = loading;
     if (was === true && loading === false) {
+      cancelSettleFallback();
       askInFlight.current = false;
       askIfNeeded();
     }
-  }, [loading, askIfNeeded]);
+  }, [loading, askIfNeeded, cancelSettleFallback]);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      cancelSettleFallback();
     };
-  }, []);
+  }, [cancelSettleFallback]);
 
   useLayoutEffect(() => {
     if (!apiRef) {

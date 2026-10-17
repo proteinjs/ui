@@ -245,6 +245,8 @@ type Frame = {
   previousAnchorTop: number | null;
   writes: number;
   fingerY: number | null;
+  /** The reservoir's signed size as the consumer's door reports it (0 in the shape replaced). */
+  reserve: number;
 };
 type Summary = {
   mode: string;
@@ -260,6 +262,8 @@ type Summary = {
   maxShChangeAtLanding: number;
   jumps: number;
   jumpRows: string[];
+  /** The frames around every landing (three before, the landing, two after), one line each. */
+  landingTrace: string[];
 };
 type ProbeDoor = {
   episodes: Summary[];
@@ -286,6 +290,9 @@ class EpisodeProbe {
   private previousAnchorEl: Element | null = null;
   /** A write's displacement on its own frame, judged together with the next frame's. */
   private pendingWrite: number | null = null;
+  /** The last frames before a landing, kept for the trace; the frames still owed after one. */
+  private ring: Frame[] = [];
+  private traceAfter = 0;
   private frame = 0;
   private quiet = 0;
   private current: Summary | null = null;
@@ -405,6 +412,7 @@ class EpisodeProbe {
       maxShChangeAtLanding: 0,
       jumps: 0,
       jumpRows: [],
+      landingTrace: [],
     };
   }
 
@@ -423,6 +431,7 @@ class EpisodeProbe {
       out.maxShChangeAtLanding = Math.max(out.maxShChangeAtLanding, s.maxShChangeAtLanding);
       out.jumps += s.jumps;
       out.jumpRows.push(...s.jumpRows);
+      out.landingTrace.push(...(s.landingTrace || []));
     });
     return out;
   }
@@ -455,6 +464,22 @@ class EpisodeProbe {
     const frame = this.read(el);
     this.judge(summary, this.previous, frame);
     summary.frames++;
+    // The trace: the three frames before a landing, the landing, and the two after.
+    if (this.previous && frame.rows > this.previous.rows) {
+      this.ring.forEach((kept) => summary.landingTrace.push(EpisodeProbe.describeFrame(kept, summary.t0, '')));
+      summary.landingTrace.push(EpisodeProbe.describeFrame(frame, summary.t0, 'LANDING'));
+      this.ring = [];
+      this.traceAfter = 2;
+    } else if (this.traceAfter > 0) {
+      summary.landingTrace.push(EpisodeProbe.describeFrame(frame, summary.t0, 'after'));
+      this.traceAfter--;
+      this.ring = [];
+    } else {
+      this.ring.push(frame);
+      if (this.ring.length > 3) {
+        this.ring.shift();
+      }
+    }
     this.previous = frame;
     this.onFrame?.(summary, this.episodes[this.episodes.length - 1] ?? null);
     this.frame = requestAnimationFrame(this.sample);
@@ -490,7 +515,17 @@ class EpisodeProbe {
       previousAnchorTop,
       writes: this.census,
       fingerY: this.fingerDown ? this.fingerY : null,
+      reserve: window.__app ? window.__app.reserve() : 0,
     };
+  }
+
+  private static describeFrame(frame: Frame, t0: number, mark: string): string {
+    return (
+      `+${frame.t - t0} ${mark || '·'} rows=${frame.rows} st=${Math.round(frame.st)} sh=${frame.sh} ` +
+      `reserve=${Math.round(frame.reserve)} anchor=${frame.anchorId}@${Math.round(frame.anchorTop)} ` +
+      `prev@${frame.previousAnchorTop === null ? '-' : Math.round(frame.previousAnchorTop)} writes=${frame.writes} ` +
+      `f=${frame.fingerY === null ? 'up' : Math.round(frame.fingerY)}`
+    );
   }
 
   private judge(summary: Summary, previous: Frame | null, frame: Frame): void {
@@ -623,8 +658,8 @@ const Overlay = ({ probe }: { probe: EpisodeProbe }) => {
         position: 'fixed',
         left: 0,
         right: 0,
-        bottom: 0,
-        padding: '6px 8px',
+        top: 0,
+        padding: 'calc(env(safe-area-inset-top, 0px) + 6px) 8px 6px',
         background: 'rgba(0,0,0,0.78)',
         color: '#fff',
         font: '11px/1.35 ui-monospace, Menlo, monospace',

@@ -190,6 +190,7 @@ class PrependSafeScrollerProbe {
       maxShChangeAtLanding: 0,
       jumps: 0,
       jumpRows: [],
+      landingTrace: [],
     };
     for (const s of list) {
       out.frames += s.frames;
@@ -203,6 +204,7 @@ class PrependSafeScrollerProbe {
       out.maxShChangeAtLanding = Math.max(out.maxShChangeAtLanding, s.maxShChangeAtLanding);
       out.jumps += s.jumps;
       out.jumpRows.push(...(s.jumpRows || []));
+      out.landingTrace.push(...(s.landingTrace || []));
     }
     return out;
   }
@@ -488,7 +490,7 @@ if (require.main === module) {
       list.forEach((s, i) => {
         (byMode[s.mode] = byMode[s.mode] || []).push(s);
         console.log(
-          `#${i + 1} ${s.mode}: ${PrependSafeScrollerProbe.describe(s)}${s.jumpRows.length ? `\n     ${s.jumpRows.slice(0, 6).join('\n     ')}` : ''}`
+          `#${i + 1} ${s.mode}: ${PrependSafeScrollerProbe.describe(s)}${s.jumpRows.length ? `\n     ${s.jumpRows.slice(0, 6).join('\n     ')}` : ''}${(s.landingTrace || []).length ? `\n     trace: ${s.landingTrace.join('\n     ')}` : ''}`
         );
       });
       let ok = true;

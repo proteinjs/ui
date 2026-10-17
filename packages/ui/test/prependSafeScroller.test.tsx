@@ -448,19 +448,64 @@ describe('the gate — onNeedMore', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    readerScrollsTo(scroller, 4000); // inside the lead again, the gate reopened by the settled promise
+    readerScrollsTo(scroller, 4000); // inside the lead, but the settle alone reopens nothing
+    expect(asks.length).toBe(1);
+    pumpFrames(2); // the settle's fallback: two frames with no commit
+    readerScrollsTo(scroller, 3900);
     expect(asks.length).toBe(2);
     fail = false;
     await act(async () => {
+      await Promise.resolve();
       await Promise.resolve();
     });
     act(() => {
       harness.setLoading(true);
     });
     act(() => {
-      harness.setLoading(false); // the consumer's read ended with nothing to land
+      harness.setLoading(false); // the consumer's read ended with nothing to land: reopened at once, asked (#3)
     });
     expect(asks.length).toBe(3);
+    // #3 resolved with nothing landed and no `loading` transition: its fallback reopens two frames later and asks.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    pumpFrames(2);
+    expect(asks.length).toBe(4);
+  });
+});
+
+describe('the gate — the settle precedes the commit', () => {
+  test('a scroll event between a read’s settle and its rows’ commit never asks again; the commit reopens the gate and cancels the settle’s fallback', async () => {
+    const asks: number[] = [];
+    const resolvers: Array<() => void> = [];
+    const { harness, scroller } = mount({
+      initial: rows(1, 30, 100),
+      remaining: 50,
+      onNeedMore: () => {
+        asks.push(1);
+        return new Promise<void>((resolve) => resolvers.push(resolve));
+      },
+    });
+    readerScrollsTo(scroller, 7400);
+    pumpFrames(1);
+    readerScrollsTo(scroller, 6100); // inside the lead: ask #1
+    expect(asks.length).toBe(1);
+    // The read settles (the consumer's continuation ran; React has not committed the rows yet).
+    resolvers.shift()!();
+    await Promise.resolve();
+    await Promise.resolve();
+    readerScrollsTo(scroller, 6000); // a scroll event in the gap — the engine pans on
+    readerScrollsTo(scroller, 5950);
+    expect(asks.length).toBe(1);
+    // The rows' commit: the gate reopens, the fallback is cancelled, and the chain asks only if still inside the lead.
+    act(() => {
+      harness.prepend(rows(101, 110, 100)); // reservoir 4000; the reader is 1950 from the start — outside
+    });
+    pumpFrames(4);
+    expect(asks.length).toBe(1);
+    readerScrollsTo(scroller, 4500); // 500 from the start: ask #2
+    expect(asks.length).toBe(2);
   });
 });
 
