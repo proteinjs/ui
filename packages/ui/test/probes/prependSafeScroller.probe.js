@@ -490,7 +490,7 @@ if (require.main === module) {
       list.forEach((s, i) => {
         (byMode[s.mode] = byMode[s.mode] || []).push(s);
         console.log(
-          `#${i + 1} ${s.mode}: ${PrependSafeScrollerProbe.describe(s)}${s.jumpRows.length ? `\n     ${s.jumpRows.slice(0, 6).join('\n     ')}` : ''}${(s.landingTrace || []).length ? `\n     trace: ${s.landingTrace.join('\n     ')}` : ''}`
+          `#${i + 1} ${s.mode}: ${PrependSafeScrollerProbe.describe(s)} asks=[${s.asks || ''}]${s.jumpRows.length ? `\n     ${s.jumpRows.slice(0, 6).join('\n     ')}` : ''}${(s.landingTrace || []).length ? `\n     trace: ${s.landingTrace.join('\n     ')}` : ''}`
         );
       });
       let ok = true;

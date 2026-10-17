@@ -431,7 +431,7 @@ describe('the gate — onNeedMore', () => {
     expect(asks.length).toBe(3);
   });
 
-  test('a promise that settles with nothing, or `loading` turning false, reopens the gate', async () => {
+  test('the ask’s own promise never reopens the gate, settled or failed; `loading` turning false does', async () => {
     let fail = true;
     const asks: number[] = [];
     const { harness, scroller } = mount({
@@ -439,7 +439,13 @@ describe('the gate — onNeedMore', () => {
       remaining: 50,
       onNeedMore: () => {
         asks.push(1);
-        return fail ? Promise.reject(new Error('the read failed')) : Promise.resolve();
+        if (!fail) {
+          return Promise.resolve();
+        }
+        // A failed read: the consumer owns its promise's rejection (the scroller never looks at the result).
+        const failed = Promise.reject(new Error('the read failed'));
+        failed.catch(() => undefined);
+        return failed;
       },
     });
     pumpFrames(1);
@@ -448,35 +454,37 @@ describe('the gate — onNeedMore', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    readerScrollsTo(scroller, 4000); // inside the lead, but the settle alone reopens nothing
-    expect(asks.length).toBe(1);
-    pumpFrames(2); // the settle's fallback: two frames with no commit
+    readerScrollsTo(scroller, 4000); // inside the lead; the failed read's settle reopens nothing
+    pumpFrames(6);
     readerScrollsTo(scroller, 3900);
-    expect(asks.length).toBe(2);
-    fail = false;
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    expect(asks.length).toBe(1);
     act(() => {
       harness.setLoading(true);
     });
     act(() => {
-      harness.setLoading(false); // the consumer's read ended with nothing to land: reopened at once, asked (#3)
+      harness.setLoading(false); // the consumer's read ended with nothing to land: reopened, asked (#2)
+    });
+    expect(asks.length).toBe(2);
+    fail = false;
+    act(() => {
+      harness.setLoading(true);
+    });
+    act(() => {
+      harness.setLoading(false); // #3
     });
     expect(asks.length).toBe(3);
-    // #3 resolved with nothing landed and no `loading` transition: its fallback reopens two frames later and asks.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    pumpFrames(2);
-    expect(asks.length).toBe(4);
+    readerScrollsTo(scroller, 3800); // #3 resolved with nothing landed: still in flight until `loading` says otherwise
+    pumpFrames(6);
+    expect(asks.length).toBe(3);
   });
 });
 
 describe('the gate — the settle precedes the commit', () => {
-  test('a scroll event between a read’s settle and its rows’ commit never asks again; the commit reopens the gate and cancels the settle’s fallback', async () => {
+  test('a scroll event between a read’s settle and its rows’ commit never asks again; the commit reopens the gate', async () => {
     const asks: number[] = [];
     const resolvers: Array<() => void> = [];
     const { harness, scroller } = mount({
@@ -497,8 +505,9 @@ describe('the gate — the settle precedes the commit', () => {
     await Promise.resolve();
     readerScrollsTo(scroller, 6000); // a scroll event in the gap — the engine pans on
     readerScrollsTo(scroller, 5950);
+    pumpFrames(6); // however long the commit takes
     expect(asks.length).toBe(1);
-    // The rows' commit: the gate reopens, the fallback is cancelled, and the chain asks only if still inside the lead.
+    // The rows' commit: the gate reopens, and the chain asks only if still inside the lead.
     act(() => {
       harness.prepend(rows(101, 110, 100)); // reservoir 4000; the reader is 1950 from the start — outside
     });
@@ -506,6 +515,46 @@ describe('the gate — the settle precedes the commit', () => {
     expect(asks.length).toBe(1);
     readerScrollsTo(scroller, 4500); // 500 from the start: ask #2
     expect(asks.length).toBe(2);
+  });
+});
+
+describe('the gate — one reopen per commit', () => {
+  test('rows landing and `loading` turning false in the same commit ask once, not twice; a `loading` turn that arrives after the chain’s next ask closes the old read, never the new one', () => {
+    const asks: number[] = [];
+    const { harness, scroller } = mount({
+      initial: rows(1, 30, 100),
+      remaining: 50,
+      onNeedMore: () => {
+        asks.push(1);
+      },
+    });
+    readerScrollsTo(scroller, 7400);
+    pumpFrames(1);
+    readerScrollsTo(scroller, 6100); // inside the lead: ask #1
+    expect(asks.length).toBe(1);
+    act(() => {
+      harness.setLoading(true); // the consumer answers #1
+    });
+    readerScrollsTo(scroller, 5100);
+    act(() => {
+      harness.prepend(rows(101, 110, 100)); // the rows land AND the read ends in ONE commit
+      harness.setLoading(false);
+    });
+    // Reservoir 4000; the reader is 1100 from the start — inside the lead: the chain asks ONCE (#2).
+    expect(asks.length).toBe(2);
+    act(() => {
+      harness.setLoading(true); // the consumer answers #2
+    });
+    readerScrollsTo(scroller, 4100); // 100 from the start, #2 in flight: no ask
+    act(() => {
+      harness.prepend(rows(111, 120, 100)); // #2's rows land: reservoir 3000, the reader 1100 from the start — the chain asks #3
+    });
+    expect(asks.length).toBe(3);
+    act(() => {
+      harness.setLoading(false); // #2's read ends in a LATER commit: it belongs to #2, not to #3 in flight — no reopen
+    });
+    readerScrollsTo(scroller, 3100);
+    expect(asks.length).toBe(3);
   });
 });
 

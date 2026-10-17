@@ -99,7 +99,11 @@ type AppDoor = {
   remaining: () => number;
   reserve: () => number;
   firstId: () => number;
+  /** Every ask the consumer answered, by the first id it read before (the page it fetched). */
+  asks: () => number[];
 };
+/** The consumer's asks, by the id its cursor stood at: the same id twice is the same page fetched twice. */
+const askLog: number[] = [];
 declare global {
   interface Window {
     __app?: AppDoor;
@@ -118,6 +122,7 @@ const ReservoirList = () => {
   const remainingReal = items[0].id - 1;
   const remaining = LOW_COUNT ? Math.min(remainingReal, 5) : remainingReal;
   const onNeedMore = useCallback(async () => {
+    askLog.push(firstId.current);
     setLoading(true);
     const rows = await readPage(firstId.current);
     setItems((previous) => [...rows, ...previous]);
@@ -137,6 +142,7 @@ const ReservoirList = () => {
       remaining: () => remaining,
       reserve: () => api.current?.reservePx() ?? 0,
       firstId: () => items[0].id,
+      asks: () => askLog.slice(),
     };
   }, [items, remaining]);
   return (
@@ -217,6 +223,7 @@ const WriteList = () => {
       remaining: () => items[0].id - 1,
       reserve: () => 0,
       firstId: () => items[0].id,
+      asks: () => askLog.slice(),
     };
   }, [items, ask]);
   return (
@@ -264,6 +271,8 @@ type Summary = {
   jumpRows: string[];
   /** The frames around every landing (three before, the landing, two after), one line each. */
   landingTrace: string[];
+  /** The consumer's asks so far, by the page id each read (the same id twice = a page fetched twice). */
+  asks: string;
 };
 type ProbeDoor = {
   episodes: Summary[];
@@ -413,6 +422,7 @@ class EpisodeProbe {
       jumps: 0,
       jumpRows: [],
       landingTrace: [],
+      asks: '',
     };
   }
 
@@ -432,6 +442,7 @@ class EpisodeProbe {
       out.jumps += s.jumps;
       out.jumpRows.push(...s.jumpRows);
       out.landingTrace.push(...(s.landingTrace || []));
+      out.asks = s.asks || out.asks;
     });
     return out;
   }
@@ -611,6 +622,7 @@ class EpisodeProbe {
     if (!summary || summary.frames === 0) {
       return;
     }
+    summary.asks = window.__app ? window.__app.asks().join(',') : '';
     this.episodes.push(summary);
     try {
       fetch('/__log', { method: 'POST', body: JSON.stringify(summary), keepalive: true }).catch(() => undefined);

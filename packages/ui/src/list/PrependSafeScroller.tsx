@@ -34,13 +34,17 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
   /**
    * Asked when the viewport is within `leadViewports` client heights of the loaded start and no ask is in flight:
    * the consumer fetches the next older rows and lands them at the start of `items`. The gate reopens when rows
-   * land at the start or when `loading` turns from true to false; a returned promise's settle reopens it two
-   * frames later if no commit did (a read that brought nothing and no `loading`) — never in the settle itself,
-   * which precedes the rows' commit. A read that brings nothing reopens the gate only through `loading` or the
-   * promise; pass one of them.
+   * land at the start or when `loading` turns from true to false — never on the ask's own result (a promise
+   * settles before the rows' commit, and a scroll event in that gap would ask for the same page again). A read
+   * that brings nothing reopens the gate only through `loading`; a consumer that reaches the start sets
+   * `remainingAbove` to 0.
    */
   onNeedMore?: () => void | Promise<unknown>;
-  /** True while the consumer's fetch is in flight: renders `loadingRow` at the reservoir's foot. */
+  /**
+   * True while the consumer's fetch is in flight: renders `loadingRow` at the reservoir's foot, and its turn to
+   * false reopens the gate — in the same update that lands the rows, or after it, never before (the next ask
+   * reads the consumer's cursor).
+   */
   loading?: boolean;
   /** The face shown just above the first row while `loading` and rows remain above — height-neutral. */
   loadingRow?: ReactNode;
@@ -98,7 +102,11 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const observedHeights = useRef(new Map<Element, number>());
   const askInFlight = useRef(false);
   const landedSinceAsk = useRef(false);
-  const previousLoading = useRef(loading);
+  /** The consumer's inputs as of the last commit judged, so each judgment sees what changed. */
+  const previousCommit = useRef({ loading, remainingAbove, estimatedRowHeight });
+  /** Every ask numbered; the ask a `loading` turn belongs to is the latest one when it turned true. */
+  const askSeq = useRef(0);
+  const loadingForAsk = useRef(-1);
   const mounted = useRef(false);
   const firstKey = useRef<string | number | undefined>(undefined);
   const latest = useRef({ onNeedMore, onRest, remainingAbove, estimatedRowHeight, leadViewports });
@@ -135,15 +143,6 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     [scrollerRef]
   );
 
-  /** A settled ask's fallback reopen, cancelled by the commit that reopens the gate instead. */
-  const settleFallback = useRef(0);
-  const cancelSettleFallback = useCallback(() => {
-    if (settleFallback.current !== 0) {
-      cancelAnimationFrame(settleFallback.current);
-      settleFallback.current = 0;
-    }
-  }, []);
-
   /** The gate: ask once while the viewport is inside the lead with rows remaining above and no ask in flight. */
   const askIfNeeded = useCallback(() => {
     const current = engine.current;
@@ -157,28 +156,12 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     }
     askInFlight.current = true;
     landedSinceAsk.current = false;
-    const result = ask();
-    if (result && typeof (result as Promise<unknown>).then === 'function') {
-      // The settle runs in the microtask BEFORE the rows' commit: reopening here would let a scroll event in that
-      // gap ask again with the consumer's cursor still at the old page. The commit reopens the gate; the settle
-      // only arms a fallback for a read that brings nothing and no `loading` — two frames, past any commit.
-      const settled = () => {
-        cancelSettleFallback();
-        let frames = 2;
-        const tick = () => {
-          if (--frames > 0) {
-            settleFallback.current = requestAnimationFrame(tick);
-            return;
-          }
-          settleFallback.current = 0;
-          askInFlight.current = false;
-          askIfNeeded();
-        };
-        settleFallback.current = requestAnimationFrame(tick);
-      };
-      (result as Promise<unknown>).then(settled, settled);
-    }
-  }, [cancelSettleFallback]);
+    askSeq.current++;
+    // The ask's result is never the gate's signal: a promise settles in the microtask BEFORE the rows' commit, and
+    // a scroll event in that gap (a busy main thread under a pan widens it past several frames) would ask again
+    // with the consumer's cursor still at the old page — the same page twice. The commit reopens the gate.
+    void ask();
+  }, []);
 
   /** A reconcile step is owed: at the next rest, not in this task. */
   const requestReconcile = useCallback(() => {
@@ -316,50 +299,45 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     syncObserved();
   }, [items, itemKey, rowBoxes, syncObserved, requestReconcile]);
 
-  // After a landing: the gate reopens and the lead is re-asked (the chain fills it). Not at the mount — the
-  // opening ask waits its frame.
-  useEffect(() => {
-    if (!mounted.current) {
-      return;
-    }
-    if (landedSinceAsk.current) {
-      landedSinceAsk.current = false;
-      cancelSettleFallback();
-      askInFlight.current = false;
-    }
-    askIfNeeded();
-  }, [items, askIfNeeded, cancelSettleFallback]);
-
-  // The consumer's count or seed changed: the target moves — a reconcile at the rest; the gate re-judged, not
-  // reopened (a count that arrives before its rows must not ask twice).
+  // ONE judgment per commit, after it: the gate reopens at most once — for rows that landed at the start, or for
+  // a `loading` that turned false and belongs to the ask in flight (a turn that lands with the chain's next ask
+  // in the same commit closes the old read, never the new one) — then the lead is asked once. The consumer's
+  // count or seed moving the target asks for a reconcile at the rest and re-judges the lead without reopening
+  // (a count that arrives before its rows must not ask twice). Not at the mount: the opening ask waits its frame.
   useEffect(() => {
     const current = engine.current;
+    const previous = previousCommit.current;
+    previousCommit.current = { loading, remainingAbove, estimatedRowHeight };
     if (!current || !mounted.current) {
       return;
     }
-    current.setRemaining(remainingAbove, estimatedRowHeight);
-    requestReconcile();
-    askIfNeeded();
-  }, [remainingAbove, estimatedRowHeight, requestReconcile, askIfNeeded]);
-
-  // The consumer's fetch ended (true → false), with or without rows to land: the gate reopens.
-  useEffect(() => {
-    const was = previousLoading.current;
-    previousLoading.current = loading;
-    if (was === true && loading === false) {
-      cancelSettleFallback();
-      askInFlight.current = false;
-      askIfNeeded();
+    if (remainingAbove !== previous.remainingAbove || estimatedRowHeight !== previous.estimatedRowHeight) {
+      current.setRemaining(remainingAbove, estimatedRowHeight);
+      requestReconcile();
     }
-  }, [loading, askIfNeeded, cancelSettleFallback]);
+    let reopen = false;
+    if (landedSinceAsk.current) {
+      landedSinceAsk.current = false;
+      reopen = true;
+    }
+    if (previous.loading === true && loading === false && loadingForAsk.current === askSeq.current) {
+      reopen = true;
+    }
+    if (previous.loading !== true && loading === true) {
+      loadingForAsk.current = askSeq.current; // the consumer answers the latest ask
+    }
+    if (reopen) {
+      askInFlight.current = false;
+    }
+    askIfNeeded();
+  }, [items, loading, remainingAbove, estimatedRowHeight, requestReconcile, askIfNeeded]);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      cancelSettleFallback();
     };
-  }, [cancelSettleFallback]);
+  }, []);
 
   useLayoutEffect(() => {
     if (!apiRef) {
