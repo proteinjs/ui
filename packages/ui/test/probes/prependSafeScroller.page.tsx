@@ -278,6 +278,8 @@ const ARM_DELAY_MS = 800;
 class EpisodeProbe {
   readonly episodes: Summary[] = [];
   private census = 0;
+  /** Per write: whether a finger was down on the scroller at the moment of the write (the census's own record). */
+  private readonly writeFlags: boolean[] = [];
   private fingerDown = false;
   private fingerY: number | null = null;
   private previous: Frame | null = null;
@@ -296,6 +298,7 @@ class EpisodeProbe {
     const scrollerId = SCROLLER_ID;
     const countWrite = () => {
       this.census++;
+      this.writeFlags.push(this.fingerDown);
     };
     const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
     Object.defineProperty(Element.prototype, 'scrollTop', {
@@ -515,11 +518,12 @@ class EpisodeProbe {
         summary.maxLandingDrift = Math.max(summary.maxLandingDrift, Math.abs(shift));
       }
     }
+    // A write is under a finger by the census's own record at the write — not by either frame's finger state: a
+    // reconcile that lands on the frame after a lift (an engine firing scrollend at the lift) is not under it.
+    const writesUnderFinger = wrote ? this.writeFlags.slice(previous.writes, frame.writes).filter(Boolean).length : 0;
     if (wrote) {
       summary.writes += frame.writes - previous.writes;
-      if (finger) {
-        summary.writesUnderFinger += frame.writes - previous.writes;
-      }
+      summary.writesUnderFinger += writesUnderFinger;
     }
     if (frame.ch !== previous.ch) {
       this.pendingWrite = null;
@@ -539,7 +543,7 @@ class EpisodeProbe {
     if (landed && shift !== null && Math.abs(shift) > JUMP_PX) {
       jumps.push({ kind: 'landing-shift', px: Math.round(shift) });
     }
-    if (wrote && finger) {
+    if (writesUnderFinger > 0) {
       jumps.push({ kind: 'write-under-finger', px: Math.round(moved ?? 0) });
     } else if (wrote && !landed && moved !== null) {
       this.pendingWrite = moved;
