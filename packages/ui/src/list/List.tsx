@@ -100,6 +100,29 @@ const groupConsecutive = <T,>(rows: T[], groupKey: (row: T) => string): ListGrou
   return groups;
 };
 
+type ListRowProps<T> = {
+  row: T;
+  /** The row's position in the full list — threaded to `renderRow`. */
+  index: number;
+  renderRow: (row: T, index: number) => ReactNode;
+};
+
+const ListRowInner = <T,>({ row, index, renderRow }: ListRowProps<T>) => <>{renderRow(row, index)}</>;
+
+/**
+ * ONE row of the list, memoized: a render of the shell — a window landing, a fetch-state flip
+ * (`isFetching`), a parent re-rendering with equal props — re-renders only the rows whose inputs
+ * changed, and a row with the same item, the same index and the same `renderRow` renders nothing.
+ * The inputs are stable by value for the usual list: react-query hands back the same row objects
+ * until a refetch replaces them (fresh objects then render, so new data never shows stale), a
+ * window appends and never shifts the rows above it, and a consumer passing a stable `renderRow`
+ * (`useCallback`, or a module-level function) gets the memo's whole worth. An inline arrow still
+ * renders every row every time, as before — correct, just not cheap. Without this a list of N rows
+ * rendered all N on every shell render, twice per page landing: the cost that made a long list
+ * stutter as it grew.
+ */
+const ListRow = React.memo(ListRowInner) as unknown as typeof ListRowInner;
+
 const defaultSkeleton = (
   <Box sx={{ width: '100%' }}>
     {[0, 1, 2].map((index) => (
@@ -217,12 +240,12 @@ export function List<T>({
               {renderGroupHeader?.(group.key, group.rows, groupIndex)}
               <Box sx={groupRowsSx}>
                 {group.rows.map((row, rowIndex) => (
-                  <React.Fragment key={rowId(row)}>{renderRow(row, group.startIndex + rowIndex)}</React.Fragment>
+                  <ListRow<T> key={rowId(row)} row={row} index={group.startIndex + rowIndex} renderRow={renderRow} />
                 ))}
               </Box>
             </Box>
           ))
-        : rows.map((row, index) => <React.Fragment key={rowId(row)}>{renderRow(row, index)}</React.Fragment>)}
+        : rows.map((row, index) => <ListRow<T> key={rowId(row)} row={row} index={index} renderRow={renderRow} />)}
       {/* The back-to-top strip AHEAD of the foot: sticky inside the scroller, it rests at its flow
           position once the reader is at the tail, the button floating up from it — placed after the
           foot it sat exactly over a loading row's spinner (the phone, 2026-10-16). Ahead, the button
