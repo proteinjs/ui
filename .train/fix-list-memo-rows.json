@@ -1,6 +1,0 @@
-{
-  "branch": "fix/list-memo-rows",
-  "packages": ["ui"],
-  "suites": ["packages/ui/test/listRowMemo.test.tsx", "packages/ui/test/list.test.tsx", "packages/ui/test/listFoot.test.tsx"],
-  "removes": []
-}
