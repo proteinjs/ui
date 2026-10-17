@@ -1,6 +1,0 @@
-{
-  "branch": "feat/prepend-safe-scroller-r2",
-  "packages": ["ui"],
-  "suites": ["packages/ui/test/prependSafeScroller.test.tsx"],
-  "removes": []
-}
