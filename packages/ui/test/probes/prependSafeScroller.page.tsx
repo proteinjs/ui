@@ -11,15 +11,14 @@
  * scroller — scrollTop, scrollHeight, the row count, the first visible row and its top, the previous frame's row
  * measured in THIS frame's layout, the census of programmatic scrollTop writes on the scroller (with the finger's
  * state at each), the finger's clientY — and closes QUIET_MS after the last signal. Every frame is judged against
- * the previous one:
- *   • under a finger the previous frame's row moves 1:1 with the finger (within a frame's own finger travel —
- *     the scroll offset trails the composited pan by up to a frame);
- *   • on a LANDING frame (the row count grew) the previous frame's row keeps its top within JUMP_PX, and
- *     scrollHeight is unchanged — the height-neutral law;
- *   • on a WRITE frame (the census grew, no finger) the previous frame's row keeps its top within JUMP_PX — a
- *     write at the rest is neutral or it is a jump.
- * A frame is judged against the PREVIOUS frame's row measured now, never against whichever row is first visible
- * now: a restore that fails puts an older row first, and judging the new first row would miss exactly that jump.
+ * the previous one, on the previous frame's row measured in THIS frame's layout (never on whichever row is first
+ * visible now: a restore that fails puts an older row first, and judging the new first row would miss that jump):
+ *   • on a LANDING frame (the row count grew) the row's position in CONTENT coordinates — its viewport top plus
+ *     the scroll offset, the layout above it — is unchanged within JUMP_PX (the height-neutral law: a pan or a
+ *     fling moves the viewport, never the content above the row), scrollHeight is unchanged, and nothing was
+ *     written; a write while a finger is down is a jump by the platform's law (the pan re-derives it away);
+ *   • on a WRITE frame with no finger (the census grew — a reconcile at the rest) the row keeps its viewport top
+ *     within JUMP_PX, judged over that frame and the next (an engine may acknowledge the offset a frame late).
  * The episode's summary is posted to /__log, kept in window.__probe.episodes and drawn in the overlay.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -283,6 +282,8 @@ class EpisodeProbe {
   private fingerY: number | null = null;
   private previous: Frame | null = null;
   private previousAnchorEl: Element | null = null;
+  /** A write's displacement on its own frame, judged together with the next frame's. */
+  private pendingWrite: number | null = null;
   private frame = 0;
   private quiet = 0;
   private current: Summary | null = null;
@@ -495,8 +496,11 @@ class EpisodeProbe {
     }
     const landed = frame.rows > previous.rows;
     const wrote = frame.writes > previous.writes;
-    const moved = frame.previousAnchorTop === null ? null : frame.previousAnchorTop - previous.anchorTop;
     const finger = frame.fingerY !== null || previous.fingerY !== null;
+    // The previous frame's row: its displacement in the viewport (`moved`), and in CONTENT coordinates (`shift`) —
+    // the layout change above it, which no pan and no fling enters into. A neutral landing shifts nothing.
+    const moved = frame.previousAnchorTop === null ? null : frame.previousAnchorTop - previous.anchorTop;
+    const shift = moved === null ? null : moved + (frame.st - previous.st);
     if (landed) {
       summary.landings++;
       if (finger) {
@@ -507,8 +511,8 @@ class EpisodeProbe {
       } else {
         summary.maxShChangeAtLanding = Math.max(summary.maxShChangeAtLanding, Math.abs(frame.sh - previous.sh));
       }
-      if (moved !== null) {
-        summary.maxLandingDrift = Math.max(summary.maxLandingDrift, Math.abs(moved));
+      if (shift !== null) {
+        summary.maxLandingDrift = Math.max(summary.maxLandingDrift, Math.abs(shift));
       }
     }
     if (wrote) {
@@ -516,33 +520,40 @@ class EpisodeProbe {
       if (finger) {
         summary.writesUnderFinger += frame.writes - previous.writes;
       }
-      if (!landed && moved !== null) {
-        summary.maxWriteDrift = Math.max(summary.maxWriteDrift, Math.abs(moved));
-      }
     }
-    if (moved === null || frame.ch !== previous.ch) {
+    if (frame.ch !== previous.ch) {
+      this.pendingWrite = null;
       return;
     }
-    let jump: { kind: string; px: number } | null = null;
-    if (frame.fingerY !== null && previous.fingerY !== null) {
-      const travel = frame.fingerY - previous.fingerY;
-      const offLaw = Math.abs(moved - travel);
-      if (offLaw > Math.max(JUMP_PX, Math.abs(travel))) {
-        jump = { kind: 'under-finger', px: Math.round(offLaw) };
+    const jumps: Array<{ kind: string; px: number }> = [];
+    // A write at the rest is judged over its frame and the next: an engine whose scroll offset acknowledges a
+    // write a frame late shows the layout shift first and the offset after; the smaller displacement is the truth.
+    if (this.pendingWrite !== null && moved !== null) {
+      const drift = Math.min(Math.abs(this.pendingWrite), Math.abs(this.pendingWrite + moved));
+      summary.maxWriteDrift = Math.max(summary.maxWriteDrift, drift);
+      if (drift > JUMP_PX) {
+        jumps.push({ kind: 'write-drift', px: Math.round(drift) });
       }
-    } else if ((landed || wrote) && Math.abs(moved) > JUMP_PX) {
-      jump = { kind: landed ? 'landing' : 'write', px: Math.round(moved) };
+      this.pendingWrite = null;
     }
-    if (jump) {
+    if (landed && shift !== null && Math.abs(shift) > JUMP_PX) {
+      jumps.push({ kind: 'landing-shift', px: Math.round(shift) });
+    }
+    if (wrote && finger) {
+      jumps.push({ kind: 'write-under-finger', px: Math.round(moved ?? 0) });
+    } else if (wrote && !landed && moved !== null) {
+      this.pendingWrite = moved;
+    }
+    jumps.forEach((jump) => {
       summary.jumps++;
       if (summary.jumpRows.length < 48) {
         summary.jumpRows.push(
-          `+${frame.t - summary.t0}/${jump.kind} row=${previous.anchorId} ${Math.round(previous.anchorTop)}>${Math.round(
-            frame.previousAnchorTop!
-          )} d=${jump.px} st=${Math.round(previous.st)}>${Math.round(frame.st)} sh=${previous.sh}>${frame.sh} rows=${previous.rows}>${frame.rows} writes=${previous.writes}>${frame.writes} f=${frame.fingerY === null ? 'up' : Math.round(frame.fingerY)}`
+          `+${frame.t - summary.t0}/${jump.kind} row=${previous.anchorId} top ${Math.round(previous.anchorTop)}>${Math.round(
+            frame.previousAnchorTop ?? NaN
+          )} shift=${shift === null ? '-' : Math.round(shift)} d=${jump.px} st=${Math.round(previous.st)}>${Math.round(frame.st)} sh=${previous.sh}>${frame.sh} rows=${previous.rows}>${frame.rows} writes=${previous.writes}>${frame.writes} f=${frame.fingerY === null ? 'up' : Math.round(frame.fingerY)}`
         );
       }
-    }
+    });
   }
 
   private close(): void {

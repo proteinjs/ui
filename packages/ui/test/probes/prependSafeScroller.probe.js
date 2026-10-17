@@ -13,7 +13,7 @@
  *       write mid-pan, so the page is given WebKit's pan law in-page: while the probe's finger is down, every
  *       programmatic scrollTop write to the scroller is re-asserted to the pan's own position on the next frame
  *       (the measured iOS behaviour: the pan re-derives the offset from the touch's origin). Scenarios, per mode:
- *         the HELD DRAG  — three slow finger-down drags into the lead; pages land under the finger;
+ *         the HELD DRAG  — six slow finger-down drags into the lead; pages land under the finger;
  *         the FLICK      — a touch fling (Chromium's own momentum) into the lead;
  *         the END        — drags until nothing remains above; the leftover reservoir collapses at the rest;
  *         the LOW COUNT  — the consumer under-counts: the reservoir runs short, the debt is paid at the rest.
@@ -171,7 +171,8 @@ class PrependSafeScrollerProbe {
       s.maxShChangeAtLanding <= 1 &&
       s.maxWriteDrift <= TOLERANCE_PX &&
       s.jumps === 0;
-    const red = s.landings > 0 && (s.writesAtLandings > 0 || s.writesUnderFinger > 0) && s.jumps > 0;
+    // The shape replaced: it writes at the landing and the landing shifts the content by the page's height.
+    const red = s.landings > 0 && s.writesAtLandings > 0 && s.maxLandingDrift > TOLERANCE_PX && s.jumps > 0;
     return { mode, summary: s, lawful, red };
   }
 
@@ -335,9 +336,9 @@ const runChromium = async (probe, playwrightPath) => {
         `\n── ${label} ── opened: rows ${opened.rows}, above ${opened.remaining}, reserve ${Math.round(opened.reserve)} px, st ${Math.round(opened.st)} / sh ${opened.sh}`
       );
 
-      // THE HELD DRAG: three slow drags, the finger down ≈ 2.4 s each — pages land under it (latency 350 ms).
+      // THE HELD DRAG: six slow drags, the finger down ≈ 2.4 s each — pages land under it (latency 350 ms).
       await mark(t.page);
-      for (let k = 0; k < 3; k++) {
+      for (let k = 0; k < 6; k++) {
         await drag(t, 80, 8, 600);
       }
       await settle(t.page);
@@ -426,7 +427,7 @@ const runChromium = async (probe, playwrightPath) => {
     // THE LOW COUNT: the consumer under-counts the rows above; landings exceed the room; the debt is paid at the rest.
     const low = await open('mode=reservoir&count=low');
     await mark(low.page);
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < 6; k++) {
       await drag(low, 80, 8, 600);
     }
     await settle(low.page, 3000);
@@ -443,12 +444,9 @@ const runChromium = async (probe, playwrightPath) => {
       PrependSafeScrollerProbe.describe(debt)
     );
     check(
-      `low count: the debt is paid at the rest — writes only with no finger down, each moving the row ≤ ${TOLERANCE_PX} px, the reservoir back at or above 0`,
-      debt.writes >= 1 &&
-        debt.writesUnderFinger === 0 &&
-        debt.maxWriteDrift <= TOLERANCE_PX &&
-        lowState.reserve >= -0.5,
-      `reserve ${lowState.reserve.toFixed(1)} px after the rest`
+      `low count: the debt is paid at the rest — any write with no finger down, moving the row ≤ ${TOLERANCE_PX} px, the reservoir back at or above 0`,
+      debt.writesUnderFinger === 0 && debt.maxWriteDrift <= TOLERANCE_PX && lowState.reserve >= -0.5,
+      `reserve ${lowState.reserve.toFixed(1)} px after the rest; ${debt.writes} writes (an engine whose own anchoring compensates the step reads a drift of 0 and gets none)`
     );
     await low.page.close();
   } finally {
