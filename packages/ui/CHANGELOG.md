@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.20.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.20.0...@proteinjs/ui@4.20.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* List renders each row through a memoized ListRow — a render of the shell (a window landing, a fetch-state flip, a parent's render with equal props) re-renders only the rows whose inputs changed: the row object, its index and the renderRow reference. react-query hands back the same row objects until a refetch replaces them, a window appends and never shifts the rows above it, so a consumer passing a stable renderRow pays for the new rows alone; an inline arrow still renders every row every time, as before. Without this a list of N rows rendered all N on every shell render, twice per page landing — the cost that made a long list stutter as it grew. Test listRowMemo.test.tsx, red-first at the old List (the second window's landing re-rendered every loaded row twice); bite: the memo dropped → the landing case fails. ([db7a1a3](https://github.com/proteinjs/ui/commit/db7a1a37884119c9af1ede0a09d2a4f76497912e))
+
+
+
+
+
 # [4.20.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.19.1...@proteinjs/ui@4.20.0) (2026-10-16)
 
 
