@@ -2,8 +2,13 @@ import { useCallback, useSyncExternalStore } from 'react';
 
 type MatchMedia = (query: string) => MediaQueryList;
 
+/** Where `matchMedia` lives — the window; a test's double stands in. */
+type MediaHost = { matchMedia?: MatchMedia };
+
 type Entry = {
   list: MediaQueryList;
+  /** The `matchMedia` the list came from — a different function on the host means a re-query. */
+  source: MatchMedia;
   listeners: Set<() => void>;
   /** Removes the one `change` listener the registry holds on the list; null while nobody subscribes. */
   detach: (() => void) | null;
@@ -21,12 +26,14 @@ type Entry = {
  *
  * The last subscriber leaving drops the list, so a later mount queries `matchMedia` afresh — a page whose
  * environment changed between mounts (a test swapping `window.matchMedia` per case, a document restored
- * from the back-forward cache) reads the current answer, never a held one.
+ * from the back-forward cache) reads the current answer, never a held one. And a list is re-made when the
+ * host's `matchMedia` is no longer the function it came from (never in a browser; a test double swapped
+ * between renders of one tree), its subscribers carried over — the next render reads the new answer.
  */
 export class MediaQueryRegistry {
   private readonly entries = new Map<string, Entry>();
 
-  constructor(private readonly matchMedia: () => MatchMedia | undefined) {}
+  constructor(private readonly host: () => MediaHost | undefined) {}
 
   /** The query's current answer; false where `matchMedia` does not exist (a server render, a bare DOM). */
   matches(query: string): boolean {
@@ -63,15 +70,27 @@ export class MediaQueryRegistry {
   }
 
   private entry(query: string): Entry | undefined {
-    const existing = this.entries.get(query);
-    if (existing) {
-      return existing;
-    }
-    const matchMedia = this.matchMedia();
-    if (!matchMedia) {
+    const host = this.host();
+    const source = host?.matchMedia;
+    if (typeof source !== 'function') {
       return undefined;
     }
-    const entry: Entry = { list: matchMedia(query), listeners: new Set(), detach: null };
+    const existing = this.entries.get(query);
+    if (existing && existing.source === source) {
+      return existing;
+    }
+    // A swapped matchMedia: the held list answers for an environment that is gone — re-query, the
+    // subscribers moved onto the new list.
+    existing?.detach?.();
+    const entry: Entry = {
+      list: source.call(host, query),
+      source,
+      listeners: existing ? existing.listeners : new Set(),
+      detach: null,
+    };
+    if (entry.listeners.size > 0) {
+      entry.detach = this.attach(entry);
+    }
     this.entries.set(query, entry);
     return entry;
   }
@@ -91,10 +110,8 @@ export class MediaQueryRegistry {
   }
 }
 
-/** The page's registry — `window.matchMedia` where it exists. */
-export const mediaQueryRegistry = new MediaQueryRegistry(() =>
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : undefined
-);
+/** The page's registry — the window's `matchMedia` where it exists. */
+export const mediaQueryRegistry = new MediaQueryRegistry(() => (typeof window !== 'undefined' ? window : undefined));
 
 /**
  * `matches` for a media query, read synchronously on the first render (a client render never paints a

@@ -11,6 +11,9 @@
  *  2. A change on the shared list reaches every consumer: all twelve re-render with the new answer.
  *  3. The last consumer leaving releases the list (its listener removed, nothing held), and a later mount
  *     reads the environment afresh rather than a held answer.
+ *  4. `matchMedia` swapped under a MOUNTED tree (a test double replaced between renders of one root): the
+ *     next render reads the new function's answer, the held list dropped — the shape a per-instance
+ *     `useMediaQuery` had by keying on the function's identity.
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -154,5 +157,27 @@ describe('useFormFactor — one MediaQueryList per query, shared by every caller
     mount();
     expect(readings()).toEqual(Array(CONSUMERS).fill('desktop/fine'));
     expect(lists.length).toBe(4);
+  });
+
+  it('matchMedia swapped under a mounted tree: the next render reads the new answer', () => {
+    mount();
+    expect(readings()).toEqual(Array(CONSUMERS).fill('phone/coarse'));
+    // The double replaced wholesale (a suite's setMedia(false) between two renders of one root).
+    const swapped: RecordingList[] = [];
+    (window as any).matchMedia = (query: string) => {
+      const list = new RecordingList(query, false);
+      swapped.push(list);
+      return list;
+    };
+    mount();
+    expect(readings()).toEqual(Array(CONSUMERS).fill('desktop/fine'));
+    // One new list per query, the consumers' listeners carried onto them; the old lists released.
+    expect(swapped.map((list) => list.listeners.size)).toEqual([1, 1]);
+    expect(lists.map((list) => list.listeners.size)).toEqual([0, 0]);
+    (window as any).matchMedia = (query: string) => {
+      const list = new RecordingList(query, isCoarseQuery(query) ? answer.coarse : answer.phoneWindow);
+      lists.push(list);
+      return list;
+    };
   });
 });
