@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.21.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.1...@proteinjs/ui@4.21.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* a list filled or replaced takes the commit's own count in the rows' layout pass — the open's reservoir stands before the first paint ([02e921f](https://github.com/proteinjs/ui/commit/02e921f72ba1f3c9705d94849d61988d54e365d6))
+* a reservoir shrink step is bounded by the reader's distance from the loaded start; at the scroller's top the visible room goes in one step ([507e0f2](https://github.com/proteinjs/ui/commit/507e0f2e0699302c814ec8f0705b97d33c521a2a))
+
+
+
+
+
 ## [4.21.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.0...@proteinjs/ui@4.21.1) (2026-10-17)
 
 
