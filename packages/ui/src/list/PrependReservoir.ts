@@ -58,23 +58,20 @@ export class PrependReservoir {
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
   initialize(): void {
-    const boxes = this.rowBoxes();
-    if (boxes.length > 0) {
-      const first = boxes[0].getBoundingClientRect();
-      const last = boxes[boxes.length - 1].getBoundingClientRect();
-      const span = last.bottom - first.top;
-      if (span > 0) {
-        this.measuredTotal = span;
-        this.measuredRows = boxes.length;
-      }
-    }
+    this.measureMounted();
     this.reserve = this.target();
     this.apply();
     this.record();
   }
 
-  /** The list was replaced, emptied or filled from empty: sized to the target with nothing to hold the view against. */
+  /**
+   * The list was replaced, emptied or filled from empty: the rows now mounted ARE measured rows — the estimate is
+   * their mean from this commit (the seed stands only while no row is in the document), so a consumer's exact count
+   * sizes an exact room before the first paint and the first landing owes no refill, no debt and no collapse to
+   * a seed that was off. Sized to the target with nothing to hold the view against.
+   */
   reset(): void {
+    this.measureMounted();
     this.reserve = this.target();
     this.apply();
     this.record();
@@ -177,6 +174,23 @@ export class PrependReservoir {
 
   private target(): number {
     return Math.min(PrependReservoir.MAX_RESERVE_PX, this.remaining * this.estimate);
+  }
+
+  /** The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without rows. */
+  private measureMounted(): void {
+    const boxes = this.rowBoxes();
+    if (boxes.length === 0) {
+      this.measuredTotal = 0;
+      this.measuredRows = 0;
+      return;
+    }
+    const first = boxes[0].getBoundingClientRect();
+    const last = boxes[boxes.length - 1].getBoundingClientRect();
+    const span = last.bottom - first.top;
+    if (span > 0) {
+      this.measuredTotal = span;
+      this.measuredRows = boxes.length;
+    }
   }
 
   /** The block's size from `reserve`: a positive reserve is its height, a negative one its bottom margin. */

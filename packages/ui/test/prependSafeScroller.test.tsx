@@ -470,6 +470,32 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(scroller.scrollHeight).toBe(5000);
   });
 
+  test('the rows that land with the count ARE measured rows: the room is count × their mean at the commit, never count × the seed — so a consumer’s exact count makes an exact room, and the first landing owes nothing at the rest', () => {
+    const { harness, scroller } = mount({ initial: [], remaining: 0 });
+    act(() => {
+      harness.replace(rows(1, 10, 150)); // the head page: ten rows of 150 (the seed says 100)
+      harness.setRemaining(14); // the consumer's exact count of rows above (a server's count)
+    });
+    // AT THE COMMIT: 14 × the mounted rows' mean (150) = 2100 — not 14 × the seed (1400).
+    expect(reservoirOf(scroller).style.height).toBe('2100px');
+    expect(writes.length).toBe(0);
+    readerScrollsTo(scroller, 2600); // the consumer parks at the end
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('2100px');
+    // THE FIRST LANDING of ten rows of 150 shrinks the room by exactly what landed: 600 left for the 4 remaining, the
+    // estimate unchanged, nothing owed — no refill, no debt, no collapse at any rest.
+    act(() => {
+      harness.prepend(rows(-9, 0, 150));
+    });
+    expect(reservoirOf(scroller).style.height).toBe('600px');
+    expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
+    expect(scroller.scrollHeight).toBe(3600); // 600 + 20 × 150: the same total as before the landing (2100 + 10 × 150)
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('600px');
+  });
+
   test('the list REPLACED (another chat’s rows and count in one commit): sized at the commit the same way, no step', () => {
     const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 0 });
     expect(reservoirOf(scroller).style.height).toBe('0px');
