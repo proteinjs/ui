@@ -21,9 +21,11 @@
  *
  * The only scroll-position writes are the RECONCILE steps the owner runs at the engine's rest (`ScrollRest`): the
  * debt paid, the leftover collapsed once the consumer says nothing remains above, a refill when the estimate ran
- * low by more than a viewport. Each step changes the block by at most one viewport and writes the drift it
- * MEASURES on the first visible row after the change — an engine whose own scroll anchoring already compensated
- * reads a drift of zero and gets no write — so a step the engine drops is bounded by a viewport, never a page.
+ * low by more than a viewport. Each step changes the block by at most one viewport — a shrink by at most the
+ * reader's distance from the loaded start as well — and writes the drift it MEASURES on the first visible row
+ * after the change — an engine whose own scroll anchoring already compensated reads a drift of zero and gets no
+ * write — so a step the engine drops is bounded by a viewport, never a page, and a dropped shrink never pulls the
+ * loaded start past the reader's edge.
  */
 export class PrependReservoir {
   /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
@@ -131,7 +133,13 @@ export class PrependReservoir {
   /**
    * ONE RECONCILE STEP, at the engine's rest: the reservoir moves toward its target by at most a viewport, and the
    * scroller is written by the drift measured on the first visible row — zero where the engine's own anchoring
-   * already held it. Returns the drift written (0 for none).
+   * already held it. A SHRINK (the end collapse, an overestimate) is bounded further, by the reader's distance from
+   * the loaded start: its write holds the reader's row, and a write the engine drops (a pan that begins in the
+   * write's frame; momentum that re-asserts its own offset) leaves the rows pulled up under the reader by the step —
+   * bounded by that distance, a dropped step can at worst bring the loaded start to the reader's edge, never the
+   * empty room past it. With the scroller at its very top no write can hold the first row at all (the offset
+   * cannot go below 0), so the room the reader is looking at goes in ONE step — one move of the first row to the
+   * edge, not a viewport of it every rest. Returns the drift written (0 for none).
    */
   step(clientHeight: number): number {
     const want = this.remaining > 0 ? this.target() : 0;
@@ -139,7 +147,12 @@ export class PrependReservoir {
     if (Math.abs(gap) <= 0.5) {
       return 0;
     }
-    const limit = Math.max(1, clientHeight * PrependReservoir.STEP_VIEWPORTS);
+    let limit = Math.max(1, clientHeight * PrependReservoir.STEP_VIEWPORTS);
+    if (gap < 0) {
+      const offset = this.scroller.scrollTop;
+      limit =
+        offset <= 0.5 ? Math.abs(gap) : Math.max(1, Math.min(limit, Math.abs(this.distanceFromLoadedStart()), offset));
+    }
     const delta = Math.sign(gap) * Math.min(Math.abs(gap), limit);
     return this.applyWithDrift(this.reserve + delta);
   }
@@ -181,8 +194,11 @@ export class PrependReservoir {
     let written = 0;
     if (anchor && before !== null) {
       const drift = anchor.getBoundingClientRect().top - before;
-      if (Math.abs(drift) > 0.5) {
-        this.scroller.scrollTop = this.scroller.scrollTop + drift;
+      const offset = this.scroller.scrollTop + drift;
+      // An offset below 0 is one the engine clamps: the write would hold nothing — none is made (the one-step
+      // collapse at the very top moves the first row to the edge by design).
+      if (Math.abs(drift) > 0.5 && offset >= 0) {
+        this.scroller.scrollTop = offset;
         written = drift;
       }
     }
