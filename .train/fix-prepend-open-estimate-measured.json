@@ -1,6 +1,0 @@
-{
-  "branch": "fix/prepend-open-estimate-measured",
-  "packages": ["ui"],
-  "suites": ["packages/ui/test/prependSafeScroller.test.tsx"],
-  "removes": []
-}
