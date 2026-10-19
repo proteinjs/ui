@@ -279,14 +279,24 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (!current) {
       return;
     }
+    // THE OPEN: a list filled from empty or replaced is sized from THIS commit's count and seed, in the rows' own
+    // layout pass — a consumer that lands its head page sets the count in the same commit, and the room must stand
+    // before the first paint. A count applied in the passive effect below sized the room from the count of the
+    // commit before (0 at an open) and built it at the engine's rest, a viewport per rest: ten writes interleaving
+    // with the consumer's own park over the first quarter second, the end edge creeping under the reader. The
+    // passive effect then sees the same count and owes nothing.
+    const fill = () => {
+      current.setRemaining(latest.current.remainingAbove, latest.current.estimatedRowHeight);
+      current.reset();
+    };
     const previous = firstKey.current;
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
     if (previous === undefined || items.length === 0) {
-      current.reset();
+      fill();
     } else {
       const index = items.findIndex((item) => itemKey(item) === previous);
       if (index < 0) {
-        current.reset();
+        fill();
       } else if (index > 0) {
         const boxes = rowBoxes();
         current.land(boxes[index] ?? null, index);

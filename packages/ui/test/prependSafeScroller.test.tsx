@@ -17,6 +17,9 @@
  *  3. When nothing remains above, the leftover reservoir collapses at the rest only, by viewport-sized steps,
  *     each a neutral write; nothing while scroll events keep arriving.
  *  4. A row above the reader that grows later is absorbed with no write (the resize observation).
+ *  5. THE OPEN: a list filled from empty (or replaced) with a count of rows above in the SAME commit sizes the
+ *     reservoir to count × estimate in the rows' own layout pass — before the first paint, with no write of its
+ *     own and no step at any later rest.
  *  The gate: `onNeedMore` leaves when the viewport enters the lead, once per read, re-asked after a landing that
  *  leaves the viewport inside the lead, never with nothing remaining; a settled promise or `loading` false reopens
  *  it. The loading row renders at the reservoir's foot only while loading with rows remaining, height-neutrally.
@@ -391,6 +394,44 @@ describe('law 4 — growth above the reader is absorbed without a write', () => 
     expect(reservoirOf(scroller).style.height).toBe('1940px');
     expect(offsetOf(scroller, 4)).toBe(-50);
     expect(writes.length).toBe(0);
+  });
+});
+
+describe('law 5 — the open: a list filled from empty takes the count in the rows’ own layout pass', () => {
+  test('rows and remainingAbove landing in ONE commit: the reservoir is count × estimate at the commit, the scroller writes nothing, and no rest step follows', () => {
+    const { harness, scroller } = mount({ initial: [], remaining: 0 });
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    act(() => {
+      harness.replace(rows(1, 10, 100)); // the head page lands …
+      harness.setRemaining(40); // … with the consumer's count of rows above, in the same commit (a chat's own shape)
+    });
+    // AT THE COMMIT: the room for 40 rows at the seed estimate (no row was measured while the list was empty), the
+    // scroller's height with it, and nothing written — the consumer's own park is the one write of an open.
+    expect(reservoirOf(scroller).style.height).toBe('4000px');
+    expect(scroller.scrollHeight).toBe(5000);
+    expect(writes.length).toBe(0);
+    readerScrollsTo(scroller, 4400); // the consumer parks at the end
+    // Rest after rest, nothing is owed: no step, no write, the room as sized.
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('4000px');
+    expect(scroller.scrollTop).toBe(4400);
+    expect(scroller.scrollHeight).toBe(5000);
+  });
+
+  test('the list REPLACED (another chat’s rows and count in one commit): sized at the commit the same way, no step', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 0 });
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    act(() => {
+      harness.replace(rows(201, 210, 100));
+      harness.setRemaining(20);
+    });
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
+    expect(writes.length).toBe(0);
+    readerScrollsTo(scroller, 2400);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
   });
 });
 
