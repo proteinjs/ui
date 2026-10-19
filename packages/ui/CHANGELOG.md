@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.21.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.2...@proteinjs/ui@4.21.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* a list filled or replaced measures the rows it mounts — the open's room is the count × their mean, never × the seed ([68928ba](https://github.com/proteinjs/ui/commit/68928ba687acf9ea1b8471d9071fc937a352b96f))
+
+
+
+
+
 ## [4.21.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.1...@proteinjs/ui@4.21.2) (2026-10-19)
 
 
