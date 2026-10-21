@@ -1,6 +1,6 @@
 {
   "name": "@proteinjs/ui",
-  "version": "4.21.3",
+  "version": "4.22.0",
   "description": "UI libs",
   "publishConfig": {
     "access": "public"

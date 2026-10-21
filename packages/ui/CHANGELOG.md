@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.22.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.3...@proteinjs/ui@4.22.0) (2026-10-21)
+
+
+### Features
+
+* **ui:** Table.rowClickable — per-row clickability beside rowOnClick; a refused row wears the disabled presence and its click door is not bound (plans/PLAN_OFFLINE_ROUTER_AND_UX_2026-10-18.md §2 "The one Table addition") ([4e57c6b](https://github.com/proteinjs/ui/commit/4e57c6b3109711419ed0d5ca7364772afabe318a))
+* **ui:** the route guard — a navigation guard at the one place every navigation passes (plans/PLAN_OFFLINE_ROUTER_AND_UX_2026-10-18.md §2; DECISIONS 654 (a)) ([8ddad67](https://github.com/proteinjs/ui/commit/8ddad67db5108e32226aaa9c36e4704a510af0bc))
+
+
+
+
+
 ## [4.21.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.21.2...@proteinjs/ui@4.21.3) (2026-10-19)
 
 
