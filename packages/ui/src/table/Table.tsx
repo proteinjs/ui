@@ -88,6 +88,15 @@ export type TableProps<T> = {
   /** Setter which will be used to update the row count when rows are loaded */
   setRowCount?: React.Dispatch<React.SetStateAction<number | undefined>>;
   rowOnClick?: RowClickAction<T>;
+  /**
+   * Per-row clickability beside `rowOnClick`: a row judged `false` renders at the disabled
+   * presence — `aria-disabled`, no pointer cursor, no `:active` wash, reduced presence — and the
+   * click door is not bound, so a tap does nothing and nothing on the row says it would. The
+   * Table alone owns a row's click affordance (the cursor, the wash, the door), so one predicate
+   * governs the look and the act together. Absent, every row of a clickable table is clickable;
+   * ignored when `rowOnClick` is absent.
+   */
+  rowClickable?: (row: T) => boolean;
   /** Buttons displayed in the table head */
   buttons?: TableButton<T>[];
   /** If true, use pagination for table page navigation, if false uses infinite scroll. Defaults to false. */
@@ -139,6 +148,7 @@ export function Table<T>({
   tableLoader,
   refetchOnWindowFocus = false,
   rowOnClick,
+  rowClickable,
   setRowCount,
   pagination = false,
   tablePaginationProps,
@@ -370,6 +380,19 @@ export function Table<T>({
     // If result is void, do nothing (the action has been performed in the function)
   }
 
+  /**
+   * A row's click affordance — one verdict for the look and the door, on both faces: clickable when
+   * the table has a row act and `rowClickable` admits the row (or is absent); disabled when the table
+   * has a row act and the predicate refuses the row. A table with no row act has neither.
+   */
+  function rowAffordance(row: T): { clickable: boolean; disabled: boolean } {
+    if (!rowOnClick) {
+      return { clickable: false, disabled: false };
+    }
+    const clickable = rowClickable ? rowClickable(row) : true;
+    return { clickable, disabled: !clickable };
+  }
+
   function updateRowsPerPage(newValue: number) {
     setRowsPerPage(newValue);
     setPage(0);
@@ -520,23 +543,25 @@ export function Table<T>({
           rows.map((row, index) => {
             index = rowsPerPage * page + index;
             const isSelected = typeof selectedRows[index] !== 'undefined';
+            const { clickable, disabled } = rowAffordance(row);
             return (
               <Box
                 data-table-phone-row
                 key={index}
+                aria-disabled={disabled || undefined}
                 onPointerDown={
-                  rowOnClick
+                  clickable
                     ? (event: React.PointerEvent) => {
                         pointerDownAt.current = { x: event.clientX, y: event.clientY };
                       }
                     : undefined
                 }
                 onClick={
-                  rowOnClick
-                    ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick, navigate)
+                  clickable
+                    ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
                     : undefined
                 }
-                sx={{
+                sx={(theme) => ({
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: 1,
@@ -547,8 +572,9 @@ export function Table<T>({
                   borderColor: 'divider',
                   '&:last-of-type': { borderBottom: 'none' },
                   ...(isSelected ? { backgroundColor: 'action.selected' } : {}),
-                  ...(rowOnClick ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
-                }}
+                  ...(clickable ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
+                  ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
+                })}
               >
                 {selectable && (
                   <Checkbox
@@ -683,24 +709,30 @@ export function Table<T>({
               {rows.map((row, index) => {
                 index = rowsPerPage * page + index;
                 const isSelected = typeof selectedRows[index] !== 'undefined';
+                const { clickable, disabled } = rowAffordance(row);
                 return (
                   <TableRow
-                    hover
+                    // A row judged not clickable neither lights on hover nor says it would.
+                    hover={!disabled}
                     tabIndex={-1}
                     key={index}
                     selected={isSelected}
+                    aria-disabled={disabled || undefined}
                     // Clickable rows say so: the framework never signaled the row-click door.
-                    sx={rowOnClick ? { cursor: 'pointer' } : undefined}
+                    sx={(theme) => ({
+                      ...(clickable ? { cursor: 'pointer' } : {}),
+                      ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
+                    })}
                     onPointerDown={
-                      rowOnClick
+                      clickable
                         ? (event: React.PointerEvent) => {
                             pointerDownAt.current = { x: event.clientX, y: event.clientY };
                           }
                         : undefined
                     }
                     onClick={
-                      rowOnClick
-                        ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick, navigate)
+                      clickable
+                        ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
                         : undefined
                     }
                   >
