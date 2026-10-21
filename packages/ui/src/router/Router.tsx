@@ -7,6 +7,7 @@ import { Page, PageComponentProps, getPages } from './Page';
 import { createUrlParams } from './createUrlParams';
 import { NotFound } from './NotFound';
 import { decorateHistoryWithViewTransitions, RouteTransitionPolicy } from './ViewTransitionHistory';
+import { decorateHistoryWithRouteGuard, RouteGuard } from './RouteGuardHistory';
 
 export type AppOptions = {
   pageContainer?: React.ComponentType<{ page: Page }>;
@@ -19,6 +20,13 @@ export type AppOptions = {
    * transition seam. Absent → byte-identical to the plain BrowserRouter this replaced.
    */
   routeTransitions?: RouteTransitionPolicy;
+  /**
+   * Optional navigation guard: consulted for every navigation the router dispatches, the initial
+   * location included, at the same seam (see RouteGuardHistory). A verdict replaces the un-admitted
+   * location in place before the app renders it. Composed nearest the raw history, so the
+   * transition policy only ever sees the location that commits. Absent → byte-identical to today.
+   */
+  routeGuard?: RouteGuard;
 };
 
 export function loadApp(options: AppOptions = {}) {
@@ -34,7 +42,7 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
   // mode. The app's own ThemeProvider owns the baseline.
   return (
     <div>
-      <HistoryRouter routeTransitions={props.options.routeTransitions}>
+      <HistoryRouter routeGuard={props.options.routeGuard} routeTransitions={props.options.routeTransitions}>
         <AppRoutes pages={props.pages} options={props.options} />
       </HistoryRouter>
     </div>
@@ -45,15 +53,26 @@ export function Router(props: { pages: Page[]; options: AppOptions }) {
  * BrowserRouter's own ~10 lines (react-router-dom 6.16: createBrowserHistory({window,
  * v5Compat}) + listen→setState), inlined so the history is OURS to decorate — react-router
  * 6.16 has no view-transition support and BrowserRouter hides its history. With no policy
- * the undecorated history dispatches identically to BrowserRouter.
+ * and no guard the undecorated history dispatches identically to BrowserRouter. The guard
+ * sits nearer the raw history than the view-transition policy, so the policy only ever sees
+ * the location that commits; the guard's initial pass runs here, at construction, before the
+ * state below seeds from `history.location`.
  */
-function HistoryRouter(props: { routeTransitions?: RouteTransitionPolicy; children: React.ReactNode }) {
+function HistoryRouter(props: {
+  routeGuard?: RouteGuard;
+  routeTransitions?: RouteTransitionPolicy;
+  children: React.ReactNode;
+}) {
   const historyRef = React.useRef<History | null>(null);
   if (historyRef.current == null) {
-    const history = createBrowserHistory({ window, v5Compat: true });
-    historyRef.current = props.routeTransitions
-      ? decorateHistoryWithViewTransitions(history, props.routeTransitions)
-      : history;
+    let history: History = createBrowserHistory({ window, v5Compat: true });
+    if (props.routeGuard) {
+      history = decorateHistoryWithRouteGuard(history, props.routeGuard);
+    }
+    if (props.routeTransitions) {
+      history = decorateHistoryWithViewTransitions(history, props.routeTransitions);
+    }
+    historyRef.current = history;
   }
   const history = historyRef.current;
   const [state, setState] = React.useState<{ action: Action; location: Location }>({

@@ -8,6 +8,7 @@ export * from './src/router/Router';
 export * from './src/router/withRouter';
 export * from './src/router/Page';
 export * from './src/router/ViewTransitionHistory';
+export * from './src/router/RouteGuardHistory';
 
 export * from './src/form/Form';
 export * from './src/form/Field';
