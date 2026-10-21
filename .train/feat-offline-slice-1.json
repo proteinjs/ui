@@ -1,0 +1,22 @@
+{
+  "branch": "feat/offline-slice-1",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/routeGuardHistory.test.ts",
+    "packages/ui/test/routerRouteGuardOption.test.tsx",
+    "packages/ui/test/tableRowClickable.test.tsx",
+    "packages/ui/test/viewTransitionHistory.test.ts",
+    "packages/ui/test/pageContainerNotSignedInRedirectReplaces.test.tsx",
+    "packages/ui/test/tablePhoneFace.test.tsx",
+    "packages/ui/test/tableSelectionServesAnAct.test.tsx",
+    "packages/ui/test/tableInfiniteScroll.test.tsx",
+    "packages/ui/test/tableLoadErrorStability.test.tsx",
+    "packages/ui/test/tableMutationSettlesOnFreshRead.test.tsx",
+    "packages/ui/test/tableSettledColumns.test.tsx",
+    "packages/ui/test/tableStickyHeader.test.tsx",
+    "packages/ui/test/tableDefaultCellValues.test.tsx",
+    "packages/ui/test/tableToolbarConfirmation.test.tsx",
+    "packages/ui/test/tableToolbarSeatIdentity.test.tsx"
+  ],
+  "removes": []
+}
