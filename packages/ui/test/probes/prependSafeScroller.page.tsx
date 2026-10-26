@@ -5,7 +5,9 @@
  *   ?mode=write       the shape it replaces: a top-origin scroller that lands older rows and restores the reader's
  *                     row with a scrollTop write in the rows' own layout effect.
  * Other parameters: total (rows in the history, 80), latency (ms a page read takes, 350), count=low (the consumer
- * under-counts the rows above, so the reservoir runs short and the debt is paid at the rest), lead (viewports).
+ * under-counts the rows above, so the reservoir runs short and the debt is paid at the rest), count=high (the
+ * consumer over-counts by two pages while rows remain, so the history's end leaves a leftover room over two
+ * viewports — the end collapse at the rest), lead (viewports).
  *
  * THE PAGE JUDGES ITSELF. From the first touch or scroll event an EPISODE records every animation frame of the
  * scroller — scrollTop, scrollHeight, the row count, the first visible row and its top, the previous frame's row
@@ -32,6 +34,7 @@ const TOTAL = Number(param('total', '80'));
 const PAGE = 10;
 const LATENCY = Number(param('latency', '350'));
 const LOW_COUNT = param('count', 'honest') === 'low';
+const HIGH_COUNT = param('count', 'honest') === 'high';
 const LEAD = Number(param('lead', '2'));
 const SCROLLER_ID = 'list';
 
@@ -111,7 +114,7 @@ declare global {
   }
 }
 
-/** The primitive under proof: the consumer counts the rows above honestly (or low, with count=low). */
+/** The primitive under proof: the consumer counts the rows above honestly (low with count=low, high with count=high). */
 const ReservoirList = () => {
   const [items, setItems] = useState<Row[]>(() => range(TOTAL - PAGE + 1, TOTAL).map(rowOf));
   const [loading, setLoading] = useState(false);
@@ -120,7 +123,9 @@ const ReservoirList = () => {
   const firstId = useRef(items[0].id);
   firstId.current = items[0].id;
   const remainingReal = items[0].id - 1;
-  const remaining = LOW_COUNT ? Math.min(remainingReal, 5) : remainingReal;
+  // A high count over-counts by two pages only while rows remain: the history's end is still the consumer's 0.
+  const remainingCounted = HIGH_COUNT && remainingReal > 0 ? remainingReal + 2 * PAGE : remainingReal;
+  const remaining = LOW_COUNT ? Math.min(remainingReal, 5) : remainingCounted;
   const onNeedMore = useCallback(async () => {
     askLog.push(firstId.current);
     setLoading(true);
@@ -578,11 +583,18 @@ class EpisodeProbe {
     const jumps: Array<{ kind: string; px: number }> = [];
     // A write at the rest is judged over its frame and the next: an engine whose scroll offset acknowledges a
     // write a frame late shows the layout shift first and the offset after; the smaller displacement is the truth.
+    // The one write no row can be held through: the history's end with the reader's edge inside the leftover room
+    // — the room goes in one step and the first row ARRIVES at the edge (the scroller at 0, the row at 0), by the
+    // engine's law; that arrival is the outcome, not a drift.
     if (this.pendingWrite !== null && moved !== null) {
       const drift = Math.min(Math.abs(this.pendingWrite), Math.abs(this.pendingWrite + moved));
-      summary.maxWriteDrift = Math.max(summary.maxWriteDrift, drift);
-      if (drift > JUMP_PX) {
-        jumps.push({ kind: 'write-drift', px: Math.round(drift) });
+      const arrivedAtEdge =
+        frame.st <= 0.5 && frame.previousAnchorTop !== null && Math.abs(frame.previousAnchorTop) <= JUMP_PX;
+      if (!arrivedAtEdge) {
+        summary.maxWriteDrift = Math.max(summary.maxWriteDrift, drift);
+        if (drift > JUMP_PX) {
+          jumps.push({ kind: 'write-drift', px: Math.round(drift) });
+        }
       }
       this.pendingWrite = null;
     }

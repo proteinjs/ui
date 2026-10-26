@@ -14,9 +14,10 @@
  *  2. A landing taller than the reservoir is still height-neutral (the shortfall is a debt — a negative margin);
  *     the debt is paid at the engine's REST only (QUIET_FRAMES quiet frames, no finger), with ONE write, the row
  *     holding — never while a finger is down.
- *  3. When nothing remains above, the leftover reservoir collapses at the rest only, by steps of at most a viewport
- *     AND at most the reader's distance from the loaded start, each a neutral write; nothing while scroll events
- *     keep arriving.
+ *  3. When nothing remains above, the whole gap — a leftover reservoir or a debt — goes at the rest only, in ONE
+ *     step with ONE write, the reader's row holding its identity and offset while a write can hold it (the first
+ *     row arrives at the edge in that same step when none can); nothing while scroll events keep arriving. While
+ *     rows remain above (a refill, an overestimate corrected) a step is still bounded by a viewport.
  *  4. A row above the reader that grows later is absorbed with no write (the resize observation).
  *  5. THE OPEN: a list filled from empty (or replaced) with a count of rows above in the SAME commit sizes the
  *     reservoir to count × estimate in the rows' own layout pass — before the first paint, with no write of its
@@ -353,8 +354,8 @@ describe('law 2 — a landing taller than the reservoir: neutral at the landing,
   });
 });
 
-describe('law 3 — the end collapse at the rest only, by steps bounded by a viewport and by the reader’s distance from the loaded start', () => {
-  test('remaining 0 with a leftover reservoir: nothing while the reader moves; at the rest one step per rest, each neutral, down to zero — viewport-sized with the reader a viewport or more below the loaded start', () => {
+describe('law 3 — the end: the whole gap at the rest only, in one step with one write; the viewport bound stays while rows remain', () => {
+  test('remaining 0 with a leftover over four viewports, the reader far below the loaded start: nothing while the reader moves; at the rest ONE step to zero with ONE write, the row holding its offset', () => {
     const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
     expect(reservoirOf(scroller).style.height).toBe('2500px');
     readerScrollsTo(scroller, 3900); // the end: row 15 (top 3900) first visible at offset 0, 1400 px below the loaded start
@@ -367,68 +368,104 @@ describe('law 3 — the end collapse at the rest only, by steps bounded by a vie
       pumpFrames(1);
     }
     expect(writes.length).toBe(0);
-    // At rest: one viewport-sized step per rest, the row holding after each.
-    const steps = [1900, 1300, 700, 100, 0];
-    steps.forEach((expected, index) => {
-      pumpFrames(ScrollRest.QUIET_FRAMES);
-      expect(writes.length).toBe(index + 1);
-      expect(reservoirOf(scroller).style.height).toBe(`${expected}px`);
-      expect(offsetOf(scroller, 15)).toBe(0);
-    });
-    pumpFrames(12);
-    expect(writes.length).toBe(steps.length);
+    // At rest: the whole 2500 px in ONE step — one write, row 15 where it was — never a viewport per rest.
+    pumpFrames(ScrollRest.QUIET_FRAMES);
+    expect(writes.length).toBe(1);
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    expect(offsetOf(scroller, 15)).toBe(0);
     expect(scroller.scrollTop).toBe(1400);
     expect(scroller.scrollHeight).toBe(2000);
+    pumpFrames(12);
+    expect(writes.length).toBe(1); // nothing more owed: no further rest, no further write
   });
 
-  test('a reader NEAR the loaded start: each step shrinks by at most that distance — a write the engine drops can never pull the loaded start past the reader’s edge', () => {
+  test('a reader NEAR the loaded start (100 px below it): the same ONE step, the row holding — never a step per rest of that distance', () => {
     const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 25 });
     expect(reservoirOf(scroller).style.height).toBe('2500px');
     readerScrollsTo(scroller, 2600); // row 2 (top 2600) first visible at offset 0: 100 px below the loaded start
     act(() => {
       harness.setRemaining(0);
     });
-    // Steps of the reader's distance (100), never the viewport (600), the row holding after each.
-    [2400, 2300, 2200].forEach((expected, index) => {
-      pumpFrames(ScrollRest.QUIET_FRAMES);
-      expect(writes.length).toBe(index + 1);
-      expect(reservoirOf(scroller).style.height).toBe(`${expected}px`);
-      expect(offsetOf(scroller, 2)).toBe(0);
-    });
-    // The reader moves to the end — 400 px below the loaded start: the next step is 400, not the viewport.
-    readerScrollsTo(scroller, 2600); // the end: row 5 (top 2600) first visible at offset 0
-    pumpFrames(1); // the scroll event's own frame restarts the quiet count
     pumpFrames(ScrollRest.QUIET_FRAMES);
-    expect(writes.length).toBe(4);
-    expect(reservoirOf(scroller).style.height).toBe('1800px');
-    expect(offsetOf(scroller, 5)).toBe(0);
-    expect(scroller.scrollTop).toBe(2200);
+    expect(writes.length).toBe(1);
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    expect(offsetOf(scroller, 2)).toBe(0);
+    expect(scroller.scrollTop).toBe(100);
+    pumpFrames(12);
+    expect(writes.length).toBe(1);
   });
 
-  test('a reader whose edge sits INSIDE the leftover room (scrolled up past the loaded start): the steps shrink by at most the room above the edge while a write can hold the first row, and the room the reader sees goes at once when none can', () => {
+  test('a reader whose edge sits INSIDE the leftover room (scrolled up past the loaded start): the room goes in ONE step with ONE write of 0 — row 1 arrives at the edge, never held at its offset a step per rest', () => {
     const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 25 });
     readerScrollsTo(scroller, 2300); // the edge 200 px above the loaded start; row 1 at offset 200
     act(() => {
       harness.setRemaining(0);
     });
-    // The edge is 200 px inside the room: the step is 200 (a dropped write brings row 1 to the edge, never past it),
-    // the write holding row 1 at 200.
     pumpFrames(ScrollRest.QUIET_FRAMES);
     expect(writes.length).toBe(1);
-    expect(reservoirOf(scroller).style.height).toBe('2300px');
-    expect(offsetOf(scroller, 1)).toBe(200);
-    expect(scroller.scrollTop).toBe(2100);
-    // The reader goes to the very top: no write can hold row 1 now (scrollTop is 0), so the room the reader sees —
-    // all of it — goes in ONE step, row 1 arriving at the edge, instead of a viewport every rest.
-    readerScrollsTo(scroller, 0);
-    pumpFrames(1);
+    expect(writes[0]).toBe(0); // the one write: the offset no write can hold is the edge
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    expect(offsetOf(scroller, 1)).toBe(0);
+    expect(scroller.scrollTop).toBe(0);
+    pumpFrames(12);
+    expect(writes.length).toBe(1);
+  });
+
+  test('a reader at the very top: the room goes in one step with NO write (the offset is already the edge)', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 25 });
+    readerScrollsTo(scroller, 0); // row 1 at offset 2500, the whole room above the edge
+    act(() => {
+      harness.setRemaining(0);
+    });
     pumpFrames(ScrollRest.QUIET_FRAMES);
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 1)).toBe(0);
     expect(scroller.scrollTop).toBe(0);
+    expect(writes.length).toBe(0);
+    pumpFrames(12);
+    expect(writes.length).toBe(0);
+  });
+
+  test('a DEBT over a viewport at the end: paid in ONE step with ONE write, the row holding — never a viewport per rest', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 3 });
+    expect(reservoirOf(scroller).style.height).toBe('300px');
+    readerScrollsTo(scroller, 500); // row 3 (top 500) first visible at offset 0
+    act(() => {
+      harness.prepend(rows(101, 110, 100)); // 1000 px into 300 px of room: a 700 px debt, over the 600 px viewport
+      harness.setRemaining(0);
+    });
+    const reservoir = reservoirOf(scroller);
+    expect(reservoir.style.marginBottom).toBe('-700px');
+    expect(scroller.scrollHeight).toBe(1300);
+    expect(offsetOf(scroller, 3)).toBe(0);
+    expect(writes.length).toBe(0);
+    pumpFrames(ScrollRest.QUIET_FRAMES);
     expect(writes.length).toBe(1);
+    expect(reservoir.style.marginBottom).toBe('0px');
+    expect(scroller.scrollTop).toBe(1200);
+    expect(offsetOf(scroller, 3)).toBe(0);
+    expect(scroller.scrollHeight).toBe(2000);
     pumpFrames(12);
     expect(writes.length).toBe(1);
+  });
+
+  test('while rows REMAIN above (an overestimate corrected: the count drops without a landing) a shrink is still bounded by a viewport per rest, the row holding after each', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+    readerScrollsTo(scroller, 3900); // row 15 first visible at offset 0, 1400 px below the loaded start
+    act(() => {
+      harness.setRemaining(5); // the target is now 500: a 2000 px overestimate, rows still above
+    });
+    // Viewport-sized steps, one per rest, until the reservoir is within the refill band of its target.
+    [1900, 1300, 700].forEach((expected, index) => {
+      pumpFrames(ScrollRest.QUIET_FRAMES);
+      expect(writes.length).toBe(index + 1);
+      expect(reservoirOf(scroller).style.height).toBe(`${expected}px`);
+      expect(offsetOf(scroller, 15)).toBe(0);
+    });
+    pumpFrames(12);
+    expect(writes.length).toBe(3); // 700 is within a viewport of 500: nothing more owed
+    expect(scroller.scrollTop).toBe(2100);
   });
 });
 

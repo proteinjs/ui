@@ -72,7 +72,8 @@ export const PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS = 2;
  * finger, a fling or a rubber band with nothing for the engine to undo. The scroller owns the loader's gate (the
  * `onNeedMore` ask, one in flight, re-asked after every landing until the lead is filled or nothing remains), a slot
  * at the reservoir's foot for the consumer's loading row, and the one rest definition (`ScrollRest`) at which its
- * rare light writes land — the end collapse and a refill, each by at most a viewport and by the drift it measures.
+ * rare light writes land — the end collapse (the whole leftover or debt in one step) and a refill (by at most a
+ * viewport per rest), each by the drift it measures.
  * It never reorders, virtualizes or styles rows, and never writes for the consumer's own deliberate moves. With
  * `remainingAbove` 0 it is a plain scroller.
  */
