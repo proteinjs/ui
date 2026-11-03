@@ -37,7 +37,9 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
    * land at the start or when `loading` turns from true to false — never on the ask's own result (a promise
    * settles before the rows' commit, and a scroll event in that gap would ask for the same page again). A read
    * that brings nothing reopens the gate only through `loading`; a consumer that reaches the start sets
-   * `remainingAbove` to 0.
+   * `remainingAbove` to 0. The lead is judged at the opening frame, on scroll, after every commit of rows and
+   * whenever the scroller's OWN box gains height — rows that landed while the scroller had no geometry (a pane
+   * mounted hidden and laid out later) are asked above once the box arrives, by this one rule.
    */
   onNeedMore?: () => void | Promise<unknown>;
   /**
@@ -70,7 +72,8 @@ export const PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS = 2;
  * for the rows not yet loaded, that shrinks by exactly the height added above the reader in the same layout pass,
  * before paint. So the scroller's `scrollHeight` is unchanged, `scrollTop` is unchanged, and rows land under a
  * finger, a fling or a rubber band with nothing for the engine to undo. The scroller owns the loader's gate (the
- * `onNeedMore` ask, one in flight, re-asked after every landing until the lead is filled or nothing remains), a slot
+ * `onNeedMore` ask, one in flight, re-asked after every landing and whenever its own box gains height, until the lead
+ * is filled or nothing remains), a slot
  * at the reservoir's foot for the consumer's loading row, and the one rest definition (`ScrollRest`) at which its
  * rare light writes land — the end collapse (the whole leftover or debt in one step) and a refill (by at most a
  * viewport per rest), each by the drift it measures.
@@ -101,6 +104,10 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const rest = useRef<ScrollRest | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const observedHeights = useRef(new Map<Element, number>());
+  /** The observation of the scroller's OWN box, beside the rows' (`observer`). */
+  const boxObserver = useRef<ResizeObserver | null>(null);
+  /** The scroller's box height as last judged — growth re-judges the lead. */
+  const boxHeight = useRef(0);
   const askInFlight = useRef(false);
   const landedSinceAsk = useRef(false);
   /** The consumer's inputs as of the last commit judged, so each judgment sees what changed. */
@@ -209,6 +216,29 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     [requestReconcile]
   );
 
+  /**
+   * The scroller's OWN box gaining height re-judges the lead. Rows that landed while the scroller had no geometry —
+   * a pane mounted hidden (display:none) and laid out later, a pane that grows — were judged against no viewport: the
+   * opening frame saw none, the commits since saw none, and the box arrived with no commit behind it, so the page
+   * above was never asked for and the reader found the loaded start short. The box's growth is the one moment left,
+   * judged here by the same rule and the same gate (`askIfNeeded`: inside the lead, rows remaining, no ask in
+   * flight). The height is read from the box itself, after layout, never from the entry (a consumer's own observer
+   * may deliver the same moment). A shrink asks nothing — the lead shrinks with it; growth while an ask is out is
+   * judged again at that ask's landing.
+   */
+  const onBoxResize = useCallback(() => {
+    const scroller = scrollerEl.current;
+    if (!scroller) {
+      return;
+    }
+    const height = scroller.clientHeight;
+    const last = boxHeight.current;
+    boxHeight.current = height;
+    if (height > last) {
+      askIfNeeded();
+    }
+  }, [askIfNeeded]);
+
   /** The observer follows the rows in the document. */
   const syncObserved = useCallback(() => {
     const ro = observer.current;
@@ -259,6 +289,11 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (typeof ResizeObserver !== 'undefined') {
       observer.current = new ResizeObserver(onResize);
       syncObserved();
+      // The scroller's own box: its height as mounted is the baseline (the observation's first report says the same
+      // height and judges nothing; the opening ask below keeps its frame), growth from there re-judges the lead.
+      boxHeight.current = scroller.clientHeight;
+      boxObserver.current = new ResizeObserver(onBoxResize);
+      boxObserver.current.observe(scroller);
     }
     // The opening ask waits a frame: a consumer lands its own opening view in its own effects first.
     const opening = requestAnimationFrame(() => askIfNeeded());
@@ -270,6 +305,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       observer.current?.disconnect();
       observer.current = null;
       observedHeights.current.clear();
+      boxObserver.current?.disconnect();
+      boxObserver.current = null;
       engine.current = null;
     };
   }, []);

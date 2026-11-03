@@ -24,7 +24,9 @@
  *     own and no step at any later rest.
  *  The gate: `onNeedMore` leaves when the viewport enters the lead, once per read, re-asked after a landing that
  *  leaves the viewport inside the lead, never with nothing remaining; a settled promise or `loading` false reopens
- *  it. The loading row renders at the reservoir's foot only while loading with rows remaining, height-neutrally.
+ *  it. THE SCROLLER'S OWN BOX: rows that landed while the scroller had no geometry (a pane mounted hidden, laid out
+ *  later) were judged against no viewport — the box gaining height re-judges the lead, by the same rule, once.
+ *  The loading row renders at the reservoir's foot only while loading with rows remaining, height-neutrally.
  *  `onRest` fires at the rest and not before; `scrollend` short-circuits it. `apiRef` reads the geometry.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
@@ -78,8 +80,7 @@ class FakeResizeObserver {
     this.entry.targets.clear();
   }
 }
-const entryFor = (target: Element): ResizeObserverEntry => {
-  const height = heightOf(target);
+const entryFor = (target: Element, height = heightOf(target)): ResizeObserverEntry => {
   return {
     target,
     contentRect: { height, width: 390, top: 0, left: 0, bottom: height, right: 390, x: 0, y: 0, toJSON() {} },
@@ -98,9 +99,20 @@ const resize = (box: Element, height: number) => {
     }
   });
 };
+/** The scroller's OWN box changes height (a pane laid out, grown or shrunk): the engine reports it to whoever observes the scroller. */
+const boxResizes = (scroller: Element, height: number) => {
+  clientHeight = height;
+  observers.forEach((observer) => {
+    if (observer.targets.has(scroller)) {
+      observer.callback([entryFor(scroller, height)]);
+    }
+  });
+};
 
 // ── The layout model ──
 const CLIENT_HEIGHT = 600;
+/** The scroller's own box height as the engine reports it — the cases move it (a pane laid out after its rows landed). */
+let clientHeight = CLIENT_HEIGHT;
 let scrollTopValue = 0;
 const writes: number[] = [];
 const heightOf = (el: Element) => Number(el.getAttribute('data-h') ?? 0);
@@ -135,7 +147,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
     return realRect.call(this);
   }
   if (this === scroller) {
-    return rect(0, CLIENT_HEIGHT);
+    return rect(0, clientHeight);
   }
   const entry = layoutOf(scroller).rects.get(this);
   return entry ? rect(entry.top - scrollTopValue, entry.bottom - scrollTopValue) : rect(0, 0);
@@ -143,16 +155,16 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
 /** The scroller element takes the model's scroll geometry; its scrollTop setter is the write spy. */
 const modelScroller = (el: HTMLElement) => {
   el.setAttribute('data-model-scroller', '');
-  Object.defineProperty(el, 'clientHeight', { get: () => CLIENT_HEIGHT, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { get: () => clientHeight, configurable: true });
   Object.defineProperty(el, 'scrollHeight', {
-    get: () => Math.max(CLIENT_HEIGHT, layoutOf(el).contentHeight),
+    get: () => Math.max(clientHeight, layoutOf(el).contentHeight),
     configurable: true,
   });
   Object.defineProperty(el, 'scrollTop', {
     get: () => scrollTopValue,
     set: (value: number) => {
       writes.push(value);
-      scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - CLIENT_HEIGHT)));
+      scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - clientHeight)));
       el.dispatchEvent(new Event('scroll')); // the write's own echo, as the engine fires it
     },
     configurable: true,
@@ -249,6 +261,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   scrollTopValue = 0;
+  clientHeight = CLIENT_HEIGHT;
   writes.length = 0;
   frameQueue.length = 0;
   observers.length = 0;
@@ -710,6 +723,54 @@ describe('the gate — one reopen per commit', () => {
     });
     readerScrollsTo(scroller, 3100);
     expect(asks.length).toBe(3);
+  });
+});
+
+describe('the gate — the scroller’s own box', () => {
+  test('rows that landed while the scroller had no box: the box arriving re-judges the lead — asked once, not at the mount, not at the landing, not again in flight, never on a shrink; the landing re-judges as ever', () => {
+    clientHeight = 0; // the pane has no geometry yet: a chat pane mounted display:none and laid out later
+    const asks: number[] = [];
+    const { harness, scroller } = mount({
+      initial: rows(1, 10, 100),
+      remaining: 20,
+      onNeedMore: () => {
+        asks.push(1);
+      },
+    });
+    pumpFrames(1); // the opening ask's frame: no viewport, nothing to judge
+    expect(asks.length).toBe(0);
+    act(() => {
+      harness.replace(rows(1, 10, 100)); // the live head lands over the copy's rows — the same keys, still no box
+    });
+    expect(asks.length).toBe(0);
+    boxResizes(scroller, 600); // the pane gains its size: 2000 px of room above the reader, inside the lead of 1200
+    expect(asks.length).toBe(1);
+    boxResizes(scroller, 600); // the same box reported again
+    boxResizes(scroller, 300); // a shrink
+    boxResizes(scroller, 900); // growth while the ask is out
+    expect(asks.length).toBe(1);
+    act(() => {
+      harness.prepend(rows(11, 20, 100)); // the landing reopens the gate and re-judges: 1000 px of room remain, inside the lead of 1800
+    });
+    expect(asks.length).toBe(2);
+  });
+
+  test('a box that grows is judged by the lead rule: nothing while the reader sits beyond the grown lead, the ask once the lead reaches the reader', () => {
+    const asks: number[] = [];
+    const { scroller } = mount({
+      initial: rows(1, 30, 100),
+      remaining: 50,
+      onNeedMore: () => {
+        asks.push(1);
+      },
+    });
+    readerScrollsTo(scroller, 7400); // 2400 px below the loaded start; the lead is 2 × 600 = 1200
+    pumpFrames(1);
+    expect(asks.length).toBe(0);
+    boxResizes(scroller, 900); // the lead 1800: the reader is still beyond it
+    expect(asks.length).toBe(0);
+    boxResizes(scroller, 1300); // the lead 2600 reaches the reader
+    expect(asks.length).toBe(1);
   });
 });
 
