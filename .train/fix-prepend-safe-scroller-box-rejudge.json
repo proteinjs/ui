@@ -1,6 +1,0 @@
-{
-  "branch": "fix/prepend-safe-scroller-box-rejudge",
-  "packages": ["ui"],
-  "suites": ["packages/ui/test/prependSafeScroller.test.tsx"],
-  "removes": []
-}
