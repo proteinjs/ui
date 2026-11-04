@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.22.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.1...@proteinjs/ui@4.22.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* PrependSafeScroller re-judges its lead when its own box gains height — rows that landed while the scroller had no geometry (a pane mounted hidden and laid out later: the cache road's open in the space's chat pane) were judged against no viewport at the opening frame and at every commit, so the page above was never asked for; a ResizeObserver on the scroller's own box beside the rows' calls the one gate (askIfNeeded) on growth, a shrink asks nothing (row 3094 round 2; red-first in the box cases, bites on the compare and the observation) ([7a8b412](https://github.com/proteinjs/ui/commit/7a8b412d4e6d92638d7e96037d9993639f255dd6))
+
+
+
+
+
 ## [4.22.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.0...@proteinjs/ui@4.22.1) (2026-10-26)
 
 
