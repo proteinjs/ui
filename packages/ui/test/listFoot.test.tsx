@@ -13,6 +13,10 @@
  *  4. The short last window: { hasMore: false, fetchingNextWindow: false } — the honest bottom.
  *  5. A dataKey invalidation refetches every loaded window (isFetching is true) and the foot is
  *     NEVER told fetchingNextWindow — the discriminating case for the signal.
+ *  6. A pull made DURING such a refetch is kept: the foot is told fetchingNextWindow at once and the
+ *     next window lands when the refetch settles, with no second reach of the foot (a seeded first
+ *     window read again behind a slow upload lost the pull, and the next page came only when the
+ *     sentinel happened to fire again).
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -238,6 +242,38 @@ describe('List foot — told exactly when the next window is on its way', () => 
     expect(loader.loads).toEqual([null, 50, null, 50]);
     expect(renderedRowAts()).toEqual([70, 60, 50, 40, 30, 20]);
     expect(footStates.some((state) => state.fetchingNextWindow)).toBe(false);
+    expect(footState()).toEqual({ hasMore: true, fetchingNextWindow: false });
+  });
+
+  it('keeps a pull made while the loaded windows are read again: told fetchingNextWindow at once, the next window lands when the refetch settles — never dropped', async () => {
+    const corpus = [row(70), row(60), row(50), row(40), row(30), row(20), row(10)];
+    const loader = new HoldableCorpusLoader(keys(), () => corpus);
+    render(<List<Row> loader={loader} windowSize={3} rowId={rowId} renderRow={testRow} renderFoot={testFoot} />);
+    await waitFor(() => renderedRowAts().length === 3);
+    expect(footState()).toEqual({ hasMore: true, fetchingNextWindow: false });
+
+    // The loaded window is read again (a seeded paint's mount refetch, a focus, an invalidation) and held in
+    // flight; the person reaches the foot meanwhile.
+    loader.hold = true;
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: [loader.reactQueryKeys.dataKey] });
+    });
+    await waitFor(() => loader.loads.length === 2);
+    await fireSentinel();
+    await flush();
+    // The pull is kept and the foot says so — while the refetch is still in flight (no third load yet).
+    expect(loader.loads).toEqual([null, null]);
+    expect(footState()).toEqual({ hasMore: true, fetchingNextWindow: true });
+
+    // The refetch settles: the kept pull runs on its own — the sentinel never fires again — and lands the next window.
+    loader.hold = false;
+    await act(async () => {
+      loader.releaseAll();
+    });
+    await waitFor(() => loader.loads.length === 3);
+    expect(loader.loads).toEqual([null, null, 50]);
+    await waitFor(() => renderedRowAts().length === 6);
+    expect(renderedRowAts()).toEqual([70, 60, 50, 40, 30, 20]);
     expect(footState()).toEqual({ hasMore: true, fetchingNextWindow: false });
   });
 });

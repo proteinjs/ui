@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InfiniteQueryObserverResult, QueryFunctionContext, useInfiniteQuery } from 'react-query';
 import { CursorLoader, CursorValue, CursorWindow } from './CursorLoader';
 
@@ -87,7 +87,15 @@ export interface CursorWindowsResult<T> {
    * swap atomically when fresh data lands.
    */
   rows: T[] | undefined;
-  /** Pull the next window into the list. No-op while fetching, exhausted, or showing previous-query rows. */
+  /**
+   * Pull the next window into the list. A no-op while exhausted, while a next window is already on its way, or while
+   * showing previous-query rows; a pull that arrives while the LOADED windows are being read again (the first window's
+   * refetch over a seeded paint, a focus or invalidation refetch) is KEPT, never dropped — react-query runs one fetch
+   * per query, so it cannot start beside the refetch, and it runs the moment the refetch settles. The person who reached
+   * the foot never waits for a scroll event that already happened (a list whose seeded first window was read again
+   * behind a slow upload lost the pull made meanwhile, and the next page came only when the sentinel happened to fire
+   * again — with no loading state the whole time).
+   */
   fetchNextWindow: () => void;
   /** More windows may exist (a full window implies more; the next short/empty window settles it). */
   hasMore: boolean;
@@ -96,10 +104,11 @@ export interface CursorWindowsResult<T> {
   /** Any fetch in flight — the first window, a next window, or a refetch of the loaded windows. */
   isFetching: boolean;
   /**
-   * A NEXT window is in flight — the sentinel's pull, and only that: false during the first window
+   * A NEXT window is on its way — the sentinel's pull, and only that: false during the first window
    * (the caller's skeleton state) and during a background refetch of the loaded windows (`isFetching`
-   * covers both). The signal a list's loading foot draws on: true exactly while rows are about to be
-   * appended below the ones on screen.
+   * covers both) UNLESS a pull was made during that refetch and waits on it (`fetchNextWindow`). The
+   * signal a list's loading foot draws on: true exactly while rows are about to be appended below the
+   * ones on screen.
    */
   isFetchingNextWindow: boolean;
   /**
@@ -149,12 +158,30 @@ export function useCursorWindows<T>(
   const rowId = options.rowId;
   const rows = useMemo(() => (data ? flattenWindows(data.pages, rowId) : undefined), [data, rowId]);
 
+  // THE KEPT PULL (the fetchNextWindow doc): a pull made while the loaded windows are being read again waits here
+  // and runs when that read settles; the foot reads it as the next window on its way from the moment it was made.
+  const [pullWaiting, setPullWaiting] = useState(false);
   const fetchNextWindow = useCallback(() => {
-    // Previous-query rows must never anchor a next-window fetch for the new query.
-    if (!isFetching && hasNextPage && !isPreviousData) {
+    // Previous-query rows must never anchor a next-window fetch for the new query; a next window already on its
+    // way is never pulled twice (the sentinel re-fires on every re-observe).
+    if (!hasNextPage || isPreviousData || isFetchingNextPage) {
+      return;
+    }
+    if (isFetching) {
+      setPullWaiting(true);
+      return;
+    }
+    void fetchNextPage();
+  }, [isFetching, isFetchingNextPage, hasNextPage, isPreviousData, fetchNextPage]);
+  useEffect(() => {
+    if (!pullWaiting || isFetching) {
+      return;
+    }
+    setPullWaiting(false);
+    if (hasNextPage && !isPreviousData) {
       void fetchNextPage();
     }
-  }, [isFetching, hasNextPage, isPreviousData, fetchNextPage]);
+  }, [pullWaiting, isFetching, hasNextPage, isPreviousData, fetchNextPage]);
 
   const refresh = useCallback(() => {
     void refetch();
@@ -166,7 +193,7 @@ export function useCursorWindows<T>(
     hasMore: !!hasNextPage && !isPreviousData,
     refresh,
     isFetching,
-    isFetchingNextWindow: isFetchingNextPage,
+    isFetchingNextWindow: isFetchingNextPage || pullWaiting,
     error,
   };
 }
