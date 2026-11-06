@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.22.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.2...@proteinjs/ui@4.22.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* **ui:** a pull made while the loaded windows are read again is kept — the foot is told the next window is on its way at once, and it lands when the refetch settles ([2070914](https://github.com/proteinjs/ui/commit/2070914944fcc7e56ff57fe5f06c195bd8c7bed0))
+
+
+
+
+
 ## [4.22.2](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.1...@proteinjs/ui@4.22.2) (2026-11-04)
 
 
