@@ -28,6 +28,14 @@
  * a viewport, never a page, and a dropped shrink never pulls the loaded start past the reader's edge. At the end
  * that bound would only split the gap into a write per rest, each painted as a tick where the engine acknowledges
  * a write a frame late (iOS WebKit), so the end takes the gap at once.
+ *
+ * THE WINDOW TERM (`setWindowAbove`): a windowed list — `List` in its windowed mode — mounts only the rows near the
+ * viewport and keeps the rows loaded ABOVE its window out of the document; their measured heights sum to the block's
+ * second term, added to `reserve` in the applied size. The two terms keep their meanings: `reserve` is the room for
+ * rows not yet loaded (and the signed drift the laws absorb — a debt is paid out of the window's room before it is a
+ * negative margin), `windowAbove` the exact height of loaded rows the window left out. `distanceFromLoadedStart` reads
+ * from the LOADED start — the window's rows above are inside the loaded span. With no window term (the default, 0)
+ * every number below is the one it was.
  */
 export class PrependReservoir {
   /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
@@ -38,6 +46,8 @@ export class PrependReservoir {
   static readonly MAX_RESERVE_PX = 4_000_000;
 
   private reserve = 0;
+  /** The measured height of the rows loaded above a windowed list's window — the block's second term (0 without a window). */
+  private windowAbove = 0;
   private remaining = 0;
   private seedEstimate = 0;
   private measuredTotal = 0;
@@ -56,6 +66,25 @@ export class PrependReservoir {
   setRemaining(remaining: number, estimatedRowHeight: number): void {
     this.remaining = Math.max(0, Number.isFinite(remaining) ? remaining : 0);
     this.seedEstimate = Math.max(0, Number.isFinite(estimatedRowHeight) ? estimatedRowHeight : 0);
+  }
+
+  /**
+   * A windowed list's rows loaded above its window, by their measured heights: the block grows by exactly that much in
+   * the same layout pass (a window shifting down leaves rows above by their measured heights; shifting up takes them
+   * back) — the rest of the block's bookkeeping is untouched, so a drift absorbed into `reserve` stands until the rest.
+   */
+  setWindowAbove(px: number): void {
+    const next = Math.max(0, Number.isFinite(px) ? px : 0);
+    if (next === this.windowAbove) {
+      return;
+    }
+    this.windowAbove = next;
+    this.apply();
+  }
+
+  /** A box's top relative to the reservoir's top, as the engine lays it out now — the one geometry the records use. */
+  topOf(box: HTMLElement): number {
+    return box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top;
   }
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
@@ -90,8 +119,7 @@ export class PrependReservoir {
       this.reset();
       return 0;
     }
-    const nowTop = previousFirstBox.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top;
-    const landed = nowTop - this.recordedFirstTop;
+    const landed = this.topOf(previousFirstBox) - this.recordedFirstTop;
     this.reserve -= landed;
     this.measuredTotal += landed;
     this.measuredRows += landedCount;
@@ -113,8 +141,7 @@ export class PrependReservoir {
   /** Re-record the first row's place after a commit that kept the same first row. */
   record(): void {
     const boxes = this.rowBoxes();
-    this.recordedFirstTop =
-      boxes.length > 0 ? boxes[0].getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top : null;
+    this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
   }
 
   /** Whether a reconcile step is wanted at the next rest. */
@@ -169,9 +196,11 @@ export class PrependReservoir {
 
   /** The reader's distance from the loaded start: the scroller's top edge below the first row's start, in px. */
   distanceFromLoadedStart(): number {
+    // The loaded start sits `reserve` below the block's top: the room, or (a debt) above it; a window's rows above
+    // are loaded rows, inside the span. With no window term this is the block's bottom plus its negative margin.
     const scrollerTop = this.scroller.getBoundingClientRect().top;
-    const reservoirBottom = this.reservoir.getBoundingClientRect().bottom;
-    return scrollerTop - reservoirBottom - Math.min(0, this.reserve);
+    const reservoirTop = this.reservoir.getBoundingClientRect().top;
+    return scrollerTop - reservoirTop - this.reserve;
   }
 
   /** The reservoir's signed size in px (a negative value is the debt). */
@@ -208,8 +237,10 @@ export class PrependReservoir {
 
   /** The block's size from `reserve`: a positive reserve is its height, a negative one its bottom margin. */
   private apply(): void {
-    this.reservoir.style.height = `${Math.max(0, this.reserve)}px`;
-    this.reservoir.style.marginBottom = `${Math.min(0, this.reserve)}px`;
+    // The two terms as one block: a debt is paid out of the window's room before it is a negative margin.
+    const total = this.reserve + this.windowAbove;
+    this.reservoir.style.height = `${Math.max(0, total)}px`;
+    this.reservoir.style.marginBottom = `${Math.min(0, total)}px`;
   }
 
   /**
