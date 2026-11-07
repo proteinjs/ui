@@ -526,7 +526,16 @@ export function List<T>({
     const height = clientHeight.current;
     const allHeights = cellHeights();
     if (height <= 0) {
+      // THE HIDDEN PANE (the box 0): every row mounts, as documented — and the frame FORGETS what it judged against
+      // the layout the box no longer has: the hysteresis's reference range (else the box's return finds the stale
+      // window "still covering" the viewport and resumes nothing — row 3234 round 2, the refuter's R1/R2) and the
+      // anchors (tops recorded against the laid-out window: read against a hidden layout they are a drift the
+      // reservoir would absorb). Nothing more: the heights map is a measurement, not a judgment (measured once; a
+      // hidden cell's zero report is the observer's and its re-report on the box's return restores it), the ask gate
+      // is judged fresh at a height, and the committed range is the state, nulled here.
       if (windowRef.current !== null) {
+        windowRef.current = null;
+        anchors.current = [];
         setWindow(null);
       }
       return;

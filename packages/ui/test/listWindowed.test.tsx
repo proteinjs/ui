@@ -26,6 +26,10 @@
  *  7. GROUP HEADS: a group's head renders once; a group cut by the window keeps its container and its rows.
  *  8. NO GEOMETRY, EVERY ROW (the hidden pane; jsdom): without a box the list mounts every row as it always has, the
  *     sentinel still pulling; the window begins when the box arrives.
+ *  9. HIDDEN AFTER A WINDOW, THEN SHOWN (round 2 — the refuter's R1/R2): a pane whose box goes to 0 after a window
+ *     stood mounts every row as 8 says, and the FIRST frame with the box back resumes the window, bounded — from the
+ *     top and from the middle at the same offset; the reservoir is the rows above the window alone (no drift absorbed
+ *     against the hidden layout) and nothing is written.
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -170,6 +174,10 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   }
   if (this === scroller) {
     return rect(0, clientHeight);
+  }
+  if (clientHeight <= 0) {
+    // A hidden pane (the box 0): nothing inside it has a rect either — the engine's own shape (display: none).
+    return rect(0, 0);
   }
   const layout = layoutOf(scroller);
   let entry = layout.rects.get(this);
@@ -620,5 +628,59 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(mountedIds().length).toBeLessThanOrEqual(BOUND);
     expect(mountedIds()[0]).toBe(0);
     expect(belowPx()).toBe((60 - mountedIds().length) * ROW_H);
+  });
+
+  test('9a. hidden after a window, then shown at the top (round 2, the refuter’s R1): every row mounts while the box is 0, and the first frame with the box back resumes the window, bounded', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    expect(mountedIds().length).toBeLessThanOrEqual(BOUND);
+
+    // The pane hides: the box reports 0 — every row mounts, as case 8 says (the documented road).
+    boxResizes(scroller, 0);
+    await frame();
+    await flush();
+    expect(mountedIds().length).toBe(1000);
+
+    // The pane shows again at the same offset: the first frame resumes the window — the window that stood before the
+    // hide is no reference for it (the stale range "still covers" the viewport and would resume nothing).
+    boxResizes(scroller, CLIENT_HEIGHT);
+    await frame();
+    await flush();
+    const shown = mountedIds();
+    expect(shown.length).toBeLessThanOrEqual(BOUND);
+    expect(shown[0]).toBe(0);
+    expect(reservoirPx()).toBe(0);
+    expect(belowPx()).toBe((1000 - shown.length) * ROW_H);
+    expect(writes).toEqual([]);
+  });
+
+  test('9b. the same from the middle, shown at the same offset (the refuter’s R2): the window resumes bounded on the first frame and the reservoir is the rows above it alone — no drift absorbed against the hidden layout, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    readerScrollsTo(scroller, 26_000);
+    await frame();
+    expect(mountedIds().length).toBeLessThanOrEqual(BOUND);
+
+    // Hidden from the middle: every row mounts. The anchors the window recorded are no measure of this layout — read
+    // against it they are a drift of the whole reservoir, and the rest would pay it as a write that throws the reader
+    // from row 488 to row 12 (the red: the window resumes at 0, scrollTop written to 624).
+    boxResizes(scroller, 0);
+    await frame();
+    await flush();
+    expect(mountedIds().length).toBe(1000);
+
+    // Shown at the same offset: the middle mounts on the first frame, the rows above it as the reservoir, exactly.
+    boxResizes(scroller, CLIENT_HEIGHT);
+    await frame();
+    await flush();
+    const shown = mountedIds();
+    expect(shown.length).toBeLessThanOrEqual(BOUND);
+    expect(shown[0]).toBe(Math.floor((26_000 - CLIENT_HEIGHT * LIST_WINDOW_SCREENS) / ROW_H));
+    expect(reservoirPx()).toBe(shown[0] * ROW_H);
+    expect(belowPx()).toBe((1000 - shown[0] - shown.length) * ROW_H);
+    expect(scroller.scrollHeight).toBe(1000 * ROW_H);
+    expect(writes).toEqual([]);
   });
 });
