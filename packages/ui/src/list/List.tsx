@@ -111,9 +111,14 @@ export interface ListProps<T> {
    * (`display: contents`) element that carries `data-list-cell`: the row's first element is its box — a fragment's
    * first element stands for it — and group containers keep `groupSx` / `groupRowsSx` around the mounted part of a
    * group. The list needs the nearest scrollable ancestor with a laid-out box: without one, or until the box has a
-   * height (a pane mounted hidden), every row mounts as before and the window begins when the box arrives. A row keeps
-   * no state of its own across the window — a row that scrolls out of the window leaves the document — so a consumer
-   * holds a row's open menu, its swipe, its selection in its own state keyed by the row's identity.
+   * height (a pane mounted hidden), every row mounts as before and the window begins when the box arrives. THE HIDDEN
+   * INTERVAL: while the box is 0, and until the first frame after it returns, the list makes NO judgment against
+   * layout — no anchor is recorded or read, a cell's report (its zero under the hidden box, its re-report at the show)
+   * is a measurement the height map takes and never growth to absorb, no reconcile step runs — and that first frame
+   * derives the window from the scroll offset and records the anchors fresh; a debt the hide interrupted is paid at the
+   * next rest. A row keeps no state of its own across the window — a row that scrolls out of the window leaves the
+   * document — so a consumer holds a row's open menu, its swipe, its selection in its own state keyed by the row's
+   * identity.
    */
   windowed?: ListWindowing;
   /** The root container (wraps rows and sentinel; slots render bare). */
@@ -409,6 +414,13 @@ export function List<T>({
   const reported = useRef(new WeakSet<Element>());
   const boxObserver = useRef<ResizeObserver | null>(null);
   const clientHeight = useRef(0);
+  /**
+   * False through the hidden interval — while the box is 0 and until the first frame after it returns — in which the
+   * list makes no judgment against layout: no anchor recorded or read (`afterCommit`), no report absorbed as growth
+   * (`onCellResize`), no reconcile step (the rest). The frame with a box ends it, deriving the window and the anchors
+   * fresh from the layout as it is.
+   */
+  const laidOut = useRef(false);
   const frame = useRef(0);
   /** The range the frame last derived — the hysteresis's reference; the committed one is `committed`. */
   const windowRef = useRef<ListWindow | null>(null);
@@ -486,6 +498,14 @@ export function List<T>({
     }
   }, []);
 
+  /** The scroller's box as laid out now — read in its observer and at the mount, never on the scroll path; a box of 0 opens the hidden interval. */
+  const readBox = useCallback((host: HTMLElement) => {
+    clientHeight.current = host.clientHeight;
+    if (clientHeight.current <= 0) {
+      laidOut.current = false;
+    }
+  }, []);
+
   /** A reconcile step is owed: at the next rest, never in this task (the reservoir's law). */
   const requestReconcile = useCallback(() => {
     const current = engine.current;
@@ -526,19 +546,24 @@ export function List<T>({
     const height = clientHeight.current;
     const allHeights = cellHeights();
     if (height <= 0) {
-      // THE HIDDEN PANE (the box 0): every row mounts, as documented — and the frame FORGETS what it judged against
-      // the layout the box no longer has: the hysteresis's reference range (else the box's return finds the stale
-      // window "still covering" the viewport and resumes nothing — row 3234 round 2, the refuter's R1/R2) and the
-      // anchors (tops recorded against the laid-out window: read against a hidden layout they are a drift the
-      // reservoir would absorb). Nothing more: the heights map is a measurement, not a judgment (measured once; a
-      // hidden cell's zero report is the observer's and its re-report on the box's return restores it), the ask gate
-      // is judged fresh at a height, and the committed range is the state, nulled here.
+      // THE HIDDEN PANE (the box 0): every row mounts, as documented — and the frame FORGETS the hysteresis's reference
+      // range, judged against the layout the box no longer has (else the box's return finds the stale window "still
+      // covering" the viewport and resumes nothing — row 3234 round 2, the refuter's R1/R2). The anchors are
+      // `afterCommit`'s: through the hidden interval it records none and reads none (round 3). Nothing more: the
+      // heights map is a measurement, not a judgment; the ask gate is judged fresh at a height; the committed range is
+      // the state, nulled here.
       if (windowRef.current !== null) {
         windowRef.current = null;
-        anchors.current = [];
         setWindow(null);
       }
       return;
+    }
+    if (!laidOut.current) {
+      // THE INTERVAL'S END — the first frame with a box since it was 0: the window is derived below from the scroll
+      // offset with no reference (forgotten above), its commit records the anchors fresh, and a debt the hide
+      // interrupted is owed at the next rest.
+      laidOut.current = true;
+      requestReconcile();
     }
     const scrollTop = host.scrollTop;
     const listTop = root.getBoundingClientRect().top - host.getBoundingClientRect().top + scrollTop;
@@ -555,7 +580,7 @@ export function List<T>({
       total += allHeights[i];
     }
     askIfNeeded(viewportBottom, total);
-  }, [cellHeights, askIfNeeded]);
+  }, [cellHeights, askIfNeeded, requestReconcile]);
 
   const scheduleFrame = useCallback(() => {
     if (frame.current === 0) {
@@ -587,6 +612,13 @@ export function List<T>({
           // The element's first report is its MEASUREMENT — the map takes it; what its mount changed above the
           // reader the commit's hold already absorbed (a re-mounted row at a height the map did not know).
           reported.current.add(box);
+          continue;
+        }
+        if (!laidOut.current) {
+          // THE HIDDEN INTERVAL: the report is a MEASUREMENT the map took — a cell's zero under a box of 0, its
+          // re-report at its height when the pane shows (the observer's two reports) — never growth to absorb: there
+          // is no laid-out "before" the change could have pushed the reader from, and the first frame with a box
+          // derives the window and records the anchors from the layout as it is (round 3, the refuter's R5/R6).
           continue;
         }
         if (last === undefined) {
@@ -639,6 +671,10 @@ export function List<T>({
    * before it) holds its place — its drift, the difference between the heights the rows mounted above it were seeded
    * with and the heights they were laid out at, is absorbed before paint and paid at the rest (the reservoir's laws);
    * a commit with no surviving cell (a jump) holds nothing. Then the anchors and the observer follow the new window.
+   * Through the hidden interval the anchors are neither read nor recorded — a top recorded against a laid-out window,
+   * read against a box of 0, is a drift of the whole reservoir, and a top of 0 recorded under the hidden layout, read
+   * at the show, the same drift the other way (round 3, the refuter's R4); the first frame with a box commits a window
+   * whose anchors are recorded here, fresh.
    */
   const afterCommit = useCallback(() => {
     const current = engine.current;
@@ -650,6 +686,11 @@ export function List<T>({
     const range = committed.current ?? { first: 0, last: allHeights.length - 1 };
     const { above } = spacerHeights(allHeights, range);
     current.setWindowAbove(above);
+    if (!laidOut.current) {
+      anchors.current = [];
+      syncObserved();
+      return;
+    }
     const anchor = anchors.current.find((candidate) => boxes.current.has(candidate.key));
     if (anchor) {
       const box = boxes.current.get(anchor.key) as HTMLElement;
@@ -687,8 +728,10 @@ export function List<T>({
     refreshBoxes();
     current.initialize();
     const watch = new ScrollRest(() => {
+      // No step through the hidden interval: its drift is measured against a box of 0 — a debt silently zeroed, no
+      // write to hold the reader. The interval's end re-asks the rest for what is owed.
       const hostNow = scrollHost;
-      if (hostNow && current.owed(clientHeight.current)) {
+      if (hostNow && laidOut.current && current.owed(clientHeight.current)) {
         current.step(clientHeight.current);
         if (current.owed(clientHeight.current)) {
           watch.request();
@@ -700,15 +743,18 @@ export function List<T>({
     // THE SCROLL LISTENER: nothing but the frame's request — no read, no render, no work per event.
     const onScroll = () => scheduleFrame();
     host.addEventListener('scroll', onScroll, { passive: true });
-    clientHeight.current = host.clientHeight;
+    laidOut.current = true;
+    readBox(host);
     if (typeof ResizeObserver !== 'undefined') {
-      cellObserver.current = new ResizeObserver(onCellResize);
-      // The scroller's own box: its height read after layout, in the observer, never in the scroll path.
+      // The scroller's own box: its height read after layout, in the observer, never in the scroll path. Created BEFORE
+      // the cells' observer: the spec delivers observers in creation order, so in one broadcast (a pane hidden, a pane
+      // shown) the box's report leads the cells' and the hidden interval is open before a cell reports under it.
       boxObserver.current = new ResizeObserver(() => {
-        clientHeight.current = host.clientHeight;
+        readBox(host);
         scheduleFrame();
       });
       boxObserver.current.observe(host);
+      cellObserver.current = new ResizeObserver(onCellResize);
     }
     afterCommit();
     scheduleFrame();

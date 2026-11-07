@@ -30,6 +30,13 @@
  *     stood mounts every row as 8 says, and the FIRST frame with the box back resumes the window, bounded — from the
  *     top and from the middle at the same offset; the reservoir is the rows above the window alone (no drift absorbed
  *     against the hidden layout) and nothing is written.
+ * 10. THE HIDDEN INTERVAL (round 3 — the refuter's R4/R5/R6; the display:none shape in full: the box's observer AND the
+ *     cells' zero report and re-report, in the spec's order): while the box is 0 and until the first frame after it
+ *     returns, no judgment against layout — the anchors neither recorded nor read, a cell's report a measurement never
+ *     growth, no reconcile step — so a show at the end, from the middle and at the top resumes the window on the first
+ *     frame with the reservoir the rows above it, nothing absorbed (the paint the show's reports leave is the hidden
+ *     one), nothing written, the reader's row held; a debt the hide interrupted stands through the interval and is
+ *     paid at the first rest after the show, in one write.
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -85,7 +92,8 @@ class FakeIntersectionObserver {
 }
 (globalThis as any).IntersectionObserver = FakeIntersectionObserver;
 
-// ── ResizeObserver stub: records targets and counts observe() per element; the first report follows observe(). ──
+// ── ResizeObserver stub: records targets and counts observe() per element; the first report follows observe() — once the
+//    element is rendered at a size (the spec: no initial observation under a pane of no box). ──
 type ROCallback = (entries: ResizeObserverEntry[]) => void;
 const observers: Array<{ callback: ROCallback; targets: Set<Element> }> = [];
 const observeCounts = new Map<Element, number>();
@@ -98,7 +106,9 @@ class FakeResizeObserver {
   observe(target: Element) {
     this.entry.targets.add(target);
     observeCounts.set(target, (observeCounts.get(target) ?? 0) + 1);
-    this.entry.callback([entryFor(target)]);
+    if (clientHeight > 0) {
+      this.entry.callback([entryFor(target)]);
+    }
   }
   unobserve(target: Element) {
     this.entry.targets.delete(target);
@@ -132,6 +142,21 @@ const boxResizes = (scroller: Element, height: number) => {
   observers.forEach((observer) => {
     if (observer.targets.has(scroller)) {
       observer.callback([entryFor(scroller, height)]);
+    }
+  });
+};
+
+/** The pane's display flips (display: none ↔ its box): EVERY observer reports, in creation order — the scroller's box at
+ *  `height`, each observed cell at 0 on the hide and at its height on the show (the ResizeObserver spec: an observation
+ *  fires when the element's display is set to none, and again when it is rendered at a size). */
+const paneDisplay = (scroller: Element, height: number) => {
+  clientHeight = height;
+  observers.forEach((observer) => {
+    const entries = Array.from(observer.targets).map((target) =>
+      target === scroller ? entryFor(target, height) : entryFor(target, height <= 0 ? 0 : heightOf(target))
+    );
+    if (entries.length > 0) {
+      observer.callback(entries);
     }
   });
 };
@@ -682,5 +707,141 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(belowPx()).toBe((1000 - shown[0] - shown.length) * ROW_H);
     expect(scroller.scrollHeight).toBe(1000 * ROW_H);
     expect(writes).toEqual([]);
+  });
+
+  /** The pane hidden under the display:none shape, through the frame that mounts every row. */
+  const hidden = async () => {
+    paneDisplay(scroller, 0);
+    await frame();
+    await flush();
+  };
+  /**
+   * The pane shown, as one outcome: the paint the show's reports leave before any frame (the reservoir, the writes), the
+   * window at the first frame with the box, and the reader's row at the rest.
+   */
+  const shown = async () => {
+    paneDisplay(scroller, CLIENT_HEIGHT);
+    const atReports = { reservoir: reservoirPx(), writes: [...writes] };
+    await frame();
+    await flush();
+    const atFrame = {
+      first: mountedIds()[0],
+      bounded: mountedIds().length <= BOUND,
+      reservoir: reservoirPx(),
+      writes: [...writes],
+    };
+    await act(async () => {
+      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
+    });
+    const atRest = {
+      first: mountedIds()[0],
+      reservoir: reservoirPx(),
+      writes: [...writes],
+      reader: readerRow(),
+      scrollTop: scrollTopValue,
+    };
+    return { atReports, atFrame, atRest };
+  };
+
+  test('10a. hidden with the reader at the END, then shown (round 3, the refuter’s R4): no anchor is recorded against the hidden layout — the window resumes at the end on the first frame, the reservoir the rows above it, nothing absorbed, nothing written, the reader’s row held', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    const END = 1000 * ROW_H - CLIENT_HEIGHT;
+    readerScrollsTo(scroller, END);
+    await frame();
+    const before = mountedIds();
+    expect(before.length).toBeLessThanOrEqual(BOUND);
+    expect(before[before.length - 1]).toBe(999);
+    const reader = readerRow();
+
+    // Hidden: every row in the document, the reservoir nothing. The red: the anchors recorded here (the first and the
+    // last cell, tops 0 under the hidden layout) — at the show the first is unmounted and the last, read against the
+    // live layout, is a drift of the whole reservoir (−1,196: the content collapses to a row, the reader thrown to 0).
+    await hidden();
+    expect(mountedIds().length).toBe(1000);
+    expect(reservoirPx()).toBe(0);
+    expect(await shown()).toEqual({
+      atReports: { reservoir: 0, writes: [] },
+      atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H, writes: [] },
+      atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: END },
+    });
+  });
+
+  test('10b. hidden from the MIDDLE, then shown (the refuter’s R5): the cells’ re-reports are measurements, not growth above the reader — nothing absorbed, nothing written at the rest, the reader’s row held', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    readerScrollsTo(scroller, 26_000);
+    await frame();
+    const before = mountedIds();
+    expect(before.length).toBeLessThanOrEqual(BOUND);
+    const reader = readerRow();
+
+    // The red: the re-report of every cell mounted before the hide, judged as growth (+52 against its zero), is absorbed
+    // for the 13 whose bottom sits at or above the edge (676) and paid at the rest as a write of 26,676 — the window at
+    // 501, the reader on row 513 instead of 500.
+    await hidden();
+    expect(mountedIds().length).toBe(1000);
+    expect(reservoirPx()).toBe(0);
+    expect(await shown()).toEqual({
+      atReports: { reservoir: 0, writes: [] },
+      atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H, writes: [] },
+      atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: 26_000 },
+    });
+  });
+
+  test('10c. hidden at the TOP, then shown (the refuter’s R6): the first row’s re-report is not absorbed — the paint the show’s reports leave is the hidden one, not a row cut by its own height; nothing written, the reader on row 0', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    expect(mountedIds().length).toBeLessThanOrEqual(BOUND);
+
+    // The red: row 0’s re-report (+52, its bottom-before exactly at the edge) is absorbed — the reservoir −52 in the paint
+    // between the show’s reports and the frame; with the anchors alone fixed, a write of 52 at the rest, the reader on row 1.
+    await hidden();
+    expect(mountedIds().length).toBe(1000);
+    expect(reservoirPx()).toBe(0);
+    expect(await shown()).toEqual({
+      atReports: { reservoir: 0, writes: [] },
+      atFrame: { first: 0, bounded: true, reservoir: 0, writes: [] },
+      atRest: { first: 0, reservoir: 0, writes: [], reader: 0, scrollTop: 0 },
+    });
+  });
+
+  test('10d. a debt at the hide — growth absorbed above the reader, the rest not yet reached — stands through the hidden interval (no step against a box of 0) and is paid at the first rest after the show in ONE write, the reader’s row held', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountList(loader, 1000);
+    await frame();
+    readerScrollsTo(scroller, 26_000);
+    await frame();
+    const before = mountedIds();
+    const reader = readerRow();
+    const offset = topOf(reader);
+    // The window’s first row, above the viewport, grows: absorbed into the reservoir (law 4), the rest owed.
+    await act(async () => {
+      resize(boxOf(before[0]), ROW_H + 40);
+    });
+    expect(reservoirPx()).toBe(before[0] * ROW_H - 40);
+    expect(topOf(reader)).toBe(offset);
+    expect(writes).toEqual([]);
+
+    // Hidden through QUIET_FRAMES frames: the rest arrives under the box of 0 and steps nothing — the debt stands. The
+    // red: a step here measures a drift of 0 against the hidden rects and zeroes the reserve, the hold silently dropped
+    // (the reservoir 0 while hidden; the reader on row 499 at the show, 40 px off, and no write to pay it).
+    await hidden();
+    await act(async () => {
+      pumpFrames(ScrollRest.QUIET_FRAMES);
+    });
+    expect(mountedIds().length).toBe(1000);
+    expect(reservoirPx()).toBe(-40);
+    expect(writes).toEqual([]);
+
+    expect(await shown()).toEqual({
+      atReports: { reservoir: -40, writes: [] },
+      atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H - 40, writes: [] },
+      atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [26_040], reader, scrollTop: 26_040 },
+    });
+    expect(topOf(reader)).toBe(offset);
   });
 });
