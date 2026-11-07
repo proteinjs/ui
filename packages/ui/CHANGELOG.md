@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.23.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.3...@proteinjs/ui@4.23.0) (2026-11-07)
+
+
+### Bug Fixes
+
+* **list:** the hidden interval — no judgment against layout while the box is 0 and until the first frame after it returns (row 3234 round 3) ([26e0a84](https://github.com/proteinjs/ui/commit/26e0a84a583fd28f21dd75f46b0ee2f4a9344317))
+* **list:** the hidden zero is no measurement, the observers' order pinned below a bar, the mount's third writer dropped (row 3234 round 4) ([a3adea2](https://github.com/proteinjs/ui/commit/a3adea29b85b177479f9cf5cd6947738b07707e2))
+* **list:** the windowed frame forgets the window at a hidden pane — the box's return resumes it bounded (row 3234 round 2) ([b7c319d](https://github.com/proteinjs/ui/commit/b7c319d6119473384677213ccef1eff64938e635))
+
+
+### Features
+
+* **list:** the windowed mode — only the viewport's rows in the document, the reservoir above, the lead ahead of the end (row 3234) ([bdcc07d](https://github.com/proteinjs/ui/commit/bdcc07db32302eae87dd0677975cc675b7bc08cb))
+
+
+
+
+
 ## [4.22.3](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.2...@proteinjs/ui@4.22.3) (2026-11-06)
 
 
