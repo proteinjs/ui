@@ -452,7 +452,7 @@ export function List<T>({
       return 0;
     }
     return cell.kind === 'head'
-      ? (options.estimatedGroupHeaderHeight ?? options.estimatedRowHeight)
+      ? options.estimatedGroupHeaderHeight ?? options.estimatedRowHeight
       : options.estimatedRowHeight;
   }, []);
 
