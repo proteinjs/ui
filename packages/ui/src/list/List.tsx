@@ -417,8 +417,9 @@ export function List<T>({
   /**
    * False through the hidden interval — while the box is 0 and until the first frame after it returns — in which the
    * list makes no judgment against layout: no anchor recorded or read (`afterCommit`), no report absorbed as growth
-   * (`onCellResize`), no reconcile step (the rest). The frame with a box ends it, deriving the window and the anchors
-   * fresh from the layout as it is.
+   * and no zero taken as a measurement (`onCellResize`), no reconcile step (the rest). Two writers: `readBox` opens it
+   * (a box of 0; false from the mount until the first frame), the frame with a box closes it, deriving the window and
+   * the anchors fresh from the layout as it is.
    */
   const laidOut = useRef(false);
   const frame = useRef(0);
@@ -451,7 +452,7 @@ export function List<T>({
       return 0;
     }
     return cell.kind === 'head'
-      ? options.estimatedGroupHeaderHeight ?? options.estimatedRowHeight
+      ? (options.estimatedGroupHeaderHeight ?? options.estimatedRowHeight)
       : options.estimatedRowHeight;
   }, []);
 
@@ -606,6 +607,13 @@ export function List<T>({
         }
         const size = Array.isArray(entry.borderBoxSize) ? entry.borderBoxSize[0] : entry.borderBoxSize;
         const height = size && typeof size.blockSize === 'number' ? size.blockSize : entry.contentRect.height;
+        if (!laidOut.current && height <= 0) {
+          // THE HIDDEN ZERO: a cell's 0 under a box of 0 is NO measurement — the map keeps its last real height, so a
+          // reveal staged over two commits (the box back and its first frame BEFORE the cells' re-report: a container
+          // shown a commit ahead of its content) derives that frame's window from the heights the rows have, not from
+          // zeros (round 4, the refuter's R7 — listWindowed 10e). The re-report at a height is the measurement.
+          continue;
+        }
         const last = heights.current.get(key);
         heights.current.set(key, height);
         if (!reported.current.has(box)) {
@@ -615,10 +623,11 @@ export function List<T>({
           continue;
         }
         if (!laidOut.current) {
-          // THE HIDDEN INTERVAL: the report is a MEASUREMENT the map took — a cell's zero under a box of 0, its
-          // re-report at its height when the pane shows (the observer's two reports) — never growth to absorb: there
-          // is no laid-out "before" the change could have pushed the reader from, and the first frame with a box
-          // derives the window and records the anchors from the layout as it is (round 3, the refuter's R5/R6).
+          // THE HIDDEN INTERVAL: the report is a MEASUREMENT the map took — a cell's re-report at its height when the
+          // pane shows (the second of the observer's two reports; the first, its zero, skipped above) — never growth
+          // to absorb: there is no laid-out "before" the change could have pushed the reader from, and the first
+          // frame with a box derives the window and records the anchors from the layout as it is (round 3, the
+          // refuter's R5/R6).
           continue;
         }
         if (last === undefined) {
@@ -743,12 +752,15 @@ export function List<T>({
     // THE SCROLL LISTENER: nothing but the frame's request — no read, no render, no work per event.
     const onScroll = () => scheduleFrame();
     host.addEventListener('scroll', onScroll, { passive: true });
-    laidOut.current = true;
+    // `laidOut` stands false from the mount (its ref's seed) until the opening frame below closes the interval; a box
+    // of 0 here keeps it so (`readBox`). No third writer.
     readBox(host);
     if (typeof ResizeObserver !== 'undefined') {
       // The scroller's own box: its height read after layout, in the observer, never in the scroll path. Created BEFORE
-      // the cells' observer: the spec delivers observers in creation order, so in one broadcast (a pane hidden, a pane
-      // shown) the box's report leads the cells' and the hidden interval is open before a cell reports under it.
+      // the cells' observer — LOAD-BEARING: the spec delivers observers in creation order, so in one broadcast (a pane
+      // hidden, a pane shown) the box's report leads the cells' and the hidden interval is open before a cell reports
+      // under it; the other order judges the hide's zeros against the standing layout (a scroller below a bar absorbs
+      // every mounted row above its edge — listWindowed 10f pins the order) and lets them into the map (10e).
       boxObserver.current = new ResizeObserver(() => {
         readBox(host);
         scheduleFrame();

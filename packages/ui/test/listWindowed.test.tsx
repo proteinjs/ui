@@ -37,6 +37,12 @@
  *     frame with the reservoir the rows above it, nothing absorbed (the paint the show's reports leave is the hidden
  *     one), nothing written, the reader's row held; a debt the hide interrupted stands through the interval and is
  *     paid at the first rest after the show, in one write.
+ *     Round 4 (the refuter's R7/R17b), the scroller BELOW A BAR (the real Home: the greeting and the pins above the
+ *     list — at viewport top 0 a hide whose cells report before its box absorbs nothing): a cell's ZERO under the box
+ *     of 0 is no measurement — the map keeps its last real height, so a reveal staged over two commits (the box back
+ *     and its first frame before the cells' re-report) derives that frame's window from the rows' heights (10e); and
+ *     the box's observer is created before the cells', so the hide's one broadcast opens the interval before a cell
+ *     reports under it (10f — red when the order is swapped).
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -148,13 +154,18 @@ const boxResizes = (scroller: Element, height: number) => {
 
 /** The pane's display flips (display: none ↔ its box): EVERY observer reports, in creation order — the scroller's box at
  *  `height`, each observed cell at 0 on the hide and at its height on the show (the ResizeObserver spec: an observation
- *  fires when the element's display is set to none, and again when it is rendered at a size). */
-const paneDisplay = (scroller: Element, height: number) => {
-  clientHeight = height;
+ *  fires when the element's display is set to none, and again when it is rendered at a size). `part` stages the show
+ *  over two broadcasts: 'box' the scroller's report alone (the caller pumps a frame between), then 'cells' the cells'. */
+const paneDisplay = (scroller: Element, height: number, part: 'all' | 'box' | 'cells' = 'all') => {
+  if (part !== 'cells') {
+    clientHeight = height;
+  }
   observers.forEach((observer) => {
-    const entries = Array.from(observer.targets).map((target) =>
-      target === scroller ? entryFor(target, height) : entryFor(target, height <= 0 ? 0 : heightOf(target))
-    );
+    const entries = Array.from(observer.targets)
+      .filter((target) => (part === 'all' ? true : part === 'box' ? target === scroller : target !== scroller))
+      .map((target) =>
+        target === scroller ? entryFor(target, height) : entryFor(target, height <= 0 ? 0 : heightOf(target))
+      );
     if (entries.length > 0) {
       observer.callback(entries);
     }
@@ -164,7 +175,11 @@ const paneDisplay = (scroller: Element, height: number) => {
 // ── The layout model: the document order of the reservoir, the cell boxes (`data-h`) and the spacer below. ──
 const CLIENT_HEIGHT = 600;
 const ROW_H = 52;
+/** The bar above the scroller (the real Home: the greeting and the pins): the scroller's top in the viewport. */
+const BAR_H = 56;
 let clientHeight = CLIENT_HEIGHT;
+/** The scroller's top in the viewport — 0, or `BAR_H` for a list mounted below the bar. */
+let hostTop = 0;
 let scrollTopValue = 0;
 const writes: number[] = [];
 const layoutOf = (scroller: Element) => {
@@ -198,7 +213,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
     return realRect.call(this);
   }
   if (this === scroller) {
-    return rect(0, clientHeight);
+    return rect(hostTop, hostTop + clientHeight);
   }
   if (clientHeight <= 0) {
     // A hidden pane (the box 0): nothing inside it has a rect either — the engine's own shape (display: none).
@@ -211,7 +226,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
     const inner = this.querySelector('[data-list-reservoir], [data-h], [data-list-below]');
     entry = inner ? layout.rects.get(inner) : undefined;
   }
-  return entry ? rect(entry.top - scrollTopValue, entry.bottom - scrollTopValue) : rect(0, 0);
+  return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
 /** The scroller element takes the model's scroll geometry; its scrollTop setter is the write spy. */
 const modelScroller = (el: HTMLElement) => {
@@ -318,7 +333,7 @@ describe('List — the windowed mode over the reservoir', () => {
   const boxOf = (id: number) => scroller.querySelector(`[data-row="${id}"]`) as HTMLElement;
   const topOf = (id: number) => boxOf(id).getBoundingClientRect().top;
   /** The reader's row: the first mounted row at least partly below the scroller's top edge. */
-  const readerRow = () => mountedIds().find((id) => boxOf(id).getBoundingClientRect().bottom > 0.5) as number;
+  const readerRow = () => mountedIds().find((id) => boxOf(id).getBoundingClientRect().bottom > hostTop + 0.5) as number;
 
   const render = (element: React.ReactElement) => {
     act(() => {
@@ -338,6 +353,11 @@ describe('List — the windowed mode over the reservoir', () => {
     );
     await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
   };
+  /** The list mounted in a scroller below the bar (the real Home) — where a hide's judgment against layout bites. */
+  const mountBelowABar = async (loader: CorpusLoader, windowSize: number) => {
+    hostTop = BAR_H;
+    await mountList(loader, windowSize);
+  };
 
   beforeEach(() => {
     ioInstances.length = 0;
@@ -348,6 +368,7 @@ describe('List — the windowed mode over the reservoir', () => {
     renderCount = 0;
     rectReads = 0;
     clientHeight = CLIENT_HEIGHT;
+    hostTop = 0;
     scrollTopValue = 0;
     scroller = document.createElement('div');
     modelScroller(scroller);
@@ -843,5 +864,78 @@ describe('List — the windowed mode over the reservoir', () => {
       atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [26_040], reader, scrollTop: 26_040 },
     });
     expect(topOf(reader)).toBe(offset);
+  });
+
+  test('10e. the show STAGED over two commits — the box back and its first frame BEFORE the cells’ re-report (round 4, the refuter’s R7): a cell’s zero under the hidden box is no measurement — the frame derives the window from the rows’ heights, the whole height counting every row; the re-reports measure, absorb nothing, write nothing', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountBelowABar(loader, 1000);
+    await frame();
+    readerScrollsTo(scroller, 26_000);
+    await frame();
+    const before = mountedIds();
+    const reader = readerRow();
+
+    // The red: the hide’s zero report of every mounted cell lands in the map, so the frame after the box’s return — the
+    // re-report not yet delivered — derives the window against 36 rows of 0: first 524 instead of 488, the reader on
+    // row 536, the whole height 36 rows short; nothing is owed, so nothing ever pays it, and the zeros stand in the map
+    // until those rows re-mount.
+    await hidden();
+    expect(mountedIds().length).toBe(1000);
+    paneDisplay(scroller, CLIENT_HEIGHT, 'box');
+    await frame();
+    await flush();
+    const atFrame = {
+      first: mountedIds()[0],
+      bounded: mountedIds().length <= BOUND,
+      reservoir: reservoirPx(),
+      scrollHeight: scroller.scrollHeight,
+      writes: [...writes],
+    };
+    paneDisplay(scroller, CLIENT_HEIGHT, 'cells');
+    const atReports = { first: mountedIds()[0], reservoir: reservoirPx(), writes: [...writes] };
+    await act(async () => {
+      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
+    });
+    const atRest = {
+      first: mountedIds()[0],
+      reservoir: reservoirPx(),
+      writes: [...writes],
+      reader: readerRow(),
+      scrollTop: scrollTopValue,
+    };
+    expect({ atFrame, atReports, atRest }).toEqual({
+      atFrame: {
+        first: before[0],
+        bounded: true,
+        reservoir: before[0] * ROW_H,
+        scrollHeight: 1000 * ROW_H,
+        writes: [],
+      },
+      atReports: { first: before[0], reservoir: before[0] * ROW_H, writes: [] },
+      atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: 26_000 },
+    });
+  });
+
+  test('10f. the observers’ order, the scroller below a bar (round 4, the refuter’s R17b): the box’s observer is created before the cells’, so the hide’s one broadcast opens the interval before a cell reports under it — the reservoir untouched while hidden, nothing written at the rest, the reader’s row held', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(1000));
+    await mountBelowABar(loader, 1000);
+    await frame();
+    readerScrollsTo(scroller, 26_000);
+    await frame();
+    const before = mountedIds();
+    const reader = readerRow();
+
+    // The red (the creation order swapped): the cells’ zeros reach the list before the box’s 0 does, under the standing
+    // layout — each mounted row whose bottom-before sits above the bar’s edge is “growth” of −52, absorbed: the reservoir
+    // 1,872 while hidden; the rest after the show pays it as a write of 24,128, the reader thrown from row 500 to 464.
+    // At viewport top 0 (10b) that bottom-before, 52, clears the edge and the swap absorbs nothing — the bar is the pin.
+    await hidden();
+    expect(mountedIds().length).toBe(1000);
+    expect(reservoirPx()).toBe(0);
+    expect(await shown()).toEqual({
+      atReports: { reservoir: 0, writes: [] },
+      atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H, writes: [] },
+      atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: 26_000 },
+    });
   });
 });
