@@ -33,7 +33,11 @@ export interface RouteTransitionNavigation {
  */
 export type RouteTransitionPolicy = (navigation: RouteTransitionNavigation) => RouteTransitionDirection | null;
 
-type DocumentWithViewTransition = Document & {
+/**
+ * The document read through the API's own shape alone: react-router-dom declares `startViewTransition` as always
+ * present on every Document, and a browser without the API is exactly the case the dispatch below checks for.
+ */
+type DocumentWithViewTransition = {
   startViewTransition?: (updateCallback: () => void) => ViewTransitionLike;
 };
 
@@ -90,7 +94,7 @@ export function decorateHistoryWithViewTransitions(history: History, policy: Rou
   // departing location is tracked here, not read off `history.location` at dispatch time.
   let lastLocation = history.location;
   const dispatchThroughViewTransition = (listener: (update: HistoryUpdate) => void, update: HistoryUpdate): void => {
-    const doc = document as DocumentWithViewTransition;
+    const doc = document as unknown as DocumentWithViewTransition;
     const from = lastLocation;
     lastLocation = update.location;
     const direction = doc.startViewTransition

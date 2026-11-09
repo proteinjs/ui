@@ -1,0 +1,13 @@
+{
+  "branch": "fix/casa-dependency-floors",
+  "packages": [
+    "ui"
+  ],
+  "suites": [
+    "packages/ui/test/notFoundRoute.test.tsx",
+    "packages/ui/test/routeGuardHistory.test.ts",
+    "packages/ui/test/routerRouteGuardOption.test.tsx",
+    "packages/ui/test/viewTransitionHistory.test.ts"
+  ],
+  "removes": []
+}

@@ -224,7 +224,7 @@ describe('decorateHistoryWithRouteGuard — swallow and replace at the history',
       policyNavs.push({ from: nav.from.pathname, to: nav.to.pathname, action: nav.action });
       return null;
     };
-    (document as Document & { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
+    (document as unknown as { startViewTransition?: unknown }).startViewTransition = (cb: () => void) => {
       cb();
       return { finished: Promise.resolve() };
     };
@@ -242,7 +242,7 @@ describe('decorateHistoryWithRouteGuard — swallow and replace at the history',
       ]);
       expect(seenPaths(updates)).toEqual(['PUSH /space', `REPLACE ${LANDING}`]);
     } finally {
-      delete (document as Document & { startViewTransition?: unknown }).startViewTransition;
+      delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
     }
   });
 
