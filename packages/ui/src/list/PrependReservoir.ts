@@ -29,6 +29,18 @@
  * that bound would only split the gap into a write per rest, each painted as a tick where the engine acknowledges
  * a write a frame late (iOS WebKit), so the end takes the gap at once.
  *
+ * THE READER'S VIEW (`noteReaderInput`): a step's write holds the reader's row only where the engine takes it. Under
+ * a touch iOS WebKit keeps its own offset — the write reads back as taken, the engine discards it at the touch's
+ * next move, and the block's new size stands — and a touch that lands on a fling reaches the scroller with no event
+ * reaching the page, so no watch for fingers can keep a step out from under one. A chain of viewport steps under
+ * such a touch pulled the rows a viewport per step out from under a reader a few rows above the end, past the end's
+ * edge, and the lift settled the view on the END. So from the reader's first input on the scroller (a wheel, a touch
+ * that moves, a press) the ESTIMATE's reconcile — the one step that is the scroller's own idea, owed to nothing the
+ * reader did — runs only while the view rests at the scroller's END, where a step the engine drops settles on the
+ * view the reader already had; anywhere else it waits for the reader to return there by their own hand or by a door
+ * that takes them there. A debt and the end's collapse are owed to rows that landed and step as before. A list
+ * replaced or filled from empty is a view the reader has not moved.
+ *
  * THE WINDOW TERM (`setWindowAbove`): a windowed list — `List` in its windowed mode — mounts only the rows near the
  * viewport and keeps the rows loaded ABOVE its window out of the document; their measured heights sum to the block's
  * second term, added to `reserve` in the applied size. The two terms keep their meanings: `reserve` is the room for
@@ -44,6 +56,8 @@ export class PrependReservoir {
   static readonly REFILL_BAND_VIEWPORTS = 1;
   /** The reservoir's ceiling — far beyond any list, inside every engine's layout range. */
   static readonly MAX_RESERVE_PX = 4_000_000;
+  /** The events on the scroller that are the reader moving the view by their own input. */
+  static readonly READER_INPUTS = ['wheel', 'touchmove', 'pointerdown'] as const;
 
   private reserve = 0;
   /** The measured height of the rows loaded above a windowed list's window — the block's second term (0 without a window). */
@@ -54,6 +68,8 @@ export class PrependReservoir {
   private measuredRows = 0;
   /** The first row's box top relative to the reservoir's box top, as of the last layout this owner saw. */
   private recordedFirstTop: number | null = null;
+  /** The reader moved this list's view by their own input: the estimate's reconcile waits for them at the END. */
+  private readerMoved = false;
 
   constructor(
     private readonly scroller: HTMLElement,
@@ -102,6 +118,7 @@ export class PrependReservoir {
    * a seed that was off. Sized to the target with nothing to hold the view against.
    */
   reset(): void {
+    this.readerMoved = false;
     this.measureMounted();
     this.reserve = this.target();
     this.apply();
@@ -144,6 +161,11 @@ export class PrependReservoir {
     this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
   }
 
+  /** The reader's own input on the scroller — a wheel, a touch that moves, a press: from here the view is theirs. */
+  noteReaderInput(): void {
+    this.readerMoved = true;
+  }
+
   /** Whether a reconcile step is wanted at the next rest. */
   owed(clientHeight: number): boolean {
     if (this.reserve < -0.5) {
@@ -151,6 +173,9 @@ export class PrependReservoir {
     }
     if (this.remaining <= 0) {
       return this.reserve > 0.5;
+    }
+    if (this.yieldsToReader()) {
+      return false;
     }
     const band = Math.max(1, clientHeight * PrependReservoir.REFILL_BAND_VIEWPORTS);
     return Math.abs(this.target() - this.reserve) > band;
@@ -172,6 +197,7 @@ export class PrependReservoir {
    * its own offset) leaves the rows pulled up under the reader by the step — bounded by that distance, a dropped
    * step can at worst bring the loaded start to the reader's edge, never the empty room past it. With the scroller
    * at its very top no write can hold the first row at all, so the room the reader is looking at goes in one step.
+   * The estimate's step (no debt to pay) waits while the reader holds the view away from the END (`yieldsToReader`).
    * Returns the write made (0 for none).
    */
   step(clientHeight: number): number {
@@ -183,6 +209,9 @@ export class PrependReservoir {
     }
     if (atEnd) {
       return this.applyWithDrift(want);
+    }
+    if (this.reserve >= -0.5 && this.yieldsToReader()) {
+      return 0;
     }
     let limit = Math.max(1, clientHeight * PrependReservoir.STEP_VIEWPORTS);
     if (gap < 0) {
@@ -216,6 +245,18 @@ export class PrependReservoir {
 
   private target(): number {
     return Math.min(PrependReservoir.MAX_RESERVE_PX, this.remaining * this.estimate);
+  }
+
+  /**
+   * Whether the estimate's reconcile waits for the reader: they moved the view by their own input and it is not at
+   * the scroller's END — the last pixel of its extent, which the engine reports whole where the offset is not.
+   */
+  private yieldsToReader(): boolean {
+    if (!this.readerMoved) {
+      return false;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = this.scroller;
+    return scrollHeight - clientHeight - scrollTop > 1;
   }
 
   /** The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without rows. */

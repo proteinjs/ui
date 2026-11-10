@@ -286,6 +286,12 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     const detachRest = watch.attach(scroller);
     const onScroll = () => askIfNeeded();
     scroller.addEventListener('scroll', onScroll, { passive: true });
+    // The reader's own input — the wheel, a touch that moves, a press: the view is theirs from here (the reservoir's
+    // estimate reconcile waits for them at the END).
+    const onReaderInput = () => current.noteReaderInput();
+    PrependReservoir.READER_INPUTS.forEach((type) => {
+      scroller.addEventListener(type, onReaderInput, { passive: true });
+    });
     if (typeof ResizeObserver !== 'undefined') {
       observer.current = new ResizeObserver(onResize);
       syncObserved();
@@ -300,6 +306,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     return () => {
       cancelAnimationFrame(opening);
       scroller.removeEventListener('scroll', onScroll);
+      PrependReservoir.READER_INPUTS.forEach((type) => scroller.removeEventListener(type, onReaderInput));
       detachRest();
       rest.current = null;
       observer.current?.disconnect();

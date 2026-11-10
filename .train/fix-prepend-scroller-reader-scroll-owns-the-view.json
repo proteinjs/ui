@@ -1,0 +1,13 @@
+{
+  "branch": "fix/prepend-scroller-reader-scroll-owns-the-view",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/list.test.tsx",
+    "packages/ui/test/listFoot.test.tsx",
+    "packages/ui/test/listRowMemo.test.tsx",
+    "packages/ui/test/listWindowed.test.tsx",
+    "packages/ui/test/scrollTopButton.test.tsx",
+    "packages/ui/test/prependSafeScroller.test.tsx"
+  ],
+  "removes": []
+}

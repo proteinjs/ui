@@ -6,6 +6,11 @@
  * scrollHeight and scrollTop, and every box's rect, are computed here from the DOM order, each row's declared
  * height (`data-h`) and the reservoir's own inline style — the geometry a real engine would give. `scrollTop`'s
  * setter is a spy: every programmatic write is counted, and a write IS the outcome these laws forbid or allow.
+ * THE MODEL IS AN ENGINE'S IN THE TWO WAYS THE LAWS LEAN ON: content that shrinks under the view CLAMPS the offset to
+ * max(0, scrollHeight − clientHeight) at the next layout read (with the clamp's own scroll event a frame later), and
+ * a touch the page gets no event for (`unseenTouchLands`) keeps the engine's own offset against every write made
+ * under it — the write reads back as taken, the touch's next move re-asserts the engine's offset, past the END
+ * where the content shrank under it, and the lift settles it in range.
  *
  * The laws, asserted as outcomes:
  *  1. A landing of K rows at the start changes the scroller's scrollHeight by 0 and writes scrollTop never — the
@@ -22,6 +27,10 @@
  *  5. THE OPEN: a list filled from empty (or replaced) with a count of rows above in the SAME commit sizes the
  *     reservoir to count × estimate in the rows' own layout pass — before the first paint, with no write of its
  *     own and no step at any later rest.
+ *  6. THE READER'S VIEW: from the reader's own input on the scroller (a wheel, a touch that moves, a press) the
+ *     estimate's reconcile runs only while the view rests at the END — anywhere else no step and no write, under a
+ *     touch the page cannot see included, until the reader returns to the END by their own hand. With no input the
+ *     reconcile runs as before, the END holding.
  *  The gate: `onNeedMore` leaves when the viewport enters the lead, once per read, re-asked after a landing that
  *  leaves the viewport inside the lead, never with nothing remaining; a settled promise or `loading` false reopens
  *  it. THE SCROLLER'S OWN BOX: rows that landed while the scroller had no geometry (a pane mounted hidden, laid out
@@ -54,6 +63,7 @@ window.cancelAnimationFrame = (id: number) => {
 };
 const pumpFrames = (count: number) => {
   for (let k = 0; k < count; k++) {
+    fireClampEcho();
     const batch = frameQueue.splice(0);
     batch.forEach((frame) => frame.cb(performance.now()));
   }
@@ -114,6 +124,13 @@ const CLIENT_HEIGHT = 600;
 /** The scroller's own box height as the engine reports it — the cases move it (a pane laid out after its rows landed). */
 let clientHeight = CLIENT_HEIGHT;
 let scrollTopValue = 0;
+/**
+ * A touch the page cannot see (iOS WebKit: one that lands on a fling reaches the scroller with no event reaching the
+ * page). While it holds, the engine's offset is this one, whatever the page writes.
+ */
+let unseenTouchOffset: number | null = null;
+/** The scroller a clamp moved: its scroll event is owed at the next frame, as the engine fires it. */
+let clampEcho: Element | null = null;
 const writes: number[] = [];
 const heightOf = (el: Element) => Number(el.getAttribute('data-h') ?? 0);
 const layoutOf = (scroller: Element) => {
@@ -138,6 +155,26 @@ const layoutOf = (scroller: Element) => {
   });
   return { rects, contentHeight: y };
 };
+const maxScrollTop = (scroller: Element) => Math.max(0, layoutOf(scroller).contentHeight - clientHeight);
+/**
+ * THE ENGINE'S CLAMP, at every layout read: content that shrank under the view takes the offset down to the new END
+ * with it — except under a touch, where the engine holds its own offset past the END until the lift.
+ */
+const settleLayout = (scroller: Element) => {
+  if (unseenTouchOffset !== null) {
+    return;
+  }
+  const clamped = Math.max(0, Math.min(scrollTopValue, maxScrollTop(scroller)));
+  if (clamped !== scrollTopValue) {
+    scrollTopValue = clamped;
+    clampEcho = scroller;
+  }
+};
+const fireClampEcho = () => {
+  const scroller = clampEcho;
+  clampEcho = null;
+  scroller?.dispatchEvent(new Event('scroll'));
+};
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
 const realRect = Element.prototype.getBoundingClientRect;
@@ -149,6 +186,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   if (this === scroller) {
     return rect(0, clientHeight);
   }
+  settleLayout(scroller);
   const entry = layoutOf(scroller).rects.get(this);
   return entry ? rect(entry.top - scrollTopValue, entry.bottom - scrollTopValue) : rect(0, 0);
 };
@@ -161,10 +199,14 @@ const modelScroller = (el: HTMLElement) => {
     configurable: true,
   });
   Object.defineProperty(el, 'scrollTop', {
-    get: () => scrollTopValue,
+    get: () => {
+      settleLayout(el);
+      return scrollTopValue;
+    },
     set: (value: number) => {
       writes.push(value);
-      scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - clientHeight)));
+      // Under a touch the page cannot see the write still reads back as taken; the engine's own offset stands.
+      scrollTopValue = Math.max(0, Math.min(value, maxScrollTop(el)));
       el.dispatchEvent(new Event('scroll')); // the write's own echo, as the engine fires it
     },
     configurable: true,
@@ -177,6 +219,30 @@ const readerScrollsTo = (scroller: HTMLElement, top: number) => {
 };
 const fingerDown = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('touchstart'));
 const fingerUp = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('touchend'));
+/** The reader drags the view to `top` with a finger the page sees: the touch, its move, the engine's scroll, the lift. */
+const readerDragsTo = (scroller: HTMLElement, top: number) => {
+  fingerDown(scroller);
+  scroller.dispatchEvent(new Event('touchmove'));
+  readerScrollsTo(scroller, top);
+  fingerUp(scroller);
+};
+/** A touch lands that the page gets no event for: the engine's offset is its own from here. */
+const unseenTouchLands = () => {
+  unseenTouchOffset = scrollTopValue;
+};
+/** That touch moves `dy` px down the glass (the view pans up by it): the engine re-asserts ITS offset, whatever was written since. */
+const unseenTouchMoves = (scroller: HTMLElement, dy: number) => {
+  unseenTouchOffset = (unseenTouchOffset ?? scrollTopValue) - dy;
+  scrollTopValue = unseenTouchOffset;
+  scroller.dispatchEvent(new Event('scroll'));
+};
+/** It lifts: the engine settles its offset in range — the slide back to the END where the content shrank under it. */
+const unseenTouchLifts = (scroller: HTMLElement) => {
+  const offset = unseenTouchOffset ?? scrollTopValue;
+  unseenTouchOffset = null;
+  scrollTopValue = Math.max(0, Math.min(offset, maxScrollTop(scroller)));
+  scroller.dispatchEvent(new Event('scroll'));
+};
 const rowBox = (scroller: HTMLElement, id: number) =>
   scroller.querySelector(`[data-prepend-row="${id}"] > [data-h]`) as HTMLElement;
 const offsetOf = (scroller: HTMLElement, id: number) => rowBox(scroller, id).getBoundingClientRect().top;
@@ -261,6 +327,8 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   scrollTopValue = 0;
+  unseenTouchOffset = null;
+  clampEcho = null;
   clientHeight = CLIENT_HEIGHT;
   writes.length = 0;
   frameQueue.length = 0;
@@ -369,9 +437,10 @@ describe('law 2 — a landing taller than the reservoir: neutral at the landing,
 
 describe('law 3 — the end: the whole gap at the rest only, in one step with one write; the viewport bound stays while rows remain', () => {
   test('remaining 0 with a leftover over four viewports, the reader far below the loaded start: nothing while the reader moves; at the rest ONE step to zero with ONE write, the row holding its offset', () => {
-    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    // A viewport of content below the reader: AT the END the engine's own clamp holds the row and no write is owed.
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25, tail: 600 });
     expect(reservoirOf(scroller).style.height).toBe('2500px');
-    readerScrollsTo(scroller, 3900); // the end: row 15 (top 3900) first visible at offset 0, 1400 px below the loaded start
+    readerScrollsTo(scroller, 3900); // row 15 (top 3900) first visible at offset 0, 1400 px below the loaded start
     act(() => {
       harness.setRemaining(0);
     });
@@ -387,7 +456,7 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 15)).toBe(0);
     expect(scroller.scrollTop).toBe(1400);
-    expect(scroller.scrollHeight).toBe(2000);
+    expect(scroller.scrollHeight).toBe(2600);
     pumpFrames(12);
     expect(writes.length).toBe(1); // nothing more owed: no further rest, no further write
   });
@@ -463,7 +532,8 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
   });
 
   test('while rows REMAIN above (an overestimate corrected: the count drops without a landing) a shrink is still bounded by a viewport per rest, the row holding after each', () => {
-    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    // A viewport of content below the reader: AT the END the engine's own clamp holds the row and no write is owed.
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25, tail: 600 });
     expect(reservoirOf(scroller).style.height).toBe('2500px');
     readerScrollsTo(scroller, 3900); // row 15 first visible at offset 0, 1400 px below the loaded start
     act(() => {
@@ -559,6 +629,64 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     pumpFrames(ScrollRest.QUIET_FRAMES * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('2000px');
+  });
+});
+
+describe('law 6 — the reader’s view: the estimate’s reconcile yields to the reader’s input', () => {
+  // A list opened at its END over 40 rows not yet loaded: ten 200 px rows measured, an 8000 px reservoir, the END
+  // at 9400. The older page that lands is ten 50 px rows — the mean drops to 125, so the estimate owes a 3750 px
+  // shrink, six viewport steps of it before the reservoir is within a viewport of its target (3900).
+  const openAtTheEnd = () => {
+    const mounted = mount({ initial: rows(11, 20, 200), remaining: 40 });
+    expect(reservoirOf(mounted.scroller).style.height).toBe('8000px');
+    readerScrollsTo(mounted.scroller, 9400);
+    pumpFrames(ScrollRest.QUIET_FRAMES);
+    return mounted;
+  };
+  const endGap = (scroller: HTMLElement) => scroller.scrollHeight - CLIENT_HEIGHT - scroller.scrollTop;
+
+  test('the reader scrolled up from the END, an older page lands and a touch the page cannot see holds the scroller: no step, no write, the reader’s row where they left it — then the reconcile runs once they return to the END by their own hand', () => {
+    const { harness, scroller } = openAtTheEnd();
+    readerDragsTo(scroller, 9300); // row 17 (top 9200) is the reader's row, 100 px above the edge; the END 100 px below
+    expect(offsetOf(scroller, 17)).toBe(-100);
+    const writesBefore = writes.length;
+    unseenTouchLands();
+
+    act(() => {
+      harness.prepend(rows(1, 10, 50));
+    });
+    expect(reservoirOf(scroller).style.height).toBe('7500px'); // the landing itself is height-neutral
+    pumpFrames(ScrollRest.QUIET_FRAMES); // the rest a step would take
+    unseenTouchMoves(scroller, 2); // the touch's next move: the engine's own offset, 2 px further up
+    pumpFrames(ScrollRest.QUIET_FRAMES);
+
+    expect(offsetOf(scroller, 17)).toBe(-98); // the reader's row, moved by their finger alone
+    expect(endGap(scroller)).toBe(102);
+    expect(reservoirOf(scroller).style.height).toBe('7500px');
+    expect(writes.length).toBe(writesBefore);
+
+    unseenTouchLifts(scroller);
+    pumpFrames(12);
+    expect(offsetOf(scroller, 17)).toBe(-98); // not the END: the view is the reader's
+    expect(endGap(scroller)).toBe(102);
+    expect(writes.length).toBe(writesBefore);
+
+    readerDragsTo(scroller, scroller.scrollHeight - CLIENT_HEIGHT); // back to the END by their own hand
+    pumpFrames(60);
+    expect(reservoirOf(scroller).style.height).toBe('3900px');
+    expect(endGap(scroller)).toBe(0);
+    expect(offsetOf(scroller, 18)).toBe(0); // the END's first row, held through every step
+  });
+
+  test('with no input from the reader the same landing reconciles as before, the END holding through every step', () => {
+    const { harness, scroller } = openAtTheEnd();
+    act(() => {
+      harness.prepend(rows(1, 10, 50));
+    });
+    pumpFrames(60);
+    expect(reservoirOf(scroller).style.height).toBe('3900px');
+    expect(endGap(scroller)).toBe(0);
+    expect(offsetOf(scroller, 18)).toBe(0);
   });
 });
 
