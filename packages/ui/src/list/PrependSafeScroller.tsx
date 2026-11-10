@@ -117,6 +117,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const loadingForAsk = useRef(-1);
   const mounted = useRef(false);
   const firstKey = useRef<string | number | undefined>(undefined);
+  /** Every item's key as of the last commit — a replacement counts the rows that left the start against them. */
+  const keys = useRef<Array<string | number>>([]);
   const latest = useRef({ onNeedMore, onRest, remainingAbove, estimatedRowHeight, leadViewports });
   latest.current = { onNeedMore, onRest, remainingAbove, estimatedRowHeight, leadViewports };
 
@@ -272,6 +274,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     current.setRemaining(latest.current.remainingAbove, latest.current.estimatedRowHeight);
     current.initialize();
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
+    keys.current = items.map(itemKey);
     const watch = new ScrollRest(() => {
       const scrollerNow = scrollerEl.current;
       if (scrollerNow && current.owed(scrollerNow.clientHeight)) {
@@ -284,7 +287,11 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     });
     rest.current = watch;
     const detachRest = watch.attach(scroller);
-    const onScroll = () => askIfNeeded();
+    // Every scroll: the reader's row re-recorded (the row a replacement holds — PrependReservoir.replace), the lead judged.
+    const onScroll = () => {
+      engine.current?.recordReader();
+      askIfNeeded();
+    };
     scroller.addEventListener('scroll', onScroll, { passive: true });
     if (typeof ResizeObserver !== 'undefined') {
       observer.current = new ResizeObserver(onResize);
@@ -328,13 +335,27 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       current.reset();
     };
     const previous = firstKey.current;
+    const previousKeys = keys.current;
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
+    keys.current = items.map(itemKey);
     if (previous === undefined || items.length === 0) {
       fill();
     } else {
       const index = items.findIndex((item) => itemKey(item) === previous);
       if (index < 0) {
-        fill();
+        // THE REPLACEMENT: the row that was first is gone. The rows that left the start are the previous keys before
+        // the first one still here; with any row surviving, the reader's row is held and the leaving height absorbed
+        // into the reservoir in this same layout pass (PrependReservoir.replace); with none, the list is another list
+        // — sized from this commit's count and seed as an open is.
+        const now = new Set(keys.current);
+        const survivor = previousKeys.findIndex((key) => now.has(key));
+        if (survivor < 0) {
+          fill();
+        } else {
+          current.setRemaining(latest.current.remainingAbove, latest.current.estimatedRowHeight);
+          current.replace(survivor);
+          requestReconcile();
+        }
       } else if (index > 0) {
         const boxes = rowBoxes();
         current.land(boxes[index] ?? null, index);

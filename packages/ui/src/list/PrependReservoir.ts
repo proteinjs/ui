@@ -36,6 +36,19 @@
  * negative margin), `windowAbove` the exact height of loaded rows the window left out. `distanceFromLoadedStart` reads
  * from the LOADED start — the window's rows above are inside the loaded span. With no window term (the default, 0)
  * every number below is the one it was.
+ *
+ * THE REPLACEMENT (`replace`): a consumer that re-cuts its list at the start — rows LEAVING the start while the rows
+ * the reader is on stay (a transcript's cached head re-cut to one page under the live head, the rows above it handed
+ * back to the server's paging) — is a height change above the reader like any other, and it is absorbed the same way:
+ * the reader's row (the first row at least partly below the scroller's top edge, re-recorded at every layout this
+ * owner sees and at every scroll) is held, its displacement since the record is exactly the height that left above
+ * it, and the reservoir GROWS by that much in the rows' own commit — `scrollHeight` unchanged, `scrollTop` unchanged,
+ * no write, on every engine. Sized from the count × the estimate instead (the open's `reset`), the room missed the
+ * leaving rows' real height by the estimate's error over hundreds of rows, and the reader fell by the difference on
+ * an engine without scroll anchoring (iOS WebKit: a transcript opened at its end, scrolled up two rows, snapped back
+ * to the end a second later as the live head landed). The rows that left are KNOWN ABOVE (`knownAbove`: their count
+ * and their measured height): the target counts them at their height, not the estimate's, so nothing is owed at the
+ * rest for a room that is exact, and the landings that bring them back drain the known term first.
  */
 export class PrependReservoir {
   /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
@@ -54,6 +67,10 @@ export class PrependReservoir {
   private measuredRows = 0;
   /** The first row's box top relative to the reservoir's box top, as of the last layout this owner saw. */
   private recordedFirstTop: number | null = null;
+  /** The reader's row and its top relative to the reservoir's top, as of the last layout or scroll this owner saw. */
+  private recordedReader: { box: HTMLElement; top: number } | null = null;
+  /** Rows that left the start with their heights measured here — counted into the target at that height, drained by the landings that bring them back. */
+  private knownAbove = { count: 0, px: 0 };
 
   constructor(
     private readonly scroller: HTMLElement,
@@ -89,6 +106,7 @@ export class PrependReservoir {
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
   initialize(): void {
+    this.knownAbove = { count: 0, px: 0 };
     this.measureMounted();
     this.reserve = this.target();
     this.apply();
@@ -102,6 +120,7 @@ export class PrependReservoir {
    * a seed that was off. Sized to the target with nothing to hold the view against.
    */
   reset(): void {
+    this.knownAbove = { count: 0, px: 0 };
     this.measureMounted();
     this.reserve = this.target();
     this.apply();
@@ -111,7 +130,9 @@ export class PrependReservoir {
   /**
    * THE LANDING: `landedCount` rows are now in the document before the row that was first; `previousFirstBox` is
    * that row's box. Its displacement since the last record is exactly the height the landing added above it —
-   * margins, collapsed or not, included — and the reservoir shrinks by that much in this same layout pass.
+   * margins, collapsed or not, included — and the reservoir shrinks by that much in this same layout pass. Rows
+   * known above (they left in a replacement, measured) come back first: the known term drains by what landed, and
+   * only the rows beyond it join the estimate's mean (the known ones are in it already).
    * Returns the height absorbed.
    */
   land(previousFirstBox: HTMLElement | null, landedCount: number): number {
@@ -121,11 +142,45 @@ export class PrependReservoir {
     }
     const landed = this.topOf(previousFirstBox) - this.recordedFirstTop;
     this.reserve -= landed;
-    this.measuredTotal += landed;
-    this.measuredRows += landedCount;
+    const fromKnown = Math.min(Math.max(0, landedCount), this.knownAbove.count);
+    if (fromKnown > 0) {
+      this.knownAbove = { count: this.knownAbove.count - fromKnown, px: Math.max(0, this.knownAbove.px - landed) };
+    }
+    const beyondKnown = Math.max(0, landedCount - fromKnown);
+    if (beyondKnown > 0) {
+      this.measuredTotal += (landed * beyondKnown) / landedCount;
+      this.measuredRows += beyondKnown;
+    }
     this.apply();
     this.record();
     return landed;
+  }
+
+  /**
+   * THE REPLACEMENT: the row that was first is gone — `removedAbove` rows left the start — and the reader's row as
+   * last recorded is still in the document. Its displacement since the record is exactly the height that left above
+   * it (a landing in reverse), and the reservoir grows by that much in this same layout pass: height-neutral, no
+   * write. The rows that left are known above at the height they had. With the reader's row gone too (the reader was
+   * among the rows that left, or no row was ever on show) the list is sized as a replacement with nothing to hold
+   * against (`reset`). Returns the height absorbed (negative: the room grew by rows leaving).
+   */
+  replace(removedAbove: number): number {
+    const held = this.recordedReader;
+    if (!held || !held.box.isConnected || !this.rowBoxes().includes(held.box)) {
+      this.reset();
+      return 0;
+    }
+    const drift = this.topOf(held.box) - held.top;
+    if (drift !== 0) {
+      this.reserve -= drift;
+      this.knownAbove = {
+        count: this.knownAbove.count + Math.max(0, removedAbove),
+        px: Math.max(0, this.knownAbove.px - drift),
+      };
+    }
+    this.apply();
+    this.record();
+    return drift;
   }
 
   /** A row above the first visible row changed height by `delta`: absorbed height-neutrally. */
@@ -138,10 +193,17 @@ export class PrependReservoir {
     this.record();
   }
 
-  /** Re-record the first row's place after a commit that kept the same first row. */
+  /** Re-record the first row's place after a commit that kept the same first row — and the reader's row with it. */
   record(): void {
     const boxes = this.rowBoxes();
     this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
+    this.recordReader();
+  }
+
+  /** The reader scrolled: the reader's row moves with the viewport, so the row a replacement holds is re-recorded. */
+  recordReader(): void {
+    const reader = this.anchorBox();
+    this.recordedReader = reader ? { box: reader, top: this.topOf(reader) } : null;
   }
 
   /** Whether a reconcile step is wanted at the next rest. */
@@ -214,8 +276,10 @@ export class PrependReservoir {
     return measured > 0 ? measured : this.seedEstimate;
   }
 
+  /** The room for the rows above: the known ones at their measured height, the rest at the estimate. */
   private target(): number {
-    return Math.min(PrependReservoir.MAX_RESERVE_PX, this.remaining * this.estimate);
+    const unknown = Math.max(0, this.remaining - this.knownAbove.count);
+    return Math.min(PrependReservoir.MAX_RESERVE_PX, this.knownAbove.px + unknown * this.estimate);
   }
 
   /** The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without rows. */
@@ -267,15 +331,29 @@ export class PrependReservoir {
     return written;
   }
 
-  /** The first row at least partly below the scroller's top edge — the reader's row; the first row when none is. */
+  /**
+   * The first row at least partly below the scroller's top edge — the reader's row; the first row when none is. The
+   * rows are stacked in document order, so their bottoms are non-decreasing and the first below the edge is found by
+   * bisection: a handful of rect reads on a transcript of hundreds of rows, at every scroll.
+   */
   private anchorBox(): HTMLElement | null {
     const boxes = this.rowBoxes();
+    if (boxes.length === 0) {
+      return null;
+    }
     const top = this.scroller.getBoundingClientRect().top;
-    for (const box of boxes) {
-      if (box.getBoundingClientRect().bottom > top + 0.5) {
-        return box;
+    let low = 0;
+    let high = boxes.length - 1;
+    let found: HTMLElement | null = null;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (boxes[mid].getBoundingClientRect().bottom > top + 0.5) {
+        found = boxes[mid];
+        high = mid - 1;
+      } else {
+        low = mid + 1;
       }
     }
-    return boxes.length > 0 ? boxes[0] : null;
+    return found ?? boxes[0];
   }
 }

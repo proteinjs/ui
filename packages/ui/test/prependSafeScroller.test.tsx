@@ -22,6 +22,13 @@
  *  5. THE OPEN: a list filled from empty (or replaced) with a count of rows above in the SAME commit sizes the
  *     reservoir to count × estimate in the rows' own layout pass — before the first paint, with no write of its
  *     own and no step at any later rest.
+ *  6. THE REPLACEMENT THAT KEEPS THE READER'S ROW: rows leaving the start while the reader's row stays (a transcript's
+ *     cached head re-cut to a page under the live head) are absorbed like a landing in reverse — the reservoir grows
+ *     by exactly their measured height in the rows' own commit, no write, the reader's row keeping its offset and
+ *     the scroller its height; the room is exact (nothing owed at the rest), and the landings that bring the rows
+ *     back drain it by what landed. RED at 4.23.0: sized from count × the estimate instead, the room missed the
+ *     leaving rows' height and the reader's row fell by the difference (a chat opened at its end and scrolled up
+ *     snapped back to the end on iOS WebKit as the live head landed — the founder's prod P0, 2026-11-09).
  *  The gate: `onNeedMore` leaves when the viewport enters the lead, once per read, re-asked after a landing that
  *  leaves the viewport inside the lead, never with nothing remaining; a settled promise or `loading` false reopens
  *  it. THE SCROLLER'S OWN BOX: rows that landed while the scroller had no geometry (a pane mounted hidden, laid out
@@ -559,6 +566,72 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     pumpFrames(ScrollRest.QUIET_FRAMES * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('2000px');
+  });
+});
+
+describe('law 6 — a replacement that keeps the reader’s row: the leaving rows absorbed by their height, no write, the room exact', () => {
+  /** A transcript's cached head: twenty older rows of 300 (long replies) under twenty newer rows of 100. */
+  const cachedHead = () => [...rows(1, 20, 300), ...rows(21, 40, 100)];
+
+  test('rows leave the start under a reader near the end: the reservoir grows by exactly their height in the commit, the reader’s row and the scroller’s height hold, nothing is written, and no step follows at the rest', () => {
+    const { harness, scroller } = mount({ initial: cachedHead(), remaining: 0 });
+    expect(reservoirOf(scroller).style.height).toBe('0px');
+    expect(scroller.scrollHeight).toBe(8000);
+    // The reader opened at the end and scrolled up a row and a half: row 33 is first below the top edge, at -50.
+    readerScrollsTo(scroller, 7250);
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    // The live head re-cuts the list: the twenty older rows leave the start (handed back to the server's paging, so
+    // the count above says 20), the reader's rows stay — one commit, as a consumer lands it.
+    act(() => {
+      harness.replace(rows(21, 40, 100));
+      harness.setRemaining(20);
+    });
+    // AT THE COMMIT: the room is the leaving rows' real height (20 × 300), never 20 × the mounted rows' mean (2000);
+    // the scroller's height is what it was, the reader's row where it was, nothing written.
+    expect(reservoirOf(scroller).style.height).toBe('6000px');
+    expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
+    expect(scroller.scrollHeight).toBe(8000);
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    expect(scroller.scrollTop).toBe(7250);
+    expect(writes.length).toBe(0);
+    // The room is exact: rest after rest, no step, no write.
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('6000px');
+    expect(offsetOf(scroller, 33)).toBe(-50);
+  });
+
+  test('the landings that bring the rows back drain the room by what landed: a page of the leaving rows lands height-neutrally, the rest owes nothing', () => {
+    const { harness, scroller } = mount({ initial: cachedHead(), remaining: 0 });
+    readerScrollsTo(scroller, 7250);
+    act(() => {
+      harness.replace(rows(21, 40, 100));
+      harness.setRemaining(20);
+    });
+    expect(reservoirOf(scroller).style.height).toBe('6000px');
+    act(() => {
+      harness.prepend(rows(11, 20, 300)); // the page above comes back from the server: ten of the rows that left
+    });
+    expect(reservoirOf(scroller).style.height).toBe('3000px'); // the room for the ten still out, at their height
+    expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
+    expect(scroller.scrollHeight).toBe(8000);
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    expect(offsetOf(scroller, 11)).toBe(3000 - 7250);
+    expect(writes.length).toBe(0);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+    expect(reservoirOf(scroller).style.height).toBe('3000px');
+  });
+
+  test('the reader’s own row among the rows that leave: nothing to hold against — the list is sized as a replacement (count × the mounted mean), no write', () => {
+    const { harness, scroller } = mount({ initial: cachedHead(), remaining: 0 });
+    readerScrollsTo(scroller, 7250); // row 33 is the reader's
+    act(() => {
+      harness.replace(rows(36, 40, 100)); // rows 1..35 leave, the reader's among them
+      harness.setRemaining(35);
+    });
+    expect(reservoirOf(scroller).style.height).toBe('3500px');
+    expect(writes.length).toBe(0);
   });
 });
 
