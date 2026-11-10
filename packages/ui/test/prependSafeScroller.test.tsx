@@ -31,6 +31,9 @@
  *     estimate's reconcile runs only while the view rests at the END — anywhere else no step and no write, under a
  *     touch the page cannot see included, until the reader returns to the END by their own hand. With no input the
  *     reconcile runs as before, the END holding.
+ *  7. THE START RE-CUT: rows that leave the start while the row now first stays in the document (a shorter head
+ *     swapped in) give their observed heights to the reservoir before any layout is read — scrollHeight unchanged,
+ *     nothing written, the reader's row where it was.
  *  The gate: `onNeedMore` leaves when the viewport enters the lead, once per read, re-asked after a landing that
  *  leaves the viewport inside the lead, never with nothing remaining; a settled promise or `loading` false reopens
  *  it. THE SCROLLER'S OWN BOX: rows that landed while the scroller had no geometry (a pane mounted hidden, laid out
@@ -687,6 +690,33 @@ describe('law 6 — the reader’s view: the estimate’s reconcile yields to th
     expect(reservoirOf(scroller).style.height).toBe('3900px');
     expect(endGap(scroller)).toBe(0);
     expect(offsetOf(scroller, 18)).toBe(0);
+  });
+});
+
+describe('law 7 — the start re-cut: the rows that leave give their height to the reservoir before any layout is read', () => {
+  test('the reader a few rows above the END, the older rows leaving the start in one commit with their count: the extent unchanged, nothing written, the reader’s row where it was — at the commit and at every rest after', () => {
+    // Twenty 300 px rows over twenty 100 px rows with nothing above: 8000 px of rows, the END at 7400.
+    const { harness, scroller } = mount({ initial: [...rows(1, 20, 300), ...rows(21, 40, 100)], remaining: 0 });
+    readerScrollsTo(scroller, 7400);
+    pumpFrames(ScrollRest.QUIET_FRAMES);
+    readerDragsTo(scroller, 7250); // row 33 (top 7200) is the reader's row, 50 px above the edge; the END 150 px below
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    const writesBefore = writes.length;
+
+    act(() => {
+      harness.replace(rows(21, 40, 100)); // the shorter head: rows 1–20 leave the start …
+      harness.setRemaining(20); // … and the consumer counts them above, in the same commit
+    });
+    // AT THE COMMIT the 6000 px the leaving rows held is the reservoir's: the extent never shrank, so the engine had
+    // no offset to clamp (a room sized after a layout read stood the reader at 1400, inside the empty block).
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    expect(scroller.scrollHeight).toBe(8000);
+    expect(reservoirOf(scroller).style.height).toBe('6000px');
+    expect(writes.length).toBe(writesBefore);
+
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(offsetOf(scroller, 33)).toBe(-50);
+    expect(writes.length).toBe(writesBefore);
   });
 });
 

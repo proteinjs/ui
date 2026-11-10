@@ -104,6 +104,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const rest = useRef<ScrollRest | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const observedHeights = useRef(new Map<Element, number>());
+  /** The rows' boxes as of the last commit of items, start first — what a start that was re-cut is read against. */
+  const committedBoxes = useRef<HTMLElement[]>([]);
   /** The observation of the scroller's OWN box, beside the rows' (`observer`). */
   const boxObserver = useRef<ResizeObserver | null>(null);
   /** The scroller's box height as last judged — growth re-judges the lead. */
@@ -260,6 +262,28 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     });
   }, [rowBoxes]);
 
+  /**
+   * The height held by the rows that LEFT the start in this commit, when the row now first (`first`) was already in
+   * the document behind them: the leaving rows' observed heights, summed — no layout read. Null when the row now
+   * first is not one of the last commit's rows (another list), or a leaving row was never observed.
+   */
+  const leftTheStart = useCallback((first: HTMLElement | undefined): number | null => {
+    const before = committedBoxes.current;
+    const kept = first ? before.indexOf(first) : -1;
+    if (kept <= 0) {
+      return null;
+    }
+    let px = 0;
+    for (let i = 0; i < kept; i++) {
+      const height = observedHeights.current.get(before[i]);
+      if (height === undefined) {
+        return null;
+      }
+      px += height;
+    }
+    return px;
+  }, []);
+
   // Mount: the reservoir sized before the first paint, the rest watch and the gate on the scroller.
   useLayoutEffect(() => {
     const scroller = scrollerEl.current;
@@ -336,23 +360,34 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     };
     const previous = firstKey.current;
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
+    const boxes = rowBoxes();
     if (previous === undefined || items.length === 0) {
       fill();
     } else {
       const index = items.findIndex((item) => itemKey(item) === previous);
-      if (index < 0) {
-        fill();
-      } else if (index > 0) {
-        const boxes = rowBoxes();
+      if (index > 0) {
         current.land(boxes[index] ?? null, index);
         landedSinceAsk.current = true;
         requestReconcile();
-      } else {
+      } else if (index === 0) {
         current.record();
+      } else {
+        // THE START RE-CUT: the row that was first is gone. Rows that left the start with the row now first still
+        // in the document give their height to the reservoir BEFORE any layout is read (`PrependReservoir.recut`);
+        // anything else is another list, sized from its own count.
+        const left = leftTheStart(boxes[0]);
+        if (left === null) {
+          fill();
+        } else {
+          current.setRemaining(latest.current.remainingAbove, latest.current.estimatedRowHeight);
+          current.recut(left);
+          requestReconcile();
+        }
       }
     }
     syncObserved();
-  }, [items, itemKey, rowBoxes, syncObserved, requestReconcile]);
+    committedBoxes.current = boxes;
+  }, [items, itemKey, rowBoxes, syncObserved, requestReconcile, leftTheStart]);
 
   // ONE judgment per commit, after it: the gate reopens at most once — for rows that landed at the start, or for
   // a `loading` that turned false and belongs to the ask in flight (a turn that lands with the chain's next ask

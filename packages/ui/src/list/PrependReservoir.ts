@@ -41,6 +41,11 @@
  * that takes them there. A debt and the end's collapse are owed to rows that landed and step as before. A list
  * replaced or filled from empty is a view the reader has not moved.
  *
+ * THE START RE-CUT (`recut`): rows that LEAVE the start while the row now first stays in the document (a consumer
+ * swapped its loaded rows for a shorter head) are the landing run backwards — the block takes the height they held,
+ * from their observed heights, BEFORE any layout is read, so the extent never shrinks under the reader and the
+ * engine has no offset to clamp.
+ *
  * THE WINDOW TERM (`setWindowAbove`): a windowed list — `List` in its windowed mode — mounts only the rows near the
  * viewport and keeps the rows loaded ABOVE its window out of the document; their measured heights sum to the block's
  * second term, added to `reserve` in the applied size. The two terms keep their meanings: `reserve` is the room for
@@ -143,6 +148,21 @@ export class PrependReservoir {
     this.apply();
     this.record();
     return landed;
+  }
+
+  /**
+   * THE START RE-CUT: rows left the start in a commit that kept the row now first, and `leftPx` is the height they
+   * held — their observed heights, known with no layout read. The block takes exactly that much BEFORE any layout
+   * is read: the extent is what it was, nothing is written and the reader's row is where it was. (Sized from the
+   * count after a read instead, the read itself met an extent shorter by the rows that left, the engine clamped the
+   * offset to it, and the room then opened ABOVE that offset — the reader inside the empty block.) The rows that
+   * left stay in the measured mean; the distance to the count's own target is the estimate's reconcile, at the
+   * rest. The view is still the reader's: nothing here forgets their input.
+   */
+  recut(leftPx: number): void {
+    this.reserve += Math.max(0, Number.isFinite(leftPx) ? leftPx : 0);
+    this.apply();
+    this.record();
   }
 
   /** A row above the first visible row changed height by `delta`: absorbed height-neutrally. */
