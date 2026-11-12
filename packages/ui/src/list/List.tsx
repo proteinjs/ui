@@ -118,7 +118,8 @@ export interface ListProps<T> {
    * derives the window from the scroll offset and records the anchors fresh; a debt the hide interrupted is paid at the
    * next rest. A row keeps no state of its own across the window — a row that scrolls out of the window leaves the
    * document — so a consumer holds a row's open menu, its swipe, its selection in its own state keyed by the row's
-   * identity.
+   * identity. ONE HOLDER: while the window's engine is mounted (a scroller exists) the list's root is out of the
+   * browser's scroll anchoring — the why and the accepted cost are at `ROOT_OUT_OF_ANCHORING`.
    */
   windowed?: ListWindowing;
   /** The root container (wraps rows and sentinel; slots render bare). */
@@ -314,6 +315,20 @@ const spacerHeights = (heights: number[], window: ListWindow): { above: number; 
 const cellWrapperStyle: React.CSSProperties = { display: 'contents' };
 
 /**
+ * ONE HOLDER — what the window's engine declares on the list's root at its mount and takes back when it leaves: the
+ * windowed list holds its own rows (the reservoir, and its law for a row that grows above the reader), and the
+ * browser's scroll anchoring is a second holder of the same rows, whose adjustment at a window commit ends an animated
+ * scroll where it stands and fires `scrollend` under a fling (WebKit from iOS 27), so the root — like the reservoir
+ * inside it — is out of it. Declared by the HOLDER, never by the `windowed` prop: a list handed the prop with no
+ * scrollable ancestor mounts no engine and keeps the browser's anchoring (its only holder), and a list that is not
+ * windowed is untouched. THE COST, accepted for this release: what a consumer renders ABOVE the list in the same
+ * scroller and changes height while the reader is deep in the list now moves the reader's row by that much on the
+ * browsers that used to hold it (the ones that anchor: Chrome and Firefox, Safari from 27) — as it always has on
+ * iOS 26 and earlier; nobody holds it, and who should is a question for the scroller's design, not a holder built here.
+ */
+const ROOT_OUT_OF_ANCHORING = { property: 'overflow-anchor', value: 'none' } as const;
+
+/**
  * `Table`'s row-stream peer: `List` renders cursor windows through `renderRow`, owning behavior
  * while the consumer owns every pixel. Behavior in the shell: window accumulation and row
  * de-duplication (`useCursorWindows` on the one CursorLoader → react-query seam `Table` rides,
@@ -427,7 +442,11 @@ export function List<T>({
   const windowRef = useRef<ListWindow | null>(null);
   const askInFlight = useRef(false);
   const rowCountAtAsk = useRef(-1);
-  /** The two anchors recorded after each commit: the first and the last mounted cell, by key and top. */
+  /**
+   * The two anchors: the first and the last mounted cell, by key and top against the reservoir — what the next commit
+   * reads its drift from, so they are recorded wherever the list itself moves that layout (`recordAnchors`): after a
+   * commit, after a cell's report changed a height, after a reconcile step.
+   */
   const anchors = useRef<Array<{ key: string; top: number }>>([]);
   const latest = useRef({
     windowed,
@@ -504,6 +523,28 @@ export function List<T>({
     clientHeight.current = host.clientHeight;
     if (clientHeight.current <= 0) {
       laidOut.current = false;
+    }
+  }, []);
+
+  /**
+   * The anchors from the layout as it is now. A record older than the list's own last change of that layout reads the
+   * change back as drift at the next commit: a hold undone (the growth un-absorbed), or a payment absorbed again as a
+   * debt nobody owes — the reader's row thrown by it at every commit after, a write at every rest (an engine's own
+   * anchoring hid both; on one that does not anchor — and under `ROOT_OUT_OF_ANCHORING` on every one — the list's
+   * record is the only one).
+   */
+  const recordAnchors = useCallback(() => {
+    const current = engine.current;
+    const order = boxOrder.current;
+    anchors.current = [];
+    if (!current || order.length === 0) {
+      return;
+    }
+    const firstKey = order[0];
+    const lastKey = order[order.length - 1];
+    anchors.current.push({ key: firstKey, top: current.topOf(boxes.current.get(firstKey) as HTMLElement) });
+    if (lastKey !== firstKey) {
+      anchors.current.push({ key: lastKey, top: current.topOf(boxes.current.get(lastKey) as HTMLElement) });
     }
   }, []);
 
@@ -598,6 +639,7 @@ export function List<T>({
         return;
       }
       let absorb = 0;
+      let changed = false;
       let hostTop: number | null = null;
       for (const entry of entries) {
         const box = entry.target;
@@ -637,6 +679,7 @@ export function List<T>({
         if (delta === 0) {
           continue;
         }
+        changed = true;
         if (hostTop === null) {
           hostTop = host.getBoundingClientRect().top;
         }
@@ -649,8 +692,12 @@ export function List<T>({
         current.absorbGrowth(absorb);
         requestReconcile();
       }
+      if (changed) {
+        // A height changed between two commits, absorbed or not: the anchors' tops moved with it.
+        recordAnchors();
+      }
     },
-    [requestReconcile]
+    [requestReconcile, recordAnchors]
   );
 
   /** The observer follows the mounted cells. */
@@ -710,29 +757,23 @@ export function List<T>({
       }
     }
     current.record();
-    const order = boxOrder.current;
-    anchors.current = [];
-    if (order.length > 0) {
-      const firstKey = order[0];
-      const lastKey = order[order.length - 1];
-      anchors.current.push({ key: firstKey, top: current.topOf(boxes.current.get(firstKey) as HTMLElement) });
-      if (lastKey !== firstKey) {
-        anchors.current.push({ key: lastKey, top: current.topOf(boxes.current.get(lastKey) as HTMLElement) });
-      }
-    }
+    recordAnchors();
     syncObserved();
-  }, [refreshBoxes, cellHeights, requestReconcile, syncObserved]);
+  }, [refreshBoxes, cellHeights, requestReconcile, recordAnchors, syncObserved]);
 
   // Mount (the windowed mode, once the scroller is known): the reservoir over the top spacer, the rest watch, the
   // passive scroll listener, the two observers, the opening frame.
   useLayoutEffect(() => {
     const host = scrollHost;
+    const root = rootEl.current;
     const reservoir = reservoirEl.current;
-    if (!isWindowed || !host || !reservoir) {
+    if (!isWindowed || !host || !root || !reservoir) {
       return;
     }
     const current = new PrependReservoir(host, reservoir, mountedBoxes);
     engine.current = current;
+    // ONE HOLDER: the engine's own declaration, made where it mounts and taken back in the cleanup below.
+    root.style.setProperty(ROOT_OUT_OF_ANCHORING.property, ROOT_OUT_OF_ANCHORING.value);
     current.setRemaining(0, latest.current.windowed?.estimatedRowHeight ?? 0);
     refreshBoxes();
     current.initialize();
@@ -742,6 +783,7 @@ export function List<T>({
       const hostNow = scrollHost;
       if (hostNow && laidOut.current && current.owed(clientHeight.current)) {
         current.step(clientHeight.current);
+        recordAnchors();
         if (current.owed(clientHeight.current)) {
           watch.request();
         }
@@ -785,6 +827,7 @@ export function List<T>({
       boxObserver.current = null;
       engine.current = null;
       anchors.current = [];
+      root.style.removeProperty(ROOT_OUT_OF_ANCHORING.property);
     };
     // The options ride `latest`; the mount follows the scroller and the mode alone.
   }, [scrollHost, isWindowed]);

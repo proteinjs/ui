@@ -1,0 +1,21 @@
+{
+  "branch": "fix/windowed-list-holds-its-own-rows-r3",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/listWindowed.test.tsx",
+    "packages/ui/test/list.test.tsx",
+    "packages/ui/test/listFoot.test.tsx",
+    "packages/ui/test/listRowMemo.test.tsx",
+    "packages/ui/test/scrollTopButton.test.tsx",
+    "packages/ui/test/prependSafeScroller.test.tsx"
+  ],
+  "removes": [],
+  "section": {
+    "heading": "## Proteinjs UI — the windowed list holds its own rows: Home’s back-to-top reaches the top in one tap (row 3435)",
+    "text": "- Home’s back-to-top reaches the top in one tap. On iOS 27 the browser was holding the list’s rows in place while the list held them too, and the browser’s correction stopped the scroll partway up; the list now holds its own rows alone.\n- For the same reason a hard flick down Home is no longer told it has stopped while it is still moving.\n- What this costs, for this release: if the pins row appears or disappears above the list while you are scrolled deep in Home (your first pin made from a row far down, or the pins placeholder closing on an account with no pins), the list jumps by that row’s height, about 108 px, on desktop, Android and iOS 27, where the browser used to hold it; iOS 26 and earlier already do this on prod.",
+    "smoke": [
+      "- HOME’S BACK-TO-TOP, on test on the phone: scroll down Home a few screens, let it stop, and tap the up arrow once — it runs all the way to the top, the greeting in view and the arrow gone.",
+      "- HOME’S FLICK, on test on the phone: flick down Home once, hard, and let go — it keeps going until it slows down by itself."
+    ]
+  }
+}
