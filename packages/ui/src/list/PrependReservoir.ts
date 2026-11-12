@@ -138,6 +138,18 @@ export class PrependReservoir {
     this.record();
   }
 
+  /**
+   * THE HOLD RELEASED: what the block owes — a debt, a leftover — goes at once, with NO scroll write; the rows land
+   * where the layout puts them. For an owner whose reader is leaving for the list's start (a windowed list's return to
+   * its top): there is no reader's row to hold, and a payment at the rest would be a write under the engine's animated
+   * scroll, which ends it.
+   */
+  release(): void {
+    this.reserve = this.target();
+    this.apply();
+    this.record();
+  }
+
   /** Re-record the first row's place after a commit that kept the same first row. */
   record(): void {
     const boxes = this.rowBoxes();

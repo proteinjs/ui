@@ -43,6 +43,13 @@
  *     and its first frame before the cells' re-report) derives that frame's window from the rows' heights (10e); and
  *     the box's observer is created before the cells', so the hide's one broadcast opens the interval before a cell
  *     reports under it (10f — red when the order is swapped).
+ * 11. THE RETURN TO THE TOP (row 3435 — his finding on test, 2026-11-11: on his phone one press of Home's back-to-top
+ *     ended short of the top). Under an engine that ANCHORS (WebKit on iOS 27 — the model below): several screens down,
+ *     ONE press, the motion settled — the scroller at its top, the first row first in view, nothing written (11a);
+ *     nothing is held through the return — a debt standing at the press is released, rows re-entering at heights other
+ *     than the map's and a row above growing are layout, never growth to absorb — so the scroll's end IS the list's top
+ *     (11b); the return ends at the top's rest and at the reader's own arm, and from there the list holds again and the
+ *     engine's anchoring has its rows back (11c).
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -228,10 +235,89 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   }
   return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
+// ── THE ENGINE'S ANIMATED SCROLL AND ITS ANCHORING (pin 11; the witnesses are the simulator on iOS 27.2 and WebKit
+//    build 2359 over the real Home, 2026-11-11). `scrollTo({ behavior: 'smooth' })` starts an animation the engine steps
+//    per tick — a scroll event each, never a write. A write to scrollTop ends it. So does the engine's own ANCHORING: at
+//    a layout change inside the scroller while the animation runs (a window commit), an engine that anchors adjusts the
+//    scroller on a candidate row, and that adjustment ends the animation where it stands — a `scrollend`, no write,
+//    short of the target. A row is a candidate unless it, or an ancestor inside the scroller, declares
+//    `overflow-anchor: none`. jsdom parses no `overflow-anchor` (a write of it is dropped), so the model keeps the
+//    declaration itself, as the engine would. ──
+let animation: { target: number } | null = null;
+let layoutAtLastTick = '';
+const anchorNone = new WeakSet<CSSStyleDeclaration>();
+const realSetProperty = CSSStyleDeclaration.prototype.setProperty;
+const realRemoveProperty = CSSStyleDeclaration.prototype.removeProperty;
+CSSStyleDeclaration.prototype.setProperty = function (
+  this: CSSStyleDeclaration,
+  name: string,
+  value: string | null,
+  priority?: string
+) {
+  if (name !== 'overflow-anchor') {
+    realSetProperty.call(this, name, value, priority);
+  } else if (value === 'none') {
+    anchorNone.add(this);
+  } else {
+    anchorNone.delete(this);
+  }
+};
+CSSStyleDeclaration.prototype.removeProperty = function (this: CSSStyleDeclaration, name: string) {
+  if (name !== 'overflow-anchor') {
+    return realRemoveProperty.call(this, name);
+  }
+  return anchorNone.delete(this) ? 'none' : '';
+};
+/** Whether the engine's anchoring finds a row to hold: a mounted row with no `overflow-anchor: none` on its way up. */
+const anchoringHasACandidate = (scroller: HTMLElement): boolean =>
+  Array.from(scroller.querySelectorAll<HTMLElement>('[data-row]')).some((row) => {
+    for (let el: HTMLElement | null = row; el && el !== scroller; el = el.parentElement) {
+      if (anchorNone.has(el.style)) {
+        return false;
+      }
+    }
+    return true;
+  });
+/** The layout as the engine's anchoring sees it change: the reservoir's size and the mounted rows. */
+const layoutSignature = (scroller: HTMLElement): string => {
+  const reservoir = scroller.querySelector<HTMLElement>('[data-list-reservoir]');
+  const rows = scroller.querySelectorAll('[data-row]');
+  return `${reservoir ? reservoir.style.height : ''}|${rows.length}|${rows.length > 0 ? rows[0].getAttribute('data-row') : ''}`;
+};
+/**
+ * One tick of the engine's animated scroll: `stepPx` toward the target as a scroll event (never a write), the
+ * `scrollend` at the target — unless the layout changed since the last tick under a candidate row: the anchoring's
+ * adjustment ends the animation where it stands. False once no animation runs.
+ */
+const engineTick = (scroller: HTMLElement, stepPx: number): boolean => {
+  if (!animation) {
+    return false;
+  }
+  const signature = layoutSignature(scroller);
+  if (signature !== layoutAtLastTick && anchoringHasACandidate(scroller)) {
+    animation = null;
+    scroller.dispatchEvent(new Event('scroll'));
+    scroller.dispatchEvent(new Event('scrollend'));
+    return false;
+  }
+  layoutAtLastTick = signature;
+  scrollTopValue = Math.max(animation.target, scrollTopValue - stepPx);
+  scroller.dispatchEvent(new Event('scroll'));
+  if (scrollTopValue === animation.target) {
+    animation = null;
+    scroller.dispatchEvent(new Event('scrollend'));
+  }
+  return true;
+};
+
 /** The scroller element takes the model's scroll geometry; its scrollTop setter is the write spy. */
 const modelScroller = (el: HTMLElement) => {
   el.setAttribute('data-model-scroller', '');
   el.style.overflowY = 'auto';
+  (el as unknown as { scrollTo: (options: { top: number }) => void }).scrollTo = ({ top }) => {
+    animation = { target: top };
+    layoutAtLastTick = layoutSignature(el);
+  };
   Object.defineProperty(el, 'clientHeight', { get: () => clientHeight, configurable: true });
   Object.defineProperty(el, 'scrollHeight', {
     get: () => Math.max(clientHeight, layoutOf(el).contentHeight),
@@ -241,6 +327,7 @@ const modelScroller = (el: HTMLElement) => {
     get: () => scrollTopValue,
     set: (value: number) => {
       writes.push(value);
+      animation = null; // a write ends the engine's animated scroll
       scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - clientHeight)));
       el.dispatchEvent(new Event('scroll'));
     },
@@ -353,6 +440,44 @@ describe('List — the windowed mode over the reservoir', () => {
     );
     await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
   };
+  const button = () => scroller.querySelector('button[aria-label="Back to top"]') as HTMLButtonElement;
+  /** The engine's rest: QUIET_FRAMES quiet frames, and one more. */
+  const rest = async () => {
+    await act(async () => {
+      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
+    });
+  };
+  /**
+   * THE PRESS, as a finger makes it: the touch lands on the button (inside the scroller), lifts, the click follows in
+   * the same task — and the lift's watch reaches its rest BEFORE the animation's first scroll event (a 120 Hz phone:
+   * three frames are 25 ms, the first event of an animated scroll is later than that).
+   */
+  const press = async () => {
+    await act(async () => {
+      const target = button();
+      target.dispatchEvent(new Event('touchstart', { bubbles: true }));
+      target.dispatchEvent(new Event('touchend', { bubbles: true }));
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await rest();
+  };
+  /** The engine's animation run to its end — or to where it is ended — a frame per tick; then the rest. */
+  const settle = async (stepPx = 400) => {
+    for (let k = 0; k < 200 && animation; k++) {
+      engineTick(scroller, stepPx);
+      await frame();
+    }
+    await rest();
+    await flush();
+  };
+  /** The reader scrolls down by hand, a frame per step — every row on the way mounted and measured — then rests. */
+  const readerScrollsDownTo = async (top: number) => {
+    for (let at = 400; at <= top; at += 400) {
+      readerScrollsTo(scroller, at);
+      await frame();
+    }
+    await rest();
+  };
   /** The list mounted in a scroller below the bar (the real Home) — where a hide's judgment against layout bites. */
   const mountBelowABar = async (loader: CorpusLoader, windowSize: number) => {
     hostTop = BAR_H;
@@ -370,6 +495,7 @@ describe('List — the windowed mode over the reservoir', () => {
     clientHeight = CLIENT_HEIGHT;
     hostTop = 0;
     scrollTopValue = 0;
+    animation = null;
     scroller = document.createElement('div');
     modelScroller(scroller);
     document.body.appendChild(scroller);
@@ -937,5 +1063,116 @@ describe('List — the windowed mode over the reservoir', () => {
       atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H, writes: [] },
       atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: 26_000 },
     });
+  });
+
+  test('11a. the return to the top under an engine that anchors (row 3435 — his phone on iOS 27: one press ended short): several screens down, ONE press, the motion settled — the scroller at its top, the first row first in view, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300, { scrollTopButton: true });
+    await frame();
+    await readerScrollsDownTo(6_000);
+    expect(mountedIds()[0]).toBeGreaterThan(50);
+    expect(button().getAttribute('data-shown')).toBe('true');
+    expect(writes).toEqual([]);
+
+    // The red: the button's default action is the engine's animated scroll and nothing more — the first window commit
+    // under it is a layout change with the rows as the anchoring's candidates, the adjustment ends the animation, and
+    // the scroller rests where that left it (5,600 of 6,000), the button still up: his "it takes two taps".
+    await press();
+    await settle();
+    expect(scrollTopValue).toBe(0);
+    expect(mountedIds()[0]).toBe(0);
+    expect(topOf(0)).toBe(0);
+    expect(reservoirPx()).toBe(0);
+    expect(writes).toEqual([]);
+    expect(button().getAttribute('data-shown')).toBe('false');
+  });
+
+  test('11b. nothing is held through the return: a debt standing at the press is released — never paid by a write under the animation — and rows re-entering at heights other than the map’s, a row above the reader growing, are layout, never growth to absorb; the scroll’s end IS the list’s top', async () => {
+    const corpus = corpusOf(300);
+    const loader = new CorpusLoader(keys(), corpus);
+    await mountList(loader, 300, { scrollTopButton: true });
+    await frame();
+    await readerScrollsDownTo(3_200);
+    // While they are out of the window the first ten rows change: they will re-enter at 80 where the map holds 52.
+    for (let id = 0; id <= 9; id++) {
+      corpus[id].h = 80;
+    }
+    // A DEBT AT THE PRESS: the window's first row, above the viewport, grows — absorbed (law 4), its rest not yet reached.
+    const first = mountedIds()[0];
+    expect(boxOf(first).getBoundingClientRect().bottom).toBeLessThan(0);
+    await act(async () => {
+      resize(boxOf(first), ROW_H + 40);
+    });
+    expect(reservoirPx()).toBe(first * ROW_H - 40);
+    expect(writes).toEqual([]);
+
+    // The press, the lift's rest before the first scroll event: the debt is released, not paid — a payment here is a
+    // write under the animation, which ends it (the red without the release: the scroller left at 3,240).
+    await press();
+    expect(writes).toEqual([]);
+    expect(reservoirPx()).toBe(first * ROW_H);
+    // Mid-return ANOTHER mounted row above the viewport grows: layout, not growth to absorb.
+    engineTick(scroller, 300);
+    await frame();
+    const above = mountedIds().find((id) => id !== first) as number;
+    expect(boxOf(above).getBoundingClientRect().bottom).toBeLessThan(0);
+    await act(async () => {
+      resize(boxOf(above), ROW_H + 24);
+    });
+    await settle();
+    // The red without the hold released: the ten rows' 280 px (and the 24) stand as a debt above the scroll origin at
+    // the animation's end, and the rest pays it holding the reader's row — one write, the scroller 280 px (304) short.
+    expect(scrollTopValue).toBe(0);
+    expect(mountedIds()[0]).toBe(0);
+    expect(topOf(0)).toBe(0);
+    expect(reservoirPx()).toBe(0);
+    expect(writes).toEqual([]);
+  });
+
+  test('11c. the return ends at the top’s rest and at the reader’s own arm: from there the list holds again (law 4) and the engine’s anchoring has its rows back', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300, { scrollTopButton: true });
+    await frame();
+    await readerScrollsDownTo(6_000);
+    await press();
+    await settle();
+    expect(scrollTopValue).toBe(0);
+    // AT THE TOP'S REST the return is over: the rows are the engine's candidates again, and growth above the reader is
+    // absorbed as ever (the red with the return never ended: the reader's row thrown 40 px by the growth).
+    expect(anchoringHasACandidate(scroller)).toBe(true);
+    await readerScrollsDownTo(2_000);
+    let above = mountedIds()[0];
+    let reader = readerRow();
+    let offset = topOf(reader);
+    await act(async () => {
+      resize(boxOf(above), ROW_H + 40);
+    });
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
+    await rest();
+    expect(writes.length).toBe(1);
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
+
+    // THE READER'S OWN ARM mid-return: a second press, two ticks of the animation, then a finger on a row — the engine
+    // ends its animation under a touch, and the return ends with it.
+    await press();
+    engineTick(scroller, 300);
+    await frame();
+    engineTick(scroller, 300);
+    await frame();
+    expect(animation).not.toBeNull();
+    expect(anchoringHasACandidate(scroller)).toBe(false);
+    await act(async () => {
+      animation = null;
+      boxOf(readerRow()).dispatchEvent(new Event('touchstart', { bubbles: true }));
+    });
+    expect(anchoringHasACandidate(scroller)).toBe(true);
+    above = mountedIds()[0];
+    reader = readerRow();
+    offset = topOf(reader);
+    expect(boxOf(above).getBoundingClientRect().bottom).toBeLessThan(0);
+    await act(async () => {
+      resize(boxOf(above), ROW_H + 40);
+    });
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
   });
 });

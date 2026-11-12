@@ -87,7 +87,8 @@ export interface ListProps<T> {
    * rather than owning one, so the wiring finds the nearest scrollable ancestor and floats the
    * button over its bottom edge via a sticky strip at the list's tail — same geometry as
    * `Table`'s sibling-after-scroller placement. Element scrollers only: a window-scrolled page
-   * has no scrollable ancestor and the button stays retired.
+   * has no scrollable ancestor and the button stays retired. In the windowed mode the press is the
+   * list's own act — THE RETURN TO THE TOP (see `windowed`): one press ends at the list's top.
    */
   scrollTopButton?: boolean | ScrollTopButtonStyleProps;
   /**
@@ -118,7 +119,14 @@ export interface ListProps<T> {
    * derives the window from the scroll offset and records the anchors fresh; a debt the hide interrupted is paid at the
    * next rest. A row keeps no state of its own across the window — a row that scrolls out of the window leaves the
    * document — so a consumer holds a row's open menu, its swipe, its selection in its own state keyed by the row's
-   * identity.
+   * identity. THE RETURN TO THE TOP: the back-to-top press of a windowed list is the engine's animated scroll to the
+   * scroller's start, under which the window commits its way up — and from the press until the scroller rests at its
+   * top, or the reader takes the scroll back (a finger, a pointer, a wheel, a key), the list holds nothing and lets
+   * nothing hold it: its rows are out of the engine's own anchoring (an anchoring adjustment at a window commit ends an
+   * animated scroll where it stands — WebKit on iOS 27), what the reservoir owed at the press is released without a
+   * write, and a drift measured at a commit or a row growing above is layout, never growth to absorb — there is no
+   * reader's row to hold on the way to the top, and a debt held above the scroll origin would make the scroll's end
+   * something other than the list's top. So one press ends at the top, in every windowed list.
    */
   windowed?: ListWindowing;
   /** The root container (wraps rows and sentinel; slots render bare). */
@@ -310,6 +318,9 @@ const spacerHeights = (heights: number[], window: ListWindow): { above: number; 
   return { above, below };
 };
 
+/** The reader's own arms on the scroller — each ends a return to the top (`ListProps.windowed`, THE RETURN TO THE TOP). */
+const RETURN_ENDING_ARMS = ['touchstart', 'pointerdown', 'wheel', 'keydown'] as const;
+
 /** The cell wrapper: box-less, so the consumer's element is the cell's box (the scroller's shape). */
 const cellWrapperStyle: React.CSSProperties = { display: 'contents' };
 
@@ -429,6 +440,11 @@ export function List<T>({
   const rowCountAtAsk = useRef(-1);
   /** The two anchors recorded after each commit: the first and the last mounted cell, by key and top. */
   const anchors = useRef<Array<{ key: string; top: number }>>([]);
+  /**
+   * True through THE RETURN TO THE TOP (`ListProps.windowed`): from the back-to-top press until the scroller rests at
+   * its top or the reader takes the scroll back. Two writers: `returnToTop` opens it, `endReturn` closes it.
+   */
+  const returning = useRef(false);
   const latest = useRef({
     windowed,
     cells,
@@ -630,6 +646,11 @@ export function List<T>({
           // refuter's R5/R6).
           continue;
         }
+        if (returning.current) {
+          // THE RETURN TO THE TOP: the map took the measurement; nothing is absorbed — no reader's row is held on the
+          // way to the top, and a debt above the scroll origin would end the scroll short of the list's top.
+          continue;
+        }
         if (last === undefined) {
           continue;
         }
@@ -700,7 +721,11 @@ export function List<T>({
       syncObserved();
       return;
     }
-    const anchor = anchors.current.find((candidate) => boxes.current.has(candidate.key));
+    // Through THE RETURN TO THE TOP no cell holds its place: the rows mounting above the reader land where the layout
+    // puts them (their drift from the map's heights is neither absorbed nor owed), so offset 0 stays the list's top.
+    const anchor = returning.current
+      ? undefined
+      : anchors.current.find((candidate) => boxes.current.has(candidate.key));
     if (anchor) {
       const box = boxes.current.get(anchor.key) as HTMLElement;
       const drift = current.topOf(box) - anchor.top;
@@ -723,6 +748,36 @@ export function List<T>({
     syncObserved();
   }, [refreshBoxes, cellHeights, requestReconcile, syncObserved]);
 
+  /** THE RETURN's end: the list holds again, and its rows are the engine's anchoring candidates again. */
+  const endReturn = useCallback(() => {
+    if (!returning.current) {
+      return;
+    }
+    returning.current = false;
+    rootEl.current?.style.removeProperty('overflow-anchor');
+  }, []);
+
+  /**
+   * THE RETURN TO THE TOP — the back-to-top press of a windowed list (`ListProps.windowed`): the return opens (the
+   * list's rows out of the engine's anchoring, what the reservoir owed released with no write), then the engine's
+   * animated scroll to the scroller's start. Without an engine (no reservoir yet) the press is the plain scroll.
+   */
+  const returnToTop = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) {
+      return;
+    }
+    const current = engine.current;
+    if (current) {
+      returning.current = true;
+      rootEl.current?.style.setProperty('overflow-anchor', 'none');
+      current.release();
+      // The tops recorded before the release are against a block of another size: the next commit records them fresh.
+      anchors.current = [];
+    }
+    host.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   // Mount (the windowed mode, once the scroller is known): the reservoir over the top spacer, the rest watch, the
   // passive scroll listener, the two observers, the opening frame.
   useLayoutEffect(() => {
@@ -737,6 +792,15 @@ export function List<T>({
     refreshBoxes();
     current.initialize();
     const watch = new ScrollRest(() => {
+      if (returning.current) {
+        // THE RETURN'S REST: short of the top it is not the return's end — the lift of the pressing finger reaches a
+        // rest before the animation's first scroll event (three frames are 25 ms at 120 Hz) — and nothing is owed to
+        // step; at the top the return is over.
+        if (host.scrollTop > 0.5) {
+          return;
+        }
+        endReturn();
+      }
       // No step through the hidden interval: its drift is measured against a box of 0 — a debt silently zeroed, no
       // write to hold the reader. The interval's end re-asks the rest for what is owed.
       const hostNow = scrollHost;
@@ -752,6 +816,9 @@ export function List<T>({
     // THE SCROLL LISTENER: nothing but the frame's request — no read, no render, no work per event.
     const onScroll = () => scheduleFrame();
     host.addEventListener('scroll', onScroll, { passive: true });
+    // THE READER'S OWN ARM ends a return to the top: the scroll is theirs again, and so is the hold. (The press that
+    // opens a return lands its own touch and pointer first, its click after — the return opens behind them.)
+    RETURN_ENDING_ARMS.forEach((type) => host.addEventListener(type, endReturn, { passive: true }));
     // `laidOut` stands false from the mount (its ref's seed) until the opening frame below closes the interval; a box
     // of 0 here keeps it so (`readBox`). No third writer.
     readBox(host);
@@ -776,6 +843,8 @@ export function List<T>({
         frame.current = 0;
       }
       host.removeEventListener('scroll', onScroll);
+      RETURN_ENDING_ARMS.forEach((type) => host.removeEventListener(type, endReturn));
+      endReturn();
       detachRest();
       rest.current = null;
       cellObserver.current?.disconnect();
@@ -906,6 +975,7 @@ export function List<T>({
           scrollContainer={scrollHost}
           {...scrollTopStyleProps}
           hostSx={stickyHostSx(scrollTopStyleProps?.hostSx)}
+          onClick={isWindowed ? returnToTop : undefined}
         />
       )}
       {renderFoot?.({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
