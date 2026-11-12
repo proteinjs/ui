@@ -39,7 +39,11 @@ export class ScrollRest {
   private quietFrames = 0;
   private frame = 0;
 
-  constructor(private readonly onRest: () => void) {}
+  constructor(
+    private readonly onRest: () => void,
+    /** An arm came down — the reader took the scroll (the one definition above); for an owner that began a scroll of its own. */
+    private readonly onArm?: () => void
+  ) {}
 
   /** The arms' and the motion's listeners on the scroller; returns the detach (also `detach()`). */
   attach(scroller: HTMLElement): () => void {
@@ -49,6 +53,7 @@ export class ScrollRest {
       this.fingerDown = true;
       this.moving = true;
       this.cancelWatch();
+      this.onArm?.();
     };
     const onTouchEnd = () => {
       this.fingerDown = false;
@@ -59,6 +64,7 @@ export class ScrollRest {
         this.pointerDown = true;
         this.moving = true;
         this.cancelWatch();
+        this.onArm?.();
       }
     };
     const onPointerEnd = () => {
