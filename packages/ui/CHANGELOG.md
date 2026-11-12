@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.23.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.23.0...@proteinjs/ui@4.23.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **list:** the browser holds the windowed list's place, the list holds its rows — every child of the root out of the browser's scroll anchoring while the engine is mounted, the root left in it (row 3435 round 4) ([3ef30d7](https://github.com/proteinjs/ui/commit/3ef30d747469a15abe48d9c29d6e350e1b9c5d35))
+* **list:** the foot under a box of the list's own, Home's grouped shape pinned, and the reservoir standing before any row's layout effect (row 3435 round 5) ([6a6d0ab](https://github.com/proteinjs/ui/commit/6a6d0abbf58b95b276bd4eaa6b2bdb665a416bb4))
+
+
+
+
+
 # [4.23.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.22.3...@proteinjs/ui@4.23.0) (2026-11-07)
 
 
