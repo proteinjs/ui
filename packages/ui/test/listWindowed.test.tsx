@@ -43,6 +43,21 @@
  *     and its first frame before the cells' re-report) derives that frame's window from the rows' heights (10e); and
  *     the box's observer is created before the cells', so the hide's one broadcast opens the interval before a cell
  *     reports under it (10f — red when the order is swapped).
+ * 11. THE LAW (row 3435 — his finding on test, 2026-11-11: on his phone one press of Home's back-to-top ended short of
+ *     the top): THE BROWSER HOLDS THE LIST'S PLACE UNDER WHAT STANDS ABOVE IT; THE LIST HOLDS ITS ROWS. Under a browser
+ *     that ANCHORS (WebKit from iOS 27; the stand-in below): several screens down, ONE press, the motion settled — the
+ *     scroller at its top, the first row first in view, the button gone, nothing written (11a); under a fling no rest
+ *     is declared at a window commit while the scroll goes on, so what is owed is written at the fling's own end, never
+ *     under its momentum (11b). Who declares what (11c): while the window's engine is mounted the list's root is a
+ *     candidate of the browser's anchoring and every child of the root is not — a child a commit that is not the
+ *     list's adds (the foot drawing itself, a row replacing its own box) and a child the list's own later commit adds
+ *     among them — a sibling of the list in the same scroller stays one and the scroller declares nothing; all of it
+ *     is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed with no scrollable
+ *     ancestor, declares nothing. The browser's side (11d): what stands above the list grows under a reader deep in
+ *     it — the reader's row does not move.
+ * 12. THE HOLD'S OWN RECORD: the anchors are recorded wherever the list itself moves the layout they are read against —
+ *     a hold is not undone at the next commit, a payment is not absorbed again as a debt nobody owes, and a row growing
+ *     below the reader's edge is not read back as drift (the engine's anchoring hid all three where it anchored).
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -212,6 +227,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   if (!scroller) {
     return realRect.call(this);
   }
+  browserLaysOut(scroller as HTMLElement);
   if (this === scroller) {
     return rect(hostTop, hostTop + clientHeight);
   }
@@ -228,10 +244,155 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   }
   return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
+// ── THE BROWSER'S SCROLL ANCHORING, ITS ANIMATED SCROLL AND ITS FLING (pin 11; the witnesses are the simulator on
+//    iOS 27.2 and the harness's WebKit and Chromium over the real Home, 2026-11-11 and 11-12). The stand-in has TWO
+//    JOBS. (i) THE ROWS: a browser that anchors answers a layout change inside a scroller with an adjustment on a
+//    candidate row. Under `scrollTo({ behavior: 'smooth' })` — an animation the browser steps per tick, a scroll event
+//    each, never a write — that adjustment ends the animation where it stands: a `scrollend`, short of the target.
+//    Under a fling it fires `scrollend` and the momentum goes on. A write to scrollTop ends an animation too. The
+//    browser chooses its anchor at a LAYOUT, and a page that reads a rect asks for one: a row that is a candidate at
+//    any layout since the last tick is a row the adjustment can land on. (ii) THE LIST'S PLACE: what stands above the
+//    list in the same scroller changes height, and the browser moves the offset by as much — its own adjustment, a
+//    scroll event, never a write — only while the list's root is a candidate; with the root out nothing in the list is
+//    one, and the reader's row moves. An element is a CANDIDATE unless it, or any ancestor up to AND INCLUDING the
+//    scroller, declares `overflow-anchor: none` — wherever and however it is declared: jsdom keeps no `overflow-anchor`
+//    (not in a style object, not in a computed style), so the stand-in reads the declaration itself by each door a page
+//    has — the style object's property (React's `style`), `setProperty`, the attribute's text, a rule of a style sheet.
+//    An element with NO BOX (`display: contents`) declares nothing a browser reads (the harness's probe on both
+//    engines, 2026-11-12: a row under a box-less element that declares it still anchors). ──
+const anchorNoneBySetProperty = new WeakSet<CSSStyleDeclaration>();
+const realSetProperty = CSSStyleDeclaration.prototype.setProperty;
+const realRemoveProperty = CSSStyleDeclaration.prototype.removeProperty;
+CSSStyleDeclaration.prototype.setProperty = function (
+  this: CSSStyleDeclaration,
+  name: string,
+  value: string | null,
+  priority?: string
+) {
+  if (name !== 'overflow-anchor') {
+    realSetProperty.call(this, name, value, priority);
+  } else if (value === 'none') {
+    anchorNoneBySetProperty.add(this);
+  } else {
+    anchorNoneBySetProperty.delete(this);
+  }
+};
+CSSStyleDeclaration.prototype.removeProperty = function (this: CSSStyleDeclaration, name: string) {
+  if (name !== 'overflow-anchor') {
+    return realRemoveProperty.call(this, name);
+  }
+  return anchorNoneBySetProperty.delete(this) ? 'none' : '';
+};
+const declaresAnchorNone = (el: HTMLElement): boolean => {
+  if (el.style.display === 'contents') {
+    return false;
+  }
+  if ((el.style as unknown as { overflowAnchor?: string }).overflowAnchor === 'none') {
+    return true;
+  }
+  if (anchorNoneBySetProperty.has(el.style) || /overflow-anchor\s*:\s*none/.test(el.getAttribute('style') ?? '')) {
+    return true;
+  }
+  return Array.from(document.styleSheets).some((sheet) =>
+    Array.from(sheet.cssRules).some((rule) => {
+      const { selectorText, style } = rule as CSSStyleRule;
+      return !!selectorText && style?.getPropertyValue('overflow-anchor') === 'none' && el.matches(selectorText);
+    })
+  );
+};
+/** A candidate of the browser's anchoring: no `overflow-anchor: none` from the element up to and including the scroller. */
+const isAnchoringCandidate = (el: HTMLElement, scroller: HTMLElement): boolean => {
+  for (let at: HTMLElement | null = el; at; at = at === scroller ? null : at.parentElement) {
+    if (declaresAnchorNone(at)) {
+      return false;
+    }
+  }
+  return true;
+};
+/** Whether the browser's anchoring finds a row to hold: a mounted row that is a candidate. */
+const anchoringHasACandidate = (scroller: HTMLElement): boolean =>
+  Array.from(scroller.querySelectorAll<HTMLElement>('[data-row]')).some((row) => isAnchoringCandidate(row, scroller));
+/** The layout as the browser's anchoring sees it change: the reservoir's size and the mounted rows. */
+const layoutSignature = (scroller: HTMLElement): string => {
+  const reservoir = scroller.querySelector<HTMLElement>('[data-list-reservoir]');
+  const rows = scroller.querySelectorAll('[data-row]');
+  return `${reservoir ? `${reservoir.style.height}/${reservoir.style.marginBottom}` : ''}|${rows.length}|${rows.length > 0 ? rows[0].getAttribute('data-row') : ''}`;
+};
+let animation: { target: number } | null = null;
+/** A fling's momentum runs (11b): the browser lays out under it as it does under its own animation. */
+let momentum = false;
+let layoutAtLastTick = '';
+/** A row was a candidate at a layout since the last tick. */
+let rowChosenAtALayout = false;
+/** THE BROWSER LAYS OUT under its own motion — at each tick, and wherever the page reads a rect — and chooses its anchor. */
+const browserLaysOut = (scroller: HTMLElement) => {
+  if ((animation || momentum) && !rowChosenAtALayout) {
+    rowChosenAtALayout = anchoringHasACandidate(scroller);
+  }
+};
+/** The anchoring's adjustment (the first job): the layout changed since the last tick, under a row chosen at a layout since then. */
+const anchoringAdjusts = (scroller: HTMLElement): boolean => {
+  browserLaysOut(scroller);
+  const signature = layoutSignature(scroller);
+  const adjusts = signature !== layoutAtLastTick && rowChosenAtALayout;
+  layoutAtLastTick = signature;
+  rowChosenAtALayout = false;
+  return adjusts;
+};
+/**
+ * One tick of the browser's animated scroll: `stepPx` toward the target as a scroll event (never a write), the
+ * `scrollend` at the target — unless the anchoring adjusts, which ends the animation where it stands. False once no
+ * animation runs.
+ */
+const engineTick = (scroller: HTMLElement, stepPx: number): boolean => {
+  if (!animation) {
+    return false;
+  }
+  if (anchoringAdjusts(scroller)) {
+    animation = null;
+    scroller.dispatchEvent(new Event('scroll'));
+    scroller.dispatchEvent(new Event('scrollend'));
+    return false;
+  }
+  scrollTopValue = Math.max(animation.target, scrollTopValue - stepPx);
+  scroller.dispatchEvent(new Event('scroll'));
+  if (scrollTopValue === animation.target) {
+    animation = null;
+    scroller.dispatchEvent(new Event('scrollend'));
+  }
+  return true;
+};
+/** One tick of a fling's momentum, downward: where the anchoring adjusts it fires `scrollend` — and the scroll goes on. */
+const flingTick = (scroller: HTMLElement, stepPx: number) => {
+  if (anchoringAdjusts(scroller)) {
+    scroller.dispatchEvent(new Event('scrollend'));
+  }
+  scrollTopValue += stepPx;
+  scroller.dispatchEvent(new Event('scroll'));
+};
+/**
+ * The stand-in's second job: the block above the list (`above`, the list's root its next sibling) grows by `px`, and
+ * the browser holds the list's place under it — the offset moved by as much, its own adjustment — only while the
+ * list's root is a candidate.
+ */
+const growsAboveTheList = (scroller: HTMLElement, above: HTMLElement, px: number) => {
+  above.setAttribute('data-h', String(heightOf(above) + px));
+  if (isAnchoringCandidate(above.nextElementSibling as HTMLElement, scroller)) {
+    scrollTopValue += px;
+    scroller.dispatchEvent(new Event('scroll'));
+  }
+};
+
 /** The scroller element takes the model's scroll geometry; its scrollTop setter is the write spy. */
 const modelScroller = (el: HTMLElement) => {
   el.setAttribute('data-model-scroller', '');
   el.style.overflowY = 'auto';
+  (el as unknown as { scrollTo: (options: { top: number }) => void }).scrollTo = ({ top }) => {
+    animation = { target: top };
+    layoutAtLastTick = layoutSignature(el);
+    rowChosenAtALayout = false;
+  };
+  Object.defineProperty(el, 'clientWidth', { get: () => 390, configurable: true });
   Object.defineProperty(el, 'clientHeight', { get: () => clientHeight, configurable: true });
   Object.defineProperty(el, 'scrollHeight', {
     get: () => Math.max(clientHeight, layoutOf(el).contentHeight),
@@ -241,6 +402,7 @@ const modelScroller = (el: HTMLElement) => {
     get: () => scrollTopValue,
     set: (value: number) => {
       writes.push(value);
+      animation = null; // a write ends the engine's animated scroll
       scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - clientHeight)));
       el.dispatchEvent(new Event('scroll'));
     },
@@ -353,6 +515,86 @@ describe('List — the windowed mode over the reservoir', () => {
     );
     await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
   };
+  const button = () => scroller.querySelector('button[aria-label="Back to top"]') as HTMLButtonElement;
+  /** The engine's rest: QUIET_FRAMES quiet frames, and one more. */
+  const rest = async () => {
+    await act(async () => {
+      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
+    });
+  };
+  /**
+   * THE PRESS, as a finger makes it: the touch lands on the button (inside the scroller), lifts, the click follows —
+   * and the lift's watch reaches its rest BEFORE the animation's first scroll event (the device: the click 49 ms after
+   * the touchend, the first scroll event 38 ms after the click; three frames are 50 ms, 25 at 120 Hz).
+   */
+  const press = async () => {
+    await act(async () => {
+      const target = button();
+      target.dispatchEvent(new Event('touchstart', { bubbles: true }));
+      target.dispatchEvent(new Event('touchend', { bubbles: true }));
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await rest();
+  };
+  /** The engine's animation run to its end — or to where it is ended — a frame per tick; then the rest. */
+  const settle = async (stepPx = 400) => {
+    for (let k = 0; k < 200 && animation; k++) {
+      engineTick(scroller, stepPx);
+      await frame();
+    }
+    await rest();
+    await flush();
+  };
+  /** The reader scrolls down by hand, a frame per step — every row on the way mounted and measured — then rests. */
+  const readerScrollsDownTo = async (top: number) => {
+    for (let at = 400; at <= top; at += 400) {
+      readerScrollsTo(scroller, at);
+      await frame();
+    }
+    await rest();
+  };
+  /** A mounted row wholly above the scroller's top edge, the nearest to it — where growth is growth above the reader. */
+  const rowAbove = () =>
+    [...mountedIds()].reverse().find((id) => boxOf(id).getBoundingClientRect().bottom < hostTop) as number;
+  /** A row's box grows by `px`, reported by its observer. */
+  const grows = async (id: number, px: number) => {
+    await act(async () => {
+      resize(boxOf(id), heightOf(boxOf(id)) + px);
+    });
+  };
+  /** The block a case renders above the list in the same scroller, and the list's root — its next sibling. */
+  const above = () => scroller.querySelector('[data-above]') as HTMLElement;
+  const listRoot = () => above().nextElementSibling as HTMLElement;
+  /** The boxes directly under a list's root as a browser lays them out — a box-less cell standing as its elements. */
+  const boxesUnder = (listRootEl: HTMLElement): HTMLElement[] =>
+    (Array.from(listRootEl.children) as HTMLElement[]).reduce<HTMLElement[]>(
+      (out, child) =>
+        out.concat(child.style.display === 'contents' ? (Array.from(child.children) as HTMLElement[]) : [child]),
+      []
+    );
+  /** What a box under the root is, by kind. */
+  const kindOf = (el: HTMLElement): string =>
+    el.hasAttribute('data-row')
+      ? 'row'
+      : el.hasAttribute('data-list-reservoir')
+        ? 'reservoir'
+        : el.hasAttribute('data-list-below')
+          ? 'spacer'
+          : el.hasAttribute('data-list-sentinel')
+            ? 'sentinel'
+            : el.hasAttribute('data-foot')
+              ? 'foot'
+              : el.querySelector('button[aria-label="Back to top"]')
+                ? 'strip'
+                : el.tagName.toLowerCase();
+  const kinds = (els: HTMLElement[]) => Array.from(new Set(els.map(kindOf))).sort();
+  /** The kinds of box under the root, and those among them the browser's anchoring can still choose. */
+  const kindsUnder = (listRootEl: HTMLElement) => kinds(boxesUnder(listRootEl));
+  const inAnchoring = (listRootEl: HTMLElement) =>
+    kinds(boxesUnder(listRootEl).filter((box) => isAnchoringCandidate(box, scroller)));
+  /** What declares `overflow-anchor: none` at a list: its root, or a box under it. */
+  const declaring = (listRootEl: HTMLElement) =>
+    (declaresAnchorNone(listRootEl) ? ['root'] : []).concat(kinds(boxesUnder(listRootEl).filter(declaresAnchorNone)));
   /** The list mounted in a scroller below the bar (the real Home) — where a hide's judgment against layout bites. */
   const mountBelowABar = async (loader: CorpusLoader, windowSize: number) => {
     hostTop = BAR_H;
@@ -370,6 +612,9 @@ describe('List — the windowed mode over the reservoir', () => {
     clientHeight = CLIENT_HEIGHT;
     hostTop = 0;
     scrollTopValue = 0;
+    animation = null;
+    momentum = false;
+    rowChosenAtALayout = false;
     scroller = document.createElement('div');
     modelScroller(scroller);
     document.body.appendChild(scroller);
@@ -937,5 +1182,262 @@ describe('List — the windowed mode over the reservoir', () => {
       atFrame: { first: before[0], bounded: true, reservoir: before[0] * ROW_H, writes: [] },
       atRest: { first: before[0], reservoir: before[0] * ROW_H, writes: [], reader, scrollTop: 26_000 },
     });
+  });
+
+  test('11a. the list holds its rows, under a browser that anchors (row 3435 — his phone on iOS 27: one press ended short): several screens down, ONE press, the motion settled — the scroller at its top, the first row first in view, the button gone, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300, { scrollTopButton: true });
+    await frame();
+    await readerScrollsDownTo(6_000);
+    expect(mountedIds()[0]).toBeGreaterThan(50);
+    expect(button().getAttribute('data-shown')).toBe('true');
+    expect(writes).toEqual([]);
+
+    // The red: the first window commit under the animation is a layout change with the rows as the anchoring's
+    // candidates — the adjustment ends the animation, the scroller rests where that left it (5,600 of 6,000), the button
+    // still up: his "it takes two taps".
+    await press();
+    await settle();
+    expect(scrollTopValue).toBe(0);
+    expect(mountedIds()[0]).toBe(0);
+    expect(topOf(0)).toBe(0);
+    expect(reservoirPx()).toBe(0);
+    expect(writes).toEqual([]);
+    expect(button().getAttribute('data-shown')).toBe('false');
+  });
+
+  test('11b. the list holds its rows, under a fling: no rest is declared at a window commit while the scroll goes on — what is owed is written at the fling’s own end, never under its momentum', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300);
+    await frame();
+    await readerScrollsDownTo(2_000);
+    // The finger flicks and lifts; as the momentum begins a row above the reader grows — absorbed, owed to the rest.
+    await act(async () => {
+      const row = boxOf(readerRow());
+      row.dispatchEvent(new Event('touchstart', { bubbles: true }));
+      row.dispatchEvent(new Event('touchend', { bubbles: true }));
+    });
+    layoutAtLastTick = layoutSignature(scroller);
+    momentum = true;
+    await grows(rowAbove(), 40);
+    expect(writes).toEqual([]);
+
+    // The momentum, a scroll event per tick, through several window commits. The red: the anchoring answers each
+    // commit with a `scrollend`, the rest is declared under the momentum and the debt's write lands under it.
+    let commits = 0;
+    let first = mountedIds()[0];
+    for (let k = 0; k < 12; k++) {
+      flingTick(scroller, 200);
+      await frame();
+      if (mountedIds()[0] !== first) {
+        commits++;
+        first = mountedIds()[0];
+      }
+      expect(writes).toEqual([]);
+    }
+    expect(commits).toBeGreaterThanOrEqual(2);
+    // The fling's own end — the browser's one `scrollend`, a true stop: the debt paid, once, the reader's row holding.
+    momentum = false;
+    const reader = readerRow();
+    const offset = topOf(reader);
+    await act(async () => {
+      scroller.dispatchEvent(new Event('scrollend'));
+    });
+    expect(writes.length).toBe(1);
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
+  });
+
+  test('11c. who declares what: while the window’s engine is mounted the list’s root is a candidate of the browser’s anchoring and every child of the root is not — a child a commit that is not the list’s adds and a child the list’s own later commit adds among them — a sibling of the list stays one and the scroller declares nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed with no scrollable ancestor, declares nothing', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    // The consumer's foot draws its row on its OWN state (a loading row timing its own appearance) and one row replaces
+    // its own box on its own state: two commits that are not the list's.
+    let drawFoot: (drawn: boolean) => void = () => undefined;
+    const Foot = () => {
+      const [drawn, setDrawn] = React.useState(false);
+      drawFoot = setDrawn;
+      return drawn ? <div data-foot data-h={44} /> : null;
+    };
+    let replaceBox: () => void = () => undefined;
+    const OwnBox = ({ r }: { r: Row }) => {
+      const [generation, setGeneration] = React.useState(0);
+      replaceBox = () => setGeneration((n) => n + 1);
+      return <div key={generation} data-h={r.h} data-row={r.id} />;
+    };
+    const renderOwnRow = (r: Row) => (r.id === 3 ? <OwnBox r={r} /> : renderRow(r));
+    const renderFoot = () => <Foot />;
+    const list = (windowed: boolean) => (
+      <>
+        <div data-above data-h={96} />
+        <List<Row>
+          loader={loader}
+          windowSize={30}
+          rowId={rowId}
+          renderRow={renderOwnRow}
+          renderFoot={renderFoot}
+          scrollTopButton
+          {...(windowed ? windowedProps({ estimatedRowHeight: ROW_H }) : {})}
+        />
+      </>
+    );
+    // NOT WINDOWED, in a scroller: untouched — nothing declared, on the root or under it.
+    render(list(false));
+    await waitFor(() => mountedIds().length === 30, 'the list, not windowed (30 rows)');
+    expect(declaring(listRoot())).toEqual([]);
+
+    // THE ENGINE MOUNTS (the same list, windowed): the root a candidate, every child of the root out; the list's
+    // sibling in the scroller a candidate still, and the scroller declares nothing (the review's mutant — the
+    // declaration made on the scroller — takes the anchoring from everything in it).
+    render(list(true));
+    await flush();
+    await frame();
+    await flush();
+    expect(kindsUnder(listRoot())).toEqual(['reservoir', 'row', 'sentinel', 'spacer', 'strip']);
+    expect(inAnchoring(listRoot())).toEqual([]);
+    expect(isAnchoringCandidate(listRoot(), scroller)).toBe(true);
+    expect(isAnchoringCandidate(above(), scroller)).toBe(true);
+    expect(declaresAnchorNone(scroller)).toBe(false);
+
+    // TWO COMMITS THAT ARE NOT THE LIST'S, each alone — the foot draws its row (a child of the root), then a row
+    // replaces its own box (a child of its box-less cell): out, each, with no commit of the list between.
+    await act(async () => {
+      drawFoot(true);
+    });
+    await flush();
+    expect(kindsUnder(listRoot())).toEqual(['foot', 'reservoir', 'row', 'sentinel', 'spacer', 'strip']);
+    expect(inAnchoring(listRoot())).toEqual([]);
+    const replaced = boxOf(3);
+    await act(async () => {
+      replaceBox();
+    });
+    await flush();
+    expect(boxOf(3)).not.toBe(replaced);
+    expect(inAnchoring(listRoot())).toEqual([]);
+
+    // THE LIST'S OWN LATER COMMIT — the reader scrolls through a window commit: the rows it mounts are out too.
+    const before = mountedIds();
+    readerScrollsTo(scroller, 1_400);
+    await frame();
+    await flush();
+    expect(mountedIds().some((id) => !before.includes(id))).toBe(true);
+    expect(inAnchoring(listRoot())).toEqual([]);
+    expect(isAnchoringCandidate(listRoot(), scroller)).toBe(true);
+
+    // THE LIST LEAVES THE WINDOWED MODE: every declaration is taken back.
+    render(list(false));
+    await flush();
+    expect(kindsUnder(listRoot())).toEqual(['foot', 'row', 'sentinel', 'strip']);
+    expect(declaring(listRoot())).toEqual([]);
+
+    // NO ENGINE — `windowed` handed to a list with no scrollable ancestor (round 2's review, RT2): nothing is declared;
+    // the browser's anchoring is the only holder its rows have, and keeps them.
+    const plain = document.createElement('div');
+    document.body.appendChild(plain);
+    const plainRoot = createRoot(plain);
+    try {
+      act(() => {
+        plainRoot.render(
+          <QueryClientProvider client={queryClient}>
+            <List<Row>
+              loader={new CorpusLoader(keys(), corpusOf(60))}
+              windowSize={60}
+              rowId={rowId}
+              renderRow={renderRow}
+              {...windowedProps({ estimatedRowHeight: ROW_H })}
+            />
+          </QueryClientProvider>
+        );
+      });
+      await waitFor(() => plain.querySelectorAll('[data-row]').length === 60, 'the list with no scroller (60 rows)');
+      await frame();
+      const reservoirEl = plain.querySelector('[data-list-reservoir]') as HTMLElement;
+      expect(reservoirEl).not.toBeNull();
+      expect(declaring(reservoirEl.parentElement as HTMLElement)).toEqual([]);
+    } finally {
+      act(() => {
+        plainRoot.unmount();
+      });
+      plain.remove();
+    }
+  });
+
+  test('11d. the browser holds the list’s place under what stands above it (the pins row appearing above a reader deep in Home): the block above the list grows — the reader’s row does not move, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    render(
+      <>
+        <div data-above data-h={96} />
+        <List<Row>
+          loader={loader}
+          windowSize={300}
+          rowId={rowId}
+          renderRow={renderRow}
+          {...windowedProps({ estimatedRowHeight: ROW_H })}
+        />
+      </>
+    );
+    await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
+    await frame();
+    await readerScrollsDownTo(6_000);
+    const reader = readerRow();
+    const offset = topOf(reader);
+
+    // The red at round 3's tip (the list's ROOT out of the anchoring): nothing in the list is the browser's to hold,
+    // the offset stays and the reader's row moves down by the growth — 108 px, the pins row on the real Home.
+    await act(async () => {
+      growsAboveTheList(scroller, above(), 108);
+    });
+    await frame();
+    await rest();
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
+    expect(writes).toEqual([]);
+  });
+
+  test('12. the hold’s own record: a hold is not undone at the next commit, a payment is not absorbed again as a debt nobody owes, and a row growing below the reader’s edge is not read back as drift', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300);
+    await frame();
+    await readerScrollsDownTo(2_000);
+    /** The reader scrolls by `delta` through a window commit: the reader's row moves by exactly that much, nothing written. */
+    const scrollsThroughACommit = async (delta: number) => {
+      const reader = readerRow();
+      const offset = topOf(reader);
+      const first = mountedIds()[0];
+      const written = writes.length;
+      readerScrollsTo(scroller, scrollTopValue + delta);
+      await frame();
+      expect(mountedIds()[0]).not.toBe(first);
+      expect(mountedIds()).toContain(reader);
+      expect(topOf(reader) - offset).toBe(-delta);
+      expect(writes.length).toBe(written);
+    };
+
+    // 1. A HOLD IS NOT UNDONE: a row above the reader grows — absorbed — and BEFORE the rest the reader scrolls up
+    //    through a commit. The red: the anchors still held their tops from before the hold shrank the reservoir, the
+    //    commit read the hold back as drift and returned it — the reader's row thrown down by the growth.
+    await grows(rowAbove(), 40);
+    await scrollsThroughACommit(-400);
+    let reader = readerRow();
+    let offset = topOf(reader);
+    await rest();
+    expect(writes.length).toBe(1);
+    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
+
+    // 2. A PAYMENT IS NOT ABSORBED AGAIN: the reader scrolls on through two commits and rests. The red: the anchors
+    //    still held their tops from under the debt, each commit read the payment back as a debt nobody owes — the
+    //    reader's row thrown up by it at every commit, a write at every rest after.
+    await scrollsThroughACommit(500);
+    await scrollsThroughACommit(500);
+    await rest();
+    expect(writes.length).toBe(1);
+
+    // 3. GROWTH BELOW THE READER'S EDGE IS NOT DRIFT: a row in view grows — nothing above the reader moved, nothing
+    //    absorbed — and the reader scrolls down through a commit that keeps only the window's last row. The red: the
+    //    last row's top, recorded before the growth, read as 40 px of drift above the reader.
+    reader = readerRow();
+    offset = topOf(reader);
+    await grows(reader + 2, 40);
+    expect(topOf(reader)).toBe(offset);
+    await scrollsThroughACommit(560);
+    await rest();
+    expect(writes.length).toBe(1);
   });
 });
