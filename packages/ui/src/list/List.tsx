@@ -1,4 +1,13 @@
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useInsertionEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Box, BoxProps, Skeleton, SxProps, Theme, Typography } from '@mui/material';
 import { CursorLoader } from '../table/CursorLoader';
 import { useCursorWindows } from '../table/cursorWindows';
@@ -95,7 +104,10 @@ export interface ListProps<T> {
    * the button never rests over it) and ahead of the sentinel, once rows exist, with the pager's state: `fetchingNextWindow` is true only while a NEXT window is in flight
    * (never the first window — the skeleton's — and never a background refetch of the loaded windows);
    * `hasMore` while windows remain. Called on every state, so a consumer's loading row can time its own
-   * appearance across the fetch's edges (a show delay, a minimum hold); return null to draw nothing.
+   * appearance across the fetch's edges (a show delay, a minimum hold); return null to draw nothing. In the windowed
+   * mode the foot is drawn inside ONE box of the list's own (`data-list-foot`, a plain block box, out of the browser's
+   * scroll anchoring with every other child of the root — `ROWS_OUT_OF_ANCHORING`): the foot is laid out as that box's
+   * content, whatever it is — an element, a fragment, bare text, something that draws itself later.
    */
   renderFoot?: (state: ListFootState) => ReactNode;
   /**
@@ -215,9 +227,11 @@ const findScrollableAncestor = (node: HTMLElement): HTMLElement | null => {
  *  viewport's bottom edge while the reader is scrolled up, at the content tail at rest. Same
  *  geometry as `Table`'s sibling-after-scroller strip, achieved from within the scroller. The
  *  consumer's `hostSx` appends after (array-merged), so it can still restyle the strip. */
-const stickyHostSx = (hostSx: ScrollTopButtonStyleProps['hostSx']): SxProps<Theme> => [
+const stickyHostSx = (hostSx: ScrollTopButtonStyleProps['hostSx'], rowsHeldAlone: boolean): SxProps<Theme> => [
   { position: 'sticky', bottom: 0 },
   ...(Array.isArray(hostSx) ? hostSx : hostSx ? [hostSx] : []),
+  // The strip is a child of the list's root: out of the browser's anchoring with the rest (`ROWS_OUT_OF_ANCHORING`).
+  ...(rowsHeldAlone ? [OUT_OF_ANCHORING] : []),
 ];
 
 // ── The windowed mode's cells, window and geometry ─────────────────────────────────────────────────────────────────
@@ -319,48 +333,55 @@ const cellWrapperStyle: React.CSSProperties = { display: 'contents' };
  * THE LAW, in two sentences: the browser holds the list's place under what stands above it. The list holds its rows.
  * So while the window's engine is mounted the list's ROOT stays a candidate of the browser's scroll anchoring — what a
  * consumer renders above the list in the same scroller can change height under a reader deep in the list and the
- * browser keeps the reader's row where it was, as it does for any content — and EVERY child of the root is out of it
- * (this declaration, on each): the reservoir, the group boxes (the row boxes of an ungrouped list), the spacer below,
- * the back-to-top strip, the consumer's foot, the sentinel. WHY the rows are out: the list holds them itself (the reservoir, and its law for a
- * row that grows above the reader), and a browser that anchors on one of them answers a window commit with an
- * adjustment of its own, which ends an animated scroll where it stands and fires `scrollend` under a fling (WebKit from
- * iOS 27); with every child out, the browser's anchor inside the list is the root, whose top no commit of the list
- * moves. ONE DOOR, the engine's (`holdRowsAlone`: called where the engine re-reads the document — at its mount and
- * after each commit of the list, ahead of every read of the layout — and by its watch of the root for a child a commit
- * that is not the list's adds: a foot drawing itself on its own state, a row replacing its own box), taken back when
- * the engine leaves. Declared by the engine, never by the `windowed` prop: a list handed the prop with no scrollable
- * ancestor mounts no engine and declares nothing, and a list that is not windowed is untouched. NOT REACHED, because a
- * declaration needs an element with a box: bare text handed as the foot or as an ungrouped row (the row's first element
- * is its box, and a foot of text wants an element around it), and the children of a consumer's own box-less element
- * (`display: contents`) handed as either — a browser reads no declaration from an element with no box, so such a child
- * stays a candidate; a portal is not under the root and is not the list's to hold.
+ * browser keeps the reader's row where it was, as it does for any content — and EVERY child of the root is out of it:
+ * the reservoir, the group boxes (the row boxes of an ungrouped list), the spacer below, the back-to-top strip, the
+ * foot's box, the sentinel. WHY the rows are out: the list holds them itself (the reservoir, and its law for a row that
+ * grows above the reader), and a browser that anchors on one of them answers a window commit with an adjustment of its
+ * own, which ends an animated scroll where it stands and fires `scrollend` under a fling (WebKit from iOS 27); with
+ * every child out, the browser's anchor inside the list is the root, whose top no commit of the list moves. WHY every
+ * child, the foot too: a child left a candidate is the ONLY candidate under the root, and the browser holds IT — a
+ * foot left in throws a reader at the tail down by every page that lands above it. WHO CARRIES THE DECLARATION: the
+ * list's own boxes carry it from their render (`OUT_OF_ANCHORING`, on each while the engine is mounted) — the
+ * reservoir, each group box, the spacer below, the strip, the sentinel, and THE FOOT'S BOX: the consumer's foot is
+ * drawn inside one box of the list's own (`data-list-foot`), so whatever a consumer hands as the foot — an element, a
+ * fragment, bare text, a box-less element, something that draws itself later on its own state — sits under a box that
+ * is already out. The rows of an UNGROUPED list are the one thing no box of the list's stands over (a cell is box-less,
+ * and a browser reads no declaration from an element with no box): the engine's walk (`holdRowsAlone`, where the engine
+ * re-reads the document — at its mount and after each commit of the list, ahead of every read of the layout) declares
+ * each element of each cell under the root, and the engine's watch (each such cell's child list) walks again for a row
+ * that draws or replaces its own box on a commit that is not the list's. WHEN THE ENGINE LEAVES the list's own boxes
+ * drop the declaration with that render, and the rows' boxes go with the mode (a list leaving the windowed mode mounts
+ * its rows anew): nothing declared outlives the engine. Declared with the engine, never by the `windowed` prop alone: a
+ * list handed the prop with no scrollable ancestor mounts no engine and declares nothing, and a list that is not
+ * windowed is untouched (its foot drawn bare, as ever).
+ * NOT REACHED, in an ungrouped list only: a row of bare text (the row's first element is its box) and the children of a
+ * consumer's own box-less element (`display: contents`) handed as a row — such a row stays a candidate. A group box a
+ * consumer's `groupSx` makes box-less carries nothing for its rows; a portal is not under the root and is not the
+ * list's to hold.
  */
 const ROWS_OUT_OF_ANCHORING = { property: 'overflow-anchor', value: 'none' } as const;
 
+/** The declaration as the list's own boxes carry it: React's `style` on each, the strip's `sx`. */
+const OUT_OF_ANCHORING = { overflowAnchor: ROWS_OUT_OF_ANCHORING.value } as const;
+
 /**
- * The boxes directly under a list's root, as a browser lays them out: each child of the root — a cell's box-less
- * wrapper (an ungrouped list's rows sit directly under the root) standing as the elements inside it.
+ * The engine's walk: the rows of an ungrouped list — each element of each box-less cell directly under the root — out
+ * of the browser's anchoring, and each such cell's child list under the engine's watch. A grouped list has no cell
+ * directly under its root (its group boxes carry the declaration for their rows): the walk finds nothing there and the
+ * watch is handed nothing.
  */
-const boxesUnder = (root: HTMLElement): HTMLElement[] => {
-  const out: HTMLElement[] = [];
+const holdRowsAlone = (root: HTMLElement, watch: MutationObserver | null): void => {
   for (let i = 0; i < root.children.length; i++) {
-    const child = root.children[i] as HTMLElement;
-    if (child.hasAttribute('data-list-cell')) {
-      out.push(...(Array.from(child.children) as HTMLElement[]));
-    } else {
-      out.push(child);
+    const cell = root.children[i];
+    if (!cell.hasAttribute('data-list-cell')) {
+      continue;
+    }
+    watch?.observe(cell, { childList: true });
+    for (let k = 0; k < cell.children.length; k++) {
+      (cell.children[k] as HTMLElement).style.setProperty(ROWS_OUT_OF_ANCHORING.property, ROWS_OUT_OF_ANCHORING.value);
     }
   }
-  return out;
 };
-
-/** The engine's one door: every box under the root out of the browser's anchoring — or, the engine leaving, back in it. */
-const holdRowsAlone = (root: HTMLElement, held: boolean): void =>
-  boxesUnder(root).forEach((box) =>
-    held
-      ? box.style.setProperty(ROWS_OUT_OF_ANCHORING.property, ROWS_OUT_OF_ANCHORING.value)
-      : box.style.removeProperty(ROWS_OUT_OF_ANCHORING.property)
-  );
 
 /**
  * `Table`'s row-stream peer: `List` renders cursor windows through `renderRow`, owning behavior
@@ -456,6 +477,8 @@ export function List<T>({
   const keyOfBox = useRef(new WeakMap<Element, string>());
   const reservoirEl = useRef<HTMLDivElement | null>(null);
   const engine = useRef<PrependReservoir | null>(null);
+  /** The engine's watch of an ungrouped list's cells (`holdRowsAlone`); null while no engine is mounted. */
+  const rowWatch = useRef<MutationObserver | null>(null);
   const rest = useRef<ScrollRest | null>(null);
   const cellObserver = useRef<ResizeObserver | null>(null);
   const observed = useRef(new Set<Element>());
@@ -532,9 +555,10 @@ export function List<T>({
   }, []);
 
   /**
-   * The document re-read after a commit, ahead of every read of its layout: the children the commit left under the
-   * root taken out of the browser's anchoring (`ROWS_OUT_OF_ANCHORING` — a row that is a candidate at a layout the
-   * list itself asks for is a row the browser may hold), then the boxes, each cell wrapper's first element.
+   * The document re-read after a commit, ahead of every read of its layout: the rows the commit left directly under
+   * the root (an ungrouped list's) taken out of the browser's anchoring (`ROWS_OUT_OF_ANCHORING` — a row that is a
+   * candidate at a layout the list itself asks for is a row the browser may hold), then the boxes, each cell wrapper's
+   * first element.
    */
   const refreshBoxes = useCallback(() => {
     boxes.current.clear();
@@ -543,7 +567,7 @@ export function List<T>({
     if (!root) {
       return;
     }
-    holdRowsAlone(root, true);
+    holdRowsAlone(root, rowWatch.current);
     const wrappers = root.querySelectorAll('[data-list-cell]');
     for (let i = 0; i < wrappers.length; i++) {
       const wrapper = wrappers[i];
@@ -812,14 +836,15 @@ export function List<T>({
     const current = new PrependReservoir(host, reservoir, mountedBoxes);
     engine.current = current;
     current.setRemaining(0, latest.current.windowed?.estimatedRowHeight ?? 0);
-    // The engine's first re-read of the document: every child of the root out of the browser's anchoring (the law at
-    // `ROWS_OUT_OF_ANCHORING`), then the boxes — before the reservoir's first read of the layout.
+    // The engine's watch: an ungrouped row that draws or replaces its own box on a commit that is NOT the list's — the
+    // walk again, before the browser's next layout. It serves nothing else: every other child of the root is a box of
+    // the list's own and carries the declaration from its render (the law at `ROWS_OUT_OF_ANCHORING`).
+    const watchOfRows: MutationObserver = new MutationObserver(() => holdRowsAlone(root, watchOfRows));
+    rowWatch.current = watchOfRows;
+    // The engine's first re-read of the document: an ungrouped list's rows out of the browser's anchoring, then the
+    // boxes — before the reservoir's first read of the layout.
     refreshBoxes();
     current.initialize();
-    // A child a commit that is NOT the list's adds under the root (the consumer's foot drawing itself on its own state,
-    // an ungrouped row replacing its own box): the same door, before the browser's next layout.
-    const childWatch = new MutationObserver(() => holdRowsAlone(root, true));
-    childWatch.observe(root, { childList: true, subtree: true });
     const watch = new ScrollRest(() => {
       // No step through the hidden interval: its drift is measured against a box of 0 — a debt silently zeroed, no
       // write to hold the reader. The interval's end re-asks the rest for what is owed.
@@ -870,11 +895,31 @@ export function List<T>({
       boxObserver.current = null;
       engine.current = null;
       anchors.current = [];
-      childWatch.disconnect();
-      holdRowsAlone(root, false);
+      watchOfRows.disconnect();
+      rowWatch.current = null;
     };
     // The options ride `latest`; the mount follows the scroller and the mode alone.
   }, [scrollHost, isWindowed]);
+
+  /**
+   * THE RESERVOIR STANDS FOR THE ROWS ABOVE THE WINDOW AT EVERY LAYOUT — the first one a commit's own effects ask for
+   * among them. A commit that moves the window takes the rows above it out of the document, and the reservoir is sized
+   * by the engine, never by React: until it is, the content is short by those rows. A row's own layout effect that
+   * reads the layout (a title measuring its overflow) asks the browser for a layout in that state, and the browser
+   * clamps the offset to the short content: a reader who jumped down the list (a dragged scrollbar, the End key, a
+   * restored offset) is thrown back by the rows the window dropped. A browser anchored on a row or on the spacer below
+   * brought the offset back; with every child of the root out of the anchoring (`ROWS_OUT_OF_ANCHORING`) nothing does.
+   * So the reservoir takes the rows above in the commit's INSERTION pass — after React has changed the document, before
+   * any layout effect of any component — and `afterCommit` finds it standing.
+   */
+  useInsertionEffect(() => {
+    const current = engine.current;
+    if (!current) {
+      return;
+    }
+    const allHeights = cellHeights();
+    current.setWindowAbove(spacerHeights(allHeights, window ?? { first: 0, last: allHeights.length - 1 }).above);
+  }, [window, cells, cellHeights]);
 
   // Every commit of the window or the cells: the reservoir and the anchors follow (the mount's effect ran its own).
   useLayoutEffect(() => {
@@ -906,6 +951,13 @@ export function List<T>({
   }
 
   const scrollTopStyleProps = scrollTopButton && scrollTopButton !== true ? scrollTopButton : undefined;
+  /**
+   * The engine is mounted — the windowed mode, in a scroller (the mount effect's own condition, in the commit that
+   * mounts it): each box of the list's own under the root carries the declaration from this render
+   * (`ROWS_OUT_OF_ANCHORING`).
+   */
+  const rowsHeldAlone = isWindowed && scrollHost !== null;
+  const outOfAnchoring = rowsHeldAlone ? OUT_OF_ANCHORING : undefined;
 
   /** The windowed body: the reservoir, the mounted cells in their group containers, the spacer below. */
   const windowedBody = (): ReactNode => {
@@ -942,7 +994,7 @@ export function List<T>({
           i++;
         }
         nodes.push(
-          <Box key={group.reactKey} sx={groupSx}>
+          <Box key={group.reactKey} sx={groupSx} style={outOfAnchoring}>
             {head}
             <Box sx={groupRowsSx}>{rowNodes}</Box>
           </Box>
@@ -956,11 +1008,11 @@ export function List<T>({
     return (
       <>
         {/* The reservoir — the rows above the window by their measured heights, sized by the engine in the rows' own
-            layout pass (never by React); out of the browser's anchoring by the engine's one door, as every child of
+            layout pass (never by React); out of the browser's anchoring while the engine is mounted, as every child of
             the root is (`ROWS_OUT_OF_ANCHORING`), so the browser's anchoring never doubles the hold. */}
-        <div ref={reservoirEl} data-list-reservoir style={{ position: 'relative', flexShrink: 0 }} />
+        <div ref={reservoirEl} data-list-reservoir style={{ position: 'relative', flexShrink: 0, ...outOfAnchoring }} />
         {nodes}
-        <div data-list-below style={{ height: `${below}px`, flexShrink: 0 }} />
+        <div data-list-below style={{ height: `${below}px`, flexShrink: 0, ...outOfAnchoring }} />
       </>
     );
   };
@@ -989,11 +1041,23 @@ export function List<T>({
         <ScrollTopButton
           scrollContainer={scrollHost}
           {...scrollTopStyleProps}
-          hostSx={stickyHostSx(scrollTopStyleProps?.hostSx)}
+          hostSx={stickyHostSx(scrollTopStyleProps?.hostSx, rowsHeldAlone)}
         />
       )}
-      {renderFoot?.({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
-      {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} />}
+      {/* The foot. In the windowed mode it is drawn inside ONE box of the list's own, out of the browser's anchoring
+          from its render while the engine is mounted — so whatever the consumer hands (an element, a fragment, bare
+          text, a box-less element, something that draws itself later) sits under a box that is already out: a foot
+          left a candidate is the only one under the root, and the browser holding it throws a reader at the tail down
+          by every landed page (`ROWS_OUT_OF_ANCHORING`). A list that is not windowed draws its foot bare, as ever. */}
+      {renderFoot &&
+        (isWindowed ? (
+          <div data-list-foot style={outOfAnchoring}>
+            {renderFoot({ hasMore, fetchingNextWindow: isFetchingNextWindow })}
+          </div>
+        ) : (
+          renderFoot({ hasMore, fetchingNextWindow: isFetchingNextWindow })
+        ))}
+      {hasMore && <Box ref={sentinelRef} data-list-sentinel sx={{ height: '1px' }} style={outOfAnchoring} />}
     </Box>
   );
 }
