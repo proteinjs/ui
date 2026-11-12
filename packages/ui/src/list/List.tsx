@@ -346,14 +346,16 @@ const cellWrapperStyle: React.CSSProperties = { display: 'contents' };
  * drawn inside one box of the list's own (`data-list-foot`), so whatever a consumer hands as the foot — an element, a
  * fragment, bare text, a box-less element, something that draws itself later on its own state — sits under a box that
  * is already out. The rows of an UNGROUPED list are the one thing no box of the list's stands over (a cell is box-less,
- * and a browser reads no declaration from an element with no box): the engine's walk (`holdRowsAlone`, where the engine
- * re-reads the document — at its mount and after each commit of the list, ahead of every read of the layout) declares
- * each element of each cell under the root, and the engine's watch (each such cell's child list) walks again for a row
- * that draws or replaces its own box on a commit that is not the list's. WHEN THE ENGINE LEAVES the list's own boxes
- * drop the declaration with that render, and the rows' boxes go with the mode (a list leaving the windowed mode mounts
- * its rows anew): nothing declared outlives the engine. Declared with the engine, never by the `windowed` prop alone: a
- * list handed the prop with no scrollable ancestor mounts no engine and declares nothing, and a list that is not
- * windowed is untouched (its foot drawn bare, as ever).
+ * and a browser reads no declaration from an element with no box): ONE RULE ON THE ROOT reaches each element of each
+ * cell directly under it (`ROWS_UNDER_THE_ROOT`, on the root's `sx` while the engine is mounted). A rule holds from a
+ * row's FIRST STYLE RESOLUTION — a row that reads the layout in its own layout effect is already out at the layout it
+ * asks for (a declaration written after the rows' effects left it a candidate there: one press ended short) — and for
+ * whatever a row draws or replaces later on its own state, so the engine walks nothing and watches nothing, and nothing
+ * is ever written on a consumer's element. The rule is `!important`: a row's own inline word does not put it back.
+ * WHEN THE ENGINE LEAVES the list's own boxes and the root drop the declaration with that render: nothing declared
+ * outlives the engine. Declared with the engine, never by the `windowed` prop alone: a list handed the prop with no
+ * scrollable ancestor mounts no engine and declares nothing, and a list that is not windowed is untouched (its foot
+ * drawn bare, as ever).
  * NOT REACHED, in an ungrouped list only: a row of bare text (the row's first element is its box) and the children of a
  * consumer's own box-less element (`display: contents`) handed as a row — such a row stays a candidate. A group box a
  * consumer's `groupSx` makes box-less carries nothing for its rows; a portal is not under the root and is not the
@@ -365,23 +367,19 @@ const ROWS_OUT_OF_ANCHORING = { property: 'overflow-anchor', value: 'none' } as 
 const OUT_OF_ANCHORING = { overflowAnchor: ROWS_OUT_OF_ANCHORING.value } as const;
 
 /**
- * The engine's walk: the rows of an ungrouped list — each element of each box-less cell directly under the root — out
- * of the browser's anchoring, and each such cell's child list under the engine's watch. A grouped list has no cell
- * directly under its root (its group boxes carry the declaration for their rows): the walk finds nothing there and the
- * watch is handed nothing.
+ * The rows of an ungrouped list out of the browser's anchoring: each element of each box-less cell directly under the
+ * root, by one rule on the root (the law above). A grouped list has no cell directly under its root (its group boxes
+ * carry the declaration for their rows): the rule matches nothing there.
  */
-const holdRowsAlone = (root: HTMLElement, watch: MutationObserver | null): void => {
-  for (let i = 0; i < root.children.length; i++) {
-    const cell = root.children[i];
-    if (!cell.hasAttribute('data-list-cell')) {
-      continue;
-    }
-    watch?.observe(cell, { childList: true });
-    for (let k = 0; k < cell.children.length; k++) {
-      (cell.children[k] as HTMLElement).style.setProperty(ROWS_OUT_OF_ANCHORING.property, ROWS_OUT_OF_ANCHORING.value);
-    }
-  }
+const ROWS_UNDER_THE_ROOT = {
+  '& > [data-list-cell] > *': { overflowAnchor: `${ROWS_OUT_OF_ANCHORING.value} !important` },
 };
+
+/** The root's `sx` while the engine is mounted: the consumer's, then the rows' rule (array-merged, the rule last). */
+const rootSxHoldingRows = (sx: BoxProps['sx']): SxProps<Theme> => [
+  ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
+  ROWS_UNDER_THE_ROOT,
+];
 
 /**
  * `Table`'s row-stream peer: `List` renders cursor windows through `renderRow`, owning behavior
@@ -466,7 +464,7 @@ export function List<T>({
   );
   /** The mounted range; null = every cell (no geometry yet, or not windowed). */
   const [window, setWindow] = useState<ListWindow | null>(null);
-  /** The range the document holds — the committed state, what `afterCommit` sizes the reservoir from. */
+  /** The range the document holds — the committed state, what the engine's mount sizes the reservoir from. */
   const committed = useRef<ListWindow | null>(null);
   committed.current = window;
   /** The heights map: a cell's measured height, by its key, for the list's life. */
@@ -477,8 +475,6 @@ export function List<T>({
   const keyOfBox = useRef(new WeakMap<Element, string>());
   const reservoirEl = useRef<HTMLDivElement | null>(null);
   const engine = useRef<PrependReservoir | null>(null);
-  /** The engine's watch of an ungrouped list's cells (`holdRowsAlone`); null while no engine is mounted. */
-  const rowWatch = useRef<MutationObserver | null>(null);
   const rest = useRef<ScrollRest | null>(null);
   const cellObserver = useRef<ResizeObserver | null>(null);
   const observed = useRef(new Set<Element>());
@@ -554,12 +550,7 @@ export function List<T>({
     return out;
   }, []);
 
-  /**
-   * The document re-read after a commit, ahead of every read of its layout: the rows the commit left directly under
-   * the root (an ungrouped list's) taken out of the browser's anchoring (`ROWS_OUT_OF_ANCHORING` — a row that is a
-   * candidate at a layout the list itself asks for is a row the browser may hold), then the boxes, each cell wrapper's
-   * first element.
-   */
+  /** The document re-read after a commit: the boxes, each cell wrapper's first element. */
   const refreshBoxes = useCallback(() => {
     boxes.current.clear();
     boxOrder.current = [];
@@ -567,7 +558,6 @@ export function List<T>({
     if (!root) {
       return;
     }
-    holdRowsAlone(root, rowWatch.current);
     const wrappers = root.querySelectorAll('[data-list-cell]');
     for (let i = 0; i < wrappers.length; i++) {
       const wrapper = wrappers[i];
@@ -785,11 +775,30 @@ export function List<T>({
   }, [mountedBoxes]);
 
   /**
-   * After every commit of the windowed list, in the rows' own layout pass: the reservoir takes the rows above the
-   * window by their measured heights; a cell mounted before and after the commit (the first or the last of the window
-   * before it) holds its place — its drift, the difference between the heights the rows mounted above it were seeded
-   * with and the heights they were laid out at, is absorbed before paint and paid at the rest (the reservoir's laws);
-   * a commit with no surviving cell (a jump) holds nothing. Then the anchors and the observer follow the new window.
+   * THE ONE SIZING OF THE RESERVOIR: the rows above `range` (null = every cell mounted, nothing above) by their heights
+   * — a row's measured height, its seed where it has none. Two callers and no other writer of that number: the commit's
+   * insertion pass (every commit of the window or the cells, below), and the engine's own mount, which finds the window
+   * the list already holds — that commit's insertion pass ran before there was an engine to size anything.
+   */
+  const sizeReservoir = useCallback(
+    (range: ListWindow | null) => {
+      const current = engine.current;
+      if (!current) {
+        return;
+      }
+      const allHeights = cellHeights();
+      current.setWindowAbove(spacerHeights(allHeights, range ?? { first: 0, last: allHeights.length - 1 }).above);
+    },
+    [cellHeights]
+  );
+
+  /**
+   * After every commit of the windowed list, in the list's own layout effect — after its rows' own, the reservoir
+   * already standing for the rows above the window (`sizeReservoir`, in the commit's insertion pass): a cell mounted
+   * before and after the commit (the first or the last of the window before it) holds its place — its drift, the
+   * difference between the heights the rows mounted above it were seeded with and the heights they were laid out at,
+   * is absorbed before paint and paid at the rest (the reservoir's laws); a commit with no surviving cell (a jump)
+   * holds nothing. Then the anchors and the observer follow the new window.
    * Through the hidden interval the anchors are neither read nor recorded — a top recorded against a laid-out window,
    * read against a box of 0, is a drift of the whole reservoir, and a top of 0 recorded under the hidden layout, read
    * at the show, the same drift the other way (round 3, the refuter's R4); the first frame with a box commits a window
@@ -801,10 +810,6 @@ export function List<T>({
       return;
     }
     refreshBoxes();
-    const allHeights = cellHeights();
-    const range = committed.current ?? { first: 0, last: allHeights.length - 1 };
-    const { above } = spacerHeights(allHeights, range);
-    current.setWindowAbove(above);
     if (!laidOut.current) {
       anchors.current = [];
       syncObserved();
@@ -822,7 +827,7 @@ export function List<T>({
     current.record();
     recordAnchors();
     syncObserved();
-  }, [refreshBoxes, cellHeights, requestReconcile, recordAnchors, syncObserved]);
+  }, [refreshBoxes, requestReconcile, recordAnchors, syncObserved]);
 
   // Mount (the windowed mode, once the scroller is known): the reservoir over the top spacer, the rest watch, the
   // passive scroll listener, the two observers, the opening frame.
@@ -836,13 +841,7 @@ export function List<T>({
     const current = new PrependReservoir(host, reservoir, mountedBoxes);
     engine.current = current;
     current.setRemaining(0, latest.current.windowed?.estimatedRowHeight ?? 0);
-    // The engine's watch: an ungrouped row that draws or replaces its own box on a commit that is NOT the list's — the
-    // walk again, before the browser's next layout. It serves nothing else: every other child of the root is a box of
-    // the list's own and carries the declaration from its render (the law at `ROWS_OUT_OF_ANCHORING`).
-    const watchOfRows: MutationObserver = new MutationObserver(() => holdRowsAlone(root, watchOfRows));
-    rowWatch.current = watchOfRows;
-    // The engine's first re-read of the document: an ungrouped list's rows out of the browser's anchoring, then the
-    // boxes — before the reservoir's first read of the layout.
+    // The engine's first re-read of the document: the boxes — before the reservoir's first read of the layout.
     refreshBoxes();
     current.initialize();
     const watch = new ScrollRest(() => {
@@ -878,6 +877,9 @@ export function List<T>({
       boxObserver.current.observe(host);
       cellObserver.current = new ResizeObserver(onCellResize);
     }
+    // THE ENGINE MOUNTS OVER THE WINDOW THE LIST ALREADY HOLDS (the list back in the windowed mode, or back from its
+    // empty face, with the window state kept): the one sizing, here — this commit's insertion pass found no engine.
+    sizeReservoir(committed.current);
     afterCommit();
     scheduleFrame();
     return () => {
@@ -895,33 +897,30 @@ export function List<T>({
       boxObserver.current = null;
       engine.current = null;
       anchors.current = [];
-      watchOfRows.disconnect();
-      rowWatch.current = null;
     };
     // The options ride `latest`; the mount follows the scroller and the mode alone.
   }, [scrollHost, isWindowed]);
 
   /**
-   * THE RESERVOIR STANDS FOR THE ROWS ABOVE THE WINDOW AT EVERY LAYOUT — the first one a commit's own effects ask for
-   * among them. A commit that moves the window takes the rows above it out of the document, and the reservoir is sized
-   * by the engine, never by React: until it is, the content is short by those rows. A row's own layout effect that
-   * reads the layout (a title measuring its overflow) asks the browser for a layout in that state, and the browser
-   * clamps the offset to the short content: a reader who jumped down the list (a dragged scrollbar, the End key, a
-   * restored offset) is thrown back by the rows the window dropped. A browser anchored on a row or on the spacer below
-   * brought the offset back; with every child of the root out of the anchoring (`ROWS_OUT_OF_ANCHORING`) nothing does.
-   * So the reservoir takes the rows above in the commit's INSERTION pass — after React has changed the document, before
-   * any layout effect of any component — and `afterCommit` finds it standing.
+   * THE RESERVOIR STANDS FOR THE ROWS ABOVE THE WINDOW AT EVERY LAYOUT EFFECT'S SETUP — the first layout a commit's own
+   * effects ask for among them. A commit that moves the window takes the rows above it out of the document, and the
+   * reservoir is sized by the engine, never by React: until it is, the content is short by those rows. A row's own
+   * layout effect that reads the layout at its mount (a title measuring its overflow) asks the browser for a layout in
+   * that state, and the browser clamps the offset to the short content: a reader who jumped down the list (a dragged
+   * scrollbar, the End key, a restored offset) is thrown back by the rows the window dropped. A browser anchored on a
+   * row or on the spacer below brought the offset back; with every child of the root out of the anchoring
+   * (`ROWS_OUT_OF_ANCHORING`) nothing does. So the reservoir takes the rows above in the commit's INSERTION pass — after
+   * React has changed the document, before the setup of any layout effect of any component — and `afterCommit` finds it
+   * standing. NOT COVERED: a row whose UNMOUNT path reads the layout (a layout effect's cleanup, a ref's detach). React
+   * runs those inside its deletions, one removed box at a time, before any effect of the list can run: such a row finds
+   * the content short by the rows already removed, and a jump is still thrown back by them. And the commit that MOUNTS
+   * the engine is sized in the engine's own mount — a layout effect of the list, after its rows' own.
    */
   useInsertionEffect(() => {
-    const current = engine.current;
-    if (!current) {
-      return;
-    }
-    const allHeights = cellHeights();
-    current.setWindowAbove(spacerHeights(allHeights, window ?? { first: 0, last: allHeights.length - 1 }).above);
-  }, [window, cells, cellHeights]);
+    sizeReservoir(window);
+  }, [window, cells, sizeReservoir]);
 
-  // Every commit of the window or the cells: the reservoir and the anchors follow (the mount's effect ran its own).
+  // Every commit of the window or the cells: the anchors and the observer follow (the mount's effect ran its own).
   useLayoutEffect(() => {
     if (engine.current) {
       afterCommit();
@@ -953,8 +952,8 @@ export function List<T>({
   const scrollTopStyleProps = scrollTopButton && scrollTopButton !== true ? scrollTopButton : undefined;
   /**
    * The engine is mounted — the windowed mode, in a scroller (the mount effect's own condition, in the commit that
-   * mounts it): each box of the list's own under the root carries the declaration from this render
-   * (`ROWS_OUT_OF_ANCHORING`).
+   * mounts it): each box of the list's own under the root carries the declaration from this render, and the root the
+   * rule for an ungrouped list's rows (`ROWS_OUT_OF_ANCHORING`).
    */
   const rowsHeldAlone = isWindowed && scrollHost !== null;
   const outOfAnchoring = rowsHeldAlone ? OUT_OF_ANCHORING : undefined;
@@ -1007,9 +1006,10 @@ export function List<T>({
     }
     return (
       <>
-        {/* The reservoir — the rows above the window by their measured heights, sized by the engine in the rows' own
-            layout pass (never by React); out of the browser's anchoring while the engine is mounted, as every child of
-            the root is (`ROWS_OUT_OF_ANCHORING`), so the browser's anchoring never doubles the hold. */}
+        {/* The reservoir — the rows above the window by their measured heights, sized by the engine in the commit's
+            insertion pass, ahead of every layout effect's setup (`sizeReservoir`; never by React); out of the browser's
+            anchoring while the engine is mounted, as every child of the root is (`ROWS_OUT_OF_ANCHORING`), so the
+            browser's anchoring never doubles the hold. */}
         <div ref={reservoirEl} data-list-reservoir style={{ position: 'relative', flexShrink: 0, ...outOfAnchoring }} />
         {nodes}
         <div data-list-below style={{ height: `${below}px`, flexShrink: 0, ...outOfAnchoring }} />
@@ -1018,7 +1018,10 @@ export function List<T>({
   };
 
   return (
-    <Box ref={scrollTopButton || isWindowed ? discoverScrollHost : undefined} sx={sx}>
+    <Box
+      ref={scrollTopButton || isWindowed ? discoverScrollHost : undefined}
+      sx={rowsHeldAlone ? rootSxHoldingRows(sx) : sx}
+    >
       {cells
         ? windowedBody()
         : groups

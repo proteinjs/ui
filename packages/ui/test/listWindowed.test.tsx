@@ -50,24 +50,35 @@
  *     is declared at a window commit while the scroll goes on, so what is owed is written at the fling's own end, never
  *     under its momentum (11b). Who declares what (11c): while the window's engine is mounted the list's root is a
  *     candidate of the browser's anchoring and every child of the root is not — the foot's box from its first render,
- *     each element of a row, a row that replaces its own box on a commit that is not the list's and a child the list's
- *     own later commit adds among them — a sibling of the list in the same scroller stays one and the scroller declares
- *     nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed
- *     with no scrollable ancestor, declares nothing. The browser's side (11d): what stands above the list grows under a
- *     reader deep in it — the reader's row does not move. HOME'S SHAPE (11e — the one windowed list in the house is
- *     GROUPED): the same one press under the same browser, each group box out with its rows, the root in. THE FOOT AT
+ *     each element of a row, a row that says otherwise inline, a row that replaces its own box on a commit that is not
+ *     the list's and a child the list's own later commit adds among them — a sibling of the list in the same scroller
+ *     stays one and the scroller declares nothing; all of it is taken back when the list leaves the windowed mode; a
+ *     list that is not windowed, or windowed with no scrollable ancestor, declares nothing. The browser's side (11d):
+ *     what stands above the list grows under a reader deep in it — the reader's row does not move. HOME'S SHAPE (11e —
+ *     the one windowed list in the house is GROUPED): the same one press under the same browser, each group box out
+ *     with its rows, the root in. THE FOOT AT
  *     THE TAIL (11f): a child of the root left a candidate is the only one under it, and the browser holds IT — so the
  *     consumer's foot is drawn inside a box of the list's own that is out from its first render: bare text, a box
  *     inside the consumer's own box-less element, a row that draws itself later — a page lands under a reader at the
- *     tail and the reader's row does not move.
+ *     tail and the reader's row does not move. AN UNGROUPED LIST'S ROWS ARE OUT FROM THEIR FIRST STYLE RESOLUTION (11g —
+ *     round 6): no box of the list's stands over them, so one rule on the root reaches each element of each cell; a
+ *     row that reads the layout in its own layout effect is already out at the layout it asks for — the same one press
+ *     reaches the top (a declaration written after the rows' effects left that row a candidate: 5,600 of 6,000).
  * 12. THE HOLD'S OWN RECORD: the anchors are recorded wherever the list itself moves the layout they are read against —
  *     a hold is not undone at the next commit, a payment is not absorbed again as a debt nobody owes, and a row growing
  *     below the reader's edge is not read back as drift (the engine's anchoring hid all three where it anchored).
- * 13. THE RESERVOIR STANDS AT EVERY LAYOUT (round 5 — iOS 27.2 and WebKit, 2026-11-12: with the rows out of the
- *     anchoring a jump down the list was thrown back, 5,320 px of 5,320): a row that reads the layout in its own layout
- *     effect asks the browser for a layout in the middle of the list's commit, and the browser clamps the offset to
- *     the content it finds — so the reservoir takes the rows above the window before any layout effect runs. The
- *     reader jumps several screens down: the offset stays where the reader put it.
+ * 13. THE RESERVOIR STANDS AT EVERY LAYOUT EFFECT'S SETUP (round 5 — iOS 27.2 and WebKit, 2026-11-12: with the rows out
+ *     of the anchoring a jump down the list was thrown back, 5,320 px of 5,320): a row that reads the layout in its own
+ *     layout effect at its mount asks the browser for a layout in the middle of the list's commit, and the browser
+ *     clamps the offset to the content it finds — so the reservoir takes the rows above the window before the setup of
+ *     any layout effect. The reader jumps several screens down: the offset stays where the reader put it. NOT COVERED,
+ *     and not pinned: a row whose UNMOUNT path reads the layout (a layout effect's cleanup, a ref's detach) runs inside
+ *     React's deletions, before any effect of the list — a jump is still thrown back by the rows already removed (round
+ *     5's review, under this stand-in: 1,196 px ungrouped, 1,120 px grouped).
+ * 14. ONE SIZING OF THE RESERVOIR (round 6): the commit's insertion pass and the engine's own mount call the same
+ *     sizing and nothing else writes that number. The engine's mount is its second caller's whole job — the engine
+ *     mounting over a window the list already holds: the list leaves the windowed mode with the reader deep and
+ *     returns to it, and the reservoir stands for the rows above that window — the reader's row where it was.
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -271,7 +282,8 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
 //    row in view that is a candidate — main — moves 0). An element is a CANDIDATE unless it, or any ancestor up to AND INCLUDING the
 //    scroller, declares `overflow-anchor: none` — wherever and however it is declared: jsdom keeps no `overflow-anchor`
 //    (not in a style object, not in a computed style), so the stand-in reads the declaration itself by each door a page
-//    has — the style object's property (React's `style`), `setProperty`, the attribute's text, a rule of a style sheet.
+//    has — the style object's property (React's `style`), `setProperty`, the attribute's text, a rule of a style sheet
+//    (the cascade: an element that says otherwise INLINE outranks a rule, unless the rule is `!important`).
 //    An element with NO BOX (`display: contents`) declares nothing a browser reads (the harness's probe on both
 //    engines, 2026-11-12: a row under a box-less element that declares it still anchors). ──
 const anchorNoneBySetProperty = new WeakSet<CSSStyleDeclaration>();
@@ -301,16 +313,23 @@ const declaresAnchorNone = (el: HTMLElement): boolean => {
   if (el.style.display === 'contents') {
     return false;
   }
-  if ((el.style as unknown as { overflowAnchor?: string }).overflowAnchor === 'none') {
+  const inline = (el.style as unknown as { overflowAnchor?: string }).overflowAnchor;
+  if (inline === 'none') {
     return true;
   }
   if (anchorNoneBySetProperty.has(el.style) || /overflow-anchor\s*:\s*none/.test(el.getAttribute('style') ?? '')) {
     return true;
   }
+  const saysOtherwiseInline = inline !== undefined && inline !== '';
   return Array.from(document.styleSheets).some((sheet) =>
     Array.from(sheet.cssRules).some((rule) => {
       const { selectorText, style } = rule as CSSStyleRule;
-      return !!selectorText && style?.getPropertyValue('overflow-anchor') === 'none' && el.matches(selectorText);
+      return (
+        !!selectorText &&
+        style?.getPropertyValue('overflow-anchor') === 'none' &&
+        (!saysOtherwiseInline || style.getPropertyPriority('overflow-anchor') === 'important') &&
+        el.matches(selectorText)
+      );
     })
   );
 };
@@ -542,6 +561,15 @@ const renderRow = (r: Row) => {
   renderCount++;
   return <div data-h={r.h} data-row={r.id} />;
 };
+/** A row that reads the layout in its own layout effect, at its mount (Home's row title measuring its overflow). */
+const ReadsItsLayout = ({ r }: { r: Row }) => {
+  const box = React.useRef<HTMLDivElement | null>(null);
+  React.useLayoutEffect(() => {
+    box.current?.getBoundingClientRect();
+  }, []);
+  return <div ref={box} data-h={r.h} data-row={r.id} />;
+};
+const renderReadingRow = (r: Row) => <ReadsItsLayout r={r} />;
 /** The margin's bound, in rows: the viewport plus a margin each side, plus the two cut rows at the edges. */
 const BOUND = Math.ceil((CLIENT_HEIGHT * (1 + 2 * LIST_WINDOW_SCREENS)) / ROW_H) + 2;
 /** The windowed option as the component takes it (cast: the pin's red run is against a List without the prop). */
@@ -1339,11 +1367,12 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
   });
 
-  test('11c. who declares what: while the window’s engine is mounted the list’s root is a candidate of the browser’s anchoring and every child of the root is not — the foot’s box from its first render, each element of a row, a row that replaces its own box on a commit that is not the list’s and a child the list’s own later commit adds among them — a sibling of the list stays one and the scroller declares nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed with no scrollable ancestor, declares nothing', async () => {
+  test('11c. who declares what: while the window’s engine is mounted the list’s root is a candidate of the browser’s anchoring and every child of the root is not — the foot’s box from its first render, each element of a row, a row that says otherwise inline, a row that replaces its own box on a commit that is not the list’s and a child the list’s own later commit adds among them — a sibling of the list stays one and the scroller declares nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed with no scrollable ancestor, declares nothing', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     // The consumer's foot draws its row on its OWN state (a loading row timing its own appearance) and one row replaces
     // its own box on its own state: two commits that are not the list's. One row is a fragment of two elements — two
-    // boxes under the root, as the browser lays them out.
+    // boxes under the root, as the browser lays them out. One row says otherwise inline (`overflow-anchor: auto` on its
+    // own box): the list's word outranks it.
     let drawFoot: (drawn: boolean) => void = () => undefined;
     const Foot = () => {
       const [drawn, setDrawn] = React.useState(false);
@@ -1364,6 +1393,8 @@ describe('List — the windowed mode over the reservoir', () => {
           <div data-h={r.h} data-row={r.id} />
           <span data-row-tail />
         </>
+      ) : r.id === 7 ? (
+        <div data-h={r.h} data-row={r.id} style={{ overflowAnchor: 'auto' }} />
       ) : (
         renderRow(r)
       );
@@ -1378,6 +1409,7 @@ describe('List — the windowed mode over the reservoir', () => {
           renderRow={renderOwnRow}
           renderFoot={renderFoot}
           scrollTopButton
+          sx={{ width: '100%' }}
           {...(windowed ? windowedProps({ estimatedRowHeight: ROW_H }) : {})}
         />
       </>
@@ -1401,6 +1433,8 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(isAnchoringCandidate(listRoot(), scroller)).toBe(true);
     expect(isAnchoringCandidate(above(), scroller)).toBe(true);
     expect(declaresAnchorNone(scroller)).toBe(false);
+    // The consumer's own `sx` still styles the root beside the list's rule (Home's root: its width).
+    expect(getComputedStyle(listRoot()).width).toBe('100%');
 
     // TWO COMMITS THAT ARE NOT THE LIST'S, each alone — the foot draws its row (inside the list's box, already out),
     // then a row replaces its own box (a child of its box-less cell): out, each, with no commit of the list between.
@@ -1596,6 +1630,27 @@ describe('List — the windowed mode over the reservoir', () => {
     }
   );
 
+  test('11g. an UNGROUPED list’s rows are out of the anchoring from their first style resolution — rows that read the layout in their own layout effect, under a browser that anchors: several screens down, ONE press, the motion settled — the scroller at its top, the first row first in view, the button gone, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300, { scrollTopButton: true, renderRow: renderReadingRow });
+    await frame();
+    await readerScrollsDownTo(6_000);
+    expect(mountedIds()[0]).toBeGreaterThan(50);
+    expect(button().getAttribute('data-shown')).toBe('true');
+    expect(writes).toEqual([]);
+
+    // The red (round 5's tip — the rows declared out by a walk in the list's own layout effect, after its rows' own):
+    // a row the first window commit mounts reads the layout in its own effect while it is still a candidate; the
+    // browser chooses it there, and the commit ends the animation where it stands — 5,600 of 6,000, the button still up.
+    await press();
+    await settle();
+    expect(scrollTopValue).toBe(0);
+    expect(mountedIds()[0]).toBe(0);
+    expect(topOf(0)).toBe(0);
+    expect(writes).toEqual([]);
+    expect(button().getAttribute('data-shown')).toBe('false');
+  });
+
   test('12. the hold’s own record: a hold is not undone at the next commit, a payment is not absorbed again as a debt nobody owes, and a row growing below the reader’s edge is not read back as drift', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     await mountList(loader, 300);
@@ -1646,15 +1701,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(writes.length).toBe(1);
   });
 
-  test('13. the reservoir stands for the rows above the window at every layout — a row that reads the layout in its own layout effect (a title measuring its overflow): the reader jumps several screens down — the offset stays where the reader put it, the rows there in the document, nothing written', async () => {
-    const ReadsItsLayout = ({ r }: { r: Row }) => {
-      const box = React.useRef<HTMLDivElement | null>(null);
-      React.useLayoutEffect(() => {
-        box.current?.getBoundingClientRect();
-      }, []);
-      return <div ref={box} data-h={r.h} data-row={r.id} />;
-    };
-    const renderReadingRow = (r: Row) => <ReadsItsLayout r={r} />;
+  test('13. the reservoir stands for the rows above the window at every layout effect’s setup — a row that reads the layout in its own layout effect (a title measuring its overflow): the reader jumps several screens down — the offset stays where the reader put it, the rows there in the document, nothing written', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     await mountList(loader, 300, { renderRow: renderReadingRow });
     await frame();
@@ -1672,6 +1719,48 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(scrollTopValue).toBe(tail);
     expect(mountedIds()).toContain(299);
     expect(reservoirPx()).toBe(mountedIds()[0] * ROW_H);
+    expect(writes).toEqual([]);
+  });
+
+  test('14. one sizing of the reservoir, and the engine’s mount calls it — the engine mounting over a window the list already holds: the list leaves the windowed mode with the reader deep and returns to it — the reservoir stands for the rows above that window, the reader’s row where it was, nothing written', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    const list = (windowed: boolean) => (
+      <List<Row>
+        loader={loader}
+        windowSize={300}
+        rowId={rowId}
+        renderRow={renderRow}
+        {...(windowed ? windowedProps({ estimatedRowHeight: ROW_H }) : {})}
+      />
+    );
+    render(list(true));
+    await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
+    await frame();
+    await readerScrollsDownTo(6_000);
+    const first = mountedIds()[0];
+    expect(first).toBeGreaterThan(50);
+    const reader = readerRow();
+    const offset = topOf(reader);
+
+    // The list leaves the windowed mode: every row in the document, the reader where they were.
+    render(list(false));
+    await flush();
+    expect(mountedIds().length).toBe(300);
+    expect(topOf(reader)).toBe(offset);
+
+    // And returns to it. The list kept its window; the commit that mounts the engine ran its insertion pass before
+    // there was an engine, so the engine's mount is the one that sizes the reservoir. The red (the mount not calling
+    // the sizing): the window stands, no later commit comes, and the reservoir stays 0 — the rows above the window are
+    // nowhere, the reader's row 5,356 px up and out of view.
+    render(list(true));
+    await flush();
+    await frame();
+    await rest();
+    await flush();
+    expect(mountedIds()[0]).toBe(first);
+    expect(reservoirPx()).toBe(first * ROW_H);
+    expect(topOf(reader)).toBe(offset);
+    expect(scrollTopValue).toBe(6_000);
     expect(writes).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "branch": "fix/windowed-list-holds-its-own-rows-r5",
+  "branch": "fix/windowed-list-holds-its-own-rows-r6",
   "packages": ["ui"],
   "suites": [
     "packages/ui/test/listWindowed.test.tsx",
