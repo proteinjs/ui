@@ -130,8 +130,6 @@ function harness(initial?: Record<string, unknown> | null) {
       leavesAtOnce?: boolean;
       /** What the sheet declares of itself: false = the page stays live around it. */
       modal?: boolean;
-      /** What the sheet declares of itself: the name an arrival's caller can keep standing. */
-      keptAs?: string;
     } = {}
   ) => {
     let closeCount = 0;
@@ -150,7 +148,6 @@ function harness(initial?: Record<string, unknown> | null) {
       },
       ...(opts.leavesAtOnce ? { onDismissNow: () => void told.push(`${opts.name}: at once`) } : {}),
       ...(opts.modal === undefined ? {} : { modal: opts.modal }),
-      ...(opts.keptAs === undefined ? {} : { name: opts.keptAs }),
     };
     return {
       instance,
@@ -639,38 +636,6 @@ describe('SheetHistoryCoordinator', () => {
     expect(history.position).toBe(3);
   });
 
-  it('an arrival that lands in a named sheet: every other standing sheet is told, those over it and those under it, one the page stays live around included; the named one is not; the entries over it are stepped back over and the stack ends on its entry', () => {
-    const { history, coordinator, sheet, told } = harness();
-    const under = sheet({ name: 'under' });
-    const around = sheet({ name: 'around', modal: false });
-    const kept = sheet({ name: 'kept', keptAs: 'the sheet the arrival lands in' });
-    const over1 = sheet({ name: 'over1', leavesAtOnce: true });
-    const over2 = sheet({ name: 'over2' });
-    under.open();
-    around.open();
-    kept.open();
-    over1.open();
-    over2.open(); // [page, under, around, kept, over1, over2]
-    coordinator.dismiss(arrival(), { except: 'the sheet the arrival lands in' });
-    expect(told).toEqual(['over2: close', 'over1: at once', 'around: close', 'under: close']);
-    // The hosts close in the order they were told.
-    over2.close();
-    over1.close();
-    around.close();
-    under.close();
-    history.flush();
-    expect(history.popCount).toBe(2); // one step back for each entry over the kept sheet's
-    expect(history.position).toBe(3);
-    expect(history.currentMarker()).toBe(kept.instance.entryId);
-    expect(kept.closes()).toBe(0);
-    // One Back closes the kept sheet and reaches the page: the entries under it were let go, and are passed through.
-    history.userBack();
-    history.flush();
-    expect(kept.closes()).toBe(1);
-    expect(history.position).toBe(0);
-    expect(history.currentMarker()).toBeUndefined();
-  });
-
   it('a sheet whose entry is still deferred behind a consumption was opened last: it is told, and told first', () => {
     const { history, coordinator, sheet, told } = harness();
     const below = sheet({ name: 'below' });
@@ -749,7 +714,7 @@ describe('SheetHistoryCoordinator', () => {
     expect((history.getState() as Record<string, unknown>).key).toBe('k0');
   });
 
-  it('the page’s door (dismissStandingSheets): a page where no sheet has stood has no coordinator and is left with none; a page that has one tells its standing sheets with a real event, and hands on the name of the sheet an arrival lands in', () => {
+  it('the page’s door (dismissStandingSheets): a page where no sheet has stood has no coordinator and is left with none; a page that has one tells its standing sheets with a real event', () => {
     const page: Record<string, unknown> = {};
     (globalThis as { window?: unknown }).window = page;
     try {
@@ -771,20 +736,6 @@ describe('SheetHistoryCoordinator', () => {
       // A real Event, never a bare object: a host's close handler may call its methods.
       expect(seen[0]).toBeInstanceOf(Event);
       expect(() => seen[0].stopPropagation()).not.toThrow();
-      // An arrival that lands in a sheet: the door hands its name on, so that sheet hears nothing and the other is told.
-      const keptHeard: Event[] = [];
-      const kept: SheetHistoryInstance = {
-        open: true,
-        entryId: null,
-        consuming: false,
-        onClose: (event) => void keptHeard.push(event),
-        name: 'kept',
-      };
-      coordinator.register(kept);
-      coordinator.opened(kept);
-      dismissStandingSheets({ except: 'kept' });
-      expect(seen).toHaveLength(2);
-      expect(keptHeard).toHaveLength(0);
     } finally {
       delete (globalThis as { window?: unknown }).window;
     }
