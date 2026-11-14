@@ -20,6 +20,13 @@ export interface SheetHistoryOptions {
   /** Gate — shells pass `useFormFactor().isPhone`. When false the hook touches nothing
    *  (no listener, no entries): desktop dialogs keep pure-modal semantics. */
   enabled: boolean;
+  /**
+   * Called INSTEAD of onClose when something from outside the page replaced what is under the sheets
+   * (`dismissStandingSheets`: a deep link the hosting shell delivers — a tapped system notification, a link
+   * opened from another application): the sheet leaves at once, with no exit motion, in the step that shows
+   * the new screen. A shell that passes none is told by its ordinary onClose and leaves with its own motion.
+   */
+  onDismissNow?: (event: Event) => void;
 }
 
 /**
@@ -97,10 +104,18 @@ export interface SheetHistoryOptions {
  * - Simultaneous user-back + programmatic close (same frame): two queued traversals pop two
  *   entries. Untangling would require cancelling a queued traversal, which the history API
  *   cannot do; the window is one frame on conflicting user input. Known, accepted.
+ *
+ * AN ARRIVAL FROM OUTSIDE (`dismissStandingSheets`, the coordinator's `dismiss`): the list of sheets
+ * standing on the page is this coordinator's registry, so the one caller that receives a deep link from
+ * the hosting shell asks it to tell every one to leave. Each is told through its own close
+ * (onDismissNow where the shell has one), so every entry leaves by the roads above: stepped back over when
+ * it is still the current entry, let go when the arrival's navigation took or buried it.
  */
-export function useSheetHistory({ open, onClose, enabled }: SheetHistoryOptions): void {
+export function useSheetHistory({ open, onClose, enabled, onDismissNow }: SheetHistoryOptions): void {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const dismissRef = useRef(onDismissNow);
+  dismissRef.current = onDismissNow;
   const instanceRef = useRef<SheetHistoryInstance | null>(null);
   const active = open && enabled;
   useEffect(() => {
@@ -113,6 +128,8 @@ export function useSheetHistory({ open, onClose, enabled }: SheetHistoryOptions)
         entryId: null,
         consuming: false,
         onClose: (event) => closeRef.current(event),
+        // The latest callback at the telling; a shell with none is told by its ordinary close.
+        onDismissNow: (event) => (dismissRef.current ?? closeRef.current)(event),
       };
     }
     // The instance object persists across open cycles: a consumption still in flight from the
@@ -163,6 +180,9 @@ export interface SheetHistoryInstance {
   consuming: boolean;
   /** The user popped this instance's entry — told with the popstate event. */
   onClose: (event: Event) => void;
+  /** Something from outside replaced what is under the sheets — told to leave at once (`dismiss`).
+   *  Absent: told by onClose. */
+  onDismissNow?: (event: Event) => void;
 }
 
 /**
@@ -333,8 +353,31 @@ export class SheetHistoryCoordinator {
       this.flushCloses();
     }
     this.observePosition();
-    this.notifyPopped(popped, event);
+    this.tellEach(popped, (instance) => instance.onClose(event));
   };
+
+  /**
+   * SOMETHING FROM OUTSIDE LANDED UNDER THE SHEETS (a deep link the hosting shell delivers — the screen
+   * beneath is being replaced by a caller that is not one of the sheets): every sheet standing is
+   * told to leave, the newest first — the push order, the order Back would close them in; a sheet whose
+   * entry is still deferred behind a consumption was opened last and is told first. A shell that can leave
+   * at once is told that way (onDismissNow), the others by their ordinary close; every one is told
+   * whatever any one of them does, and the first error surfaces after (the popstate sweep's convention).
+   *
+   * NOTHING IS DISOWNED AND NO HISTORY STEP IS TAKEN HERE. Each sheet's own close reaches `closed`, and the
+   * flush already holds both answers: an entry still current is stepped back over (the arrival was for the
+   * screen already showing — the stack ends on it), and an entry the arrival's navigation took (a replace
+   * over the top entry) or buried (a push) is let go with no traversal, so Back from the new screen reaches
+   * the screen beneath. Disowning here would leave the first case parked on a dead marker.
+   */
+  dismiss(event: Event): void {
+    const standing = Array.from(this.instances)
+      .filter((instance) => instance.open)
+      // Registration order, newest first: the tie's order among sheets that hold no entry yet.
+      .reverse();
+    standing.sort((a, b) => this.pushSeq(b) - this.pushSeq(a));
+    this.tellEach(standing, (instance) => (instance.onDismissNow ?? instance.onClose)(event));
+  }
 
   /**
    * THE GHOST RULE'S ROAD: a landing on a marker entry no live instance owns continues the
@@ -367,14 +410,15 @@ export class SheetHistoryCoordinator {
     }
   }
 
-  /** Every popped-past sheet is told, whatever any one of them does; a consumer's error
-   *  surfaces after all are told — never by skipping a sibling. */
-  private notifyPopped(popped: SheetHistoryInstance[], event: Event): void {
+  /** Every sheet named is told, whatever any one of them does; a consumer's error surfaces
+   *  after all are told — never by skipping a sibling. The popstate sweep's telling and the
+   *  dismissal's are this one loop. */
+  private tellEach(sheets: SheetHistoryInstance[], tell: (instance: SheetHistoryInstance) => void): void {
     let error: unknown;
     let threw = false;
-    for (const instance of popped) {
+    for (const instance of sheets) {
       try {
-        instance.onClose(event);
+        tell(instance);
       } catch (thrown) {
         if (!threw) {
           threw = true;
@@ -406,6 +450,13 @@ export class SheetHistoryCoordinator {
       }
       this.disown(instance);
     }
+  }
+
+  /** An instance's place in the push order; one holding no entry yet (its push deferred behind a
+   *  consumption in flight) was opened after every entry on the stack. */
+  private pushSeq(instance: SheetHistoryInstance): number {
+    const seq = instance.entryId === null ? undefined : this.order.get(instance.entryId);
+    return seq ?? Number.MAX_SAFE_INTEGER;
   }
 
   /** The one door out of the stack: the entry leaves the order with its instance. */
@@ -466,9 +517,26 @@ interface NavigationLike {
   entries(): unknown[];
 }
 
+/**
+ * SOMETHING FROM OUTSIDE THE PAGE REPLACED WHAT IS UNDER THE SHEETS — the door for the one caller that
+ * receives such an arrival (a native shell's deep-link handler: a tapped system notification, a link opened
+ * from another application): every phone sheet standing on the page is told to leave
+ * (`SheetHistoryCoordinator.dismiss`). It has no event of the phone's to hand on, so it makes a plain one —
+ * a real Event, because a host's close handler may call its methods. Only a page that already has a
+ * coordinator is asked: a page where no sheet has ever stood has none standing, and this door never
+ * installs one (the desktop installs no listener).
+ */
+export function dismissStandingSheets(): void {
+  installedCoordinator()?.dismiss(new Event('sheetdismiss'));
+}
+
+function installedCoordinator(): SheetHistoryCoordinator | undefined {
+  return (window as unknown as Record<string, unknown>)[COORDINATOR_KEY] as SheetHistoryCoordinator | undefined;
+}
+
 function browserCoordinator(): SheetHistoryCoordinator {
   const host = window as unknown as Record<string, unknown>;
-  let coordinator = host[COORDINATOR_KEY] as SheetHistoryCoordinator | undefined;
+  let coordinator = installedCoordinator();
   if (!coordinator) {
     coordinator = new SheetHistoryCoordinator({
       getState: () => window.history.state,

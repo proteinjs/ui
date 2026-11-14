@@ -6,6 +6,7 @@ import {
   SheetHistoryCoordinator,
   SheetHistoryEnv,
   SheetHistoryInstance,
+  dismissStandingSheets,
 } from '../src/hooks/useSheetHistory';
 
 /** Router-shaped base entry (usr/key/idx — what @remix-run/router keeps in history.state). */
@@ -119,7 +120,10 @@ function harness(initial?: Record<string, unknown> | null) {
   const history = new FakeHistory(initial);
   const coordinator = new SheetHistoryCoordinator(history);
   history.onPop = coordinator.handlePop;
-  const sheet = (opts: { throws?: string } = {}) => {
+  /** What each NAMED sheet heard, in the order it heard it: `<name>: close` (its ordinary close) or
+   *  `<name>: at once` (the leave-at-once a shell may offer). */
+  const told: string[] = [];
+  const sheet = (opts: { throws?: string; name?: string; leavesAtOnce?: boolean } = {}) => {
     let closeCount = 0;
     const instance: SheetHistoryInstance = {
       open: false,
@@ -127,10 +131,14 @@ function harness(initial?: Record<string, unknown> | null) {
       consuming: false,
       onClose: () => {
         closeCount += 1;
+        if (opts.name) {
+          told.push(`${opts.name}: close`);
+        }
         if (opts.throws) {
           throw new Error(opts.throws);
         }
       },
+      ...(opts.leavesAtOnce ? { onDismissNow: () => void told.push(`${opts.name}: at once`) } : {}),
     };
     return {
       instance,
@@ -147,7 +155,7 @@ function harness(initial?: Record<string, unknown> | null) {
       },
     };
   };
-  return { history, coordinator, sheet };
+  return { history, coordinator, sheet, told };
 }
 
 describe('SheetHistoryCoordinator', () => {
@@ -584,5 +592,128 @@ describe('SheetHistoryCoordinator', () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBeInstanceOf(Event);
     expect(seen[0].type).toBe('popstate');
+  });
+
+  // SOMETHING FROM OUTSIDE LANDS UNDER THE SHEETS (`dismiss` — a deep link the hosting shell delivers: a tapped
+  // system notification, a link opened from another application; without it the destination was shown BEHIND a
+  // sheet left standing). The telling is the coordinator's; what history does after is each sheet's own close, by
+  // the roads above.
+  const arrival = () => new Event('sheetdismiss');
+
+  it('something from outside lands under the sheets: every one standing is told to leave, the newest first, each once; one that can leave at once is told that way, the others are told to close', () => {
+    const { history, coordinator, sheet, told } = harness();
+    const gone = sheet({ name: 'gone' });
+    const bottom = sheet({ name: 'bottom', leavesAtOnce: true });
+    const middle = sheet({ name: 'middle' });
+    const top = sheet({ name: 'top', leavesAtOnce: true });
+    gone.open();
+    gone.close(); // opened and closed before the arrival: not standing, never told
+    history.flush();
+    bottom.open();
+    middle.open();
+    top.open();
+    coordinator.dismiss(arrival());
+    expect(told).toEqual(['top: at once', 'middle: close', 'bottom: at once']);
+    // The telling takes no history step of its own and lets go of no entry: each sheet's close does.
+    expect(history.popCount).toBe(1); // the one traversal is `gone`'s own close, before the arrival
+    expect(history.position).toBe(3);
+    expect(history.currentMarker()).toBe(top.instance.entryId);
+  });
+
+  it('a sheet whose entry is still deferred behind a consumption was opened last: it is told, and told first', () => {
+    const { history, coordinator, sheet, told } = harness();
+    const below = sheet({ name: 'below' });
+    const leaving = sheet({ name: 'leaving' });
+    const late = sheet({ name: 'late' });
+    below.open();
+    leaving.open();
+    history.flush();
+    leaving.close();
+    history.drainMicrotasks(); // its back() is in flight
+    late.open(); // deferred behind it: no entry yet
+    expect(late.instance.entryId).toBeNull();
+    coordinator.dismiss(arrival());
+    expect(told).toEqual(['late: close', 'below: close']);
+    // The hosts close; the traversal in flight lands and the one entry left is stepped back over.
+    late.close();
+    below.close();
+    history.flush();
+    expect(history.position).toBe(0);
+    expect(history.currentMarker()).toBeUndefined();
+  });
+
+  it('every standing sheet is told even when one throws, and the first error surfaces after', () => {
+    const { coordinator, sheet, told } = harness();
+    const beneath = sheet({ name: 'beneath' });
+    const thrower = sheet({ name: 'thrower', throws: 'a close handler threw' });
+    beneath.open();
+    thrower.open(); // the newest: told first, and it throws
+    expect(() => coordinator.dismiss(arrival())).toThrow('a close handler threw');
+    expect(told).toEqual(['thrower: close', 'beneath: close']);
+  });
+
+  it('the arrival replaces the top entry in the same task (a new screen takes the sheet’s entry): no step back is taken, and a later Back from the new screen reaches the screen beneath', () => {
+    const { history, coordinator, sheet, told } = harness();
+    const s = sheet({ name: 'standing', leavesAtOnce: true });
+    s.open(); // [home, sheet]
+    coordinator.dismiss(arrival());
+    history.replaceState(routerEntry(1)); // the arrival's own navigation: the new screen over the sheet's entry
+    s.close(); // the sheet's close lands with the commit, after the navigation
+    history.flush();
+    expect(told).toEqual(['standing: at once']);
+    expect(history.popCount).toBe(0); // never traversed: a step back here would leave the new screen
+    expect(history.position).toBe(1);
+    expect(history.stack).toHaveLength(2); // history is no longer than it was with the sheet open
+    expect(history.currentMarker()).toBeUndefined();
+    expect((history.getState() as Record<string, unknown>).key).toBe('k1');
+    history.userBack();
+    history.flush();
+    expect(history.position).toBe(0);
+    expect((history.getState() as Record<string, unknown>).key).toBe('k0');
+    expect(told).toEqual(['standing: at once']); // told once: nothing is left to close
+  });
+
+  it('the arrival is for the screen already showing (no navigation): the sheets’ entries are stepped back over one at a time and the stack ends on the screen', () => {
+    const { history, coordinator, sheet, told } = harness();
+    const lower = sheet({ name: 'lower', leavesAtOnce: true });
+    const upper = sheet({ name: 'upper' });
+    lower.open();
+    upper.open(); // [home, lower, upper]
+    coordinator.dismiss(arrival());
+    upper.close(); // the hosts close in the order they were told
+    lower.close();
+    history.flush();
+    expect(told).toEqual(['upper: close', 'lower: at once']);
+    expect(history.popCount).toBe(2); // one step back for each entry
+    expect(history.position).toBe(0);
+    expect(history.currentMarker()).toBeUndefined();
+    expect((history.getState() as Record<string, unknown>).key).toBe('k0');
+  });
+
+  it('the page’s door (dismissStandingSheets): a page where no sheet has stood has no coordinator and is left with none; a page that has one tells its standing sheets with a real event', () => {
+    const page: Record<string, unknown> = {};
+    (globalThis as { window?: unknown }).window = page;
+    try {
+      dismissStandingSheets();
+      expect(Object.keys(page)).toEqual([]);
+      const { coordinator } = harness();
+      page.__sheetHistoryCoordinator = coordinator;
+      const seen: Event[] = [];
+      const instance: SheetHistoryInstance = {
+        open: true,
+        entryId: null,
+        consuming: false,
+        onClose: (event) => void seen.push(event),
+      };
+      coordinator.register(instance);
+      coordinator.opened(instance);
+      dismissStandingSheets();
+      expect(seen).toHaveLength(1);
+      // A real Event, never a bare object: a host's close handler may call its methods.
+      expect(seen[0]).toBeInstanceOf(Event);
+      expect(() => seen[0].stopPropagation()).not.toThrow();
+    } finally {
+      delete (globalThis as { window?: unknown }).window;
+    }
   });
 });
