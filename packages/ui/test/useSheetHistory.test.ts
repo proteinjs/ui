@@ -123,7 +123,17 @@ function harness(initial?: Record<string, unknown> | null) {
   /** What each NAMED sheet heard, in the order it heard it: `<name>: close` (its ordinary close) or
    *  `<name>: at once` (the leave-at-once a shell may offer). */
   const told: string[] = [];
-  const sheet = (opts: { throws?: string; name?: string; leavesAtOnce?: boolean } = {}) => {
+  const sheet = (
+    opts: {
+      throws?: string;
+      name?: string;
+      leavesAtOnce?: boolean;
+      /** What the sheet declares of itself: false = the page stays live around it. */
+      modal?: boolean;
+      /** What the sheet declares of itself: the name an arrival's caller can keep standing. */
+      keptAs?: string;
+    } = {}
+  ) => {
     let closeCount = 0;
     const instance: SheetHistoryInstance = {
       open: false,
@@ -139,6 +149,8 @@ function harness(initial?: Record<string, unknown> | null) {
         }
       },
       ...(opts.leavesAtOnce ? { onDismissNow: () => void told.push(`${opts.name}: at once`) } : {}),
+      ...(opts.modal === undefined ? {} : { modal: opts.modal }),
+      ...(opts.keptAs === undefined ? {} : { name: opts.keptAs }),
     };
     return {
       instance,
@@ -600,24 +612,63 @@ describe('SheetHistoryCoordinator', () => {
   // the roads above.
   const arrival = () => new Event('sheetdismiss');
 
-  it('something from outside lands under the sheets: every one standing is told to leave, the newest first, each once; one that can leave at once is told that way, the others are told to close', () => {
+  it('something from outside lands under the sheets: every one standing over the page is told to leave, the newest first, each once; one that can leave at once is told that way, the others are told to close; a sheet the page stays live around hears nothing, and Back still closes it', () => {
     const { history, coordinator, sheet, told } = harness();
     const gone = sheet({ name: 'gone' });
     const bottom = sheet({ name: 'bottom', leavesAtOnce: true });
     const middle = sheet({ name: 'middle' });
     const top = sheet({ name: 'top', leavesAtOnce: true });
+    const around = sheet({ name: 'around', modal: false, leavesAtOnce: true });
     gone.open();
     gone.close(); // opened and closed before the arrival: not standing, never told
     history.flush();
     bottom.open();
     middle.open();
     top.open();
+    around.open(); // the newest of all, and not over the page
     coordinator.dismiss(arrival());
     expect(told).toEqual(['top: at once', 'middle: close', 'bottom: at once']);
     // The telling takes no history step of its own and lets go of no entry: each sheet's close does.
     expect(history.popCount).toBe(1); // the one traversal is `gone`'s own close, before the arrival
+    expect(history.position).toBe(4);
+    expect(history.currentMarker()).toBe(around.instance.entryId);
+    // It is a sheet like any other to Back: its entry is the top one, and a Back press closes it.
+    history.userBack();
+    history.flush();
+    expect(told).toEqual(['top: at once', 'middle: close', 'bottom: at once', 'around: close']);
     expect(history.position).toBe(3);
-    expect(history.currentMarker()).toBe(top.instance.entryId);
+  });
+
+  it('an arrival that lands in a named sheet: every other standing sheet is told, those over it and those under it, one the page stays live around included; the named one is not; the entries over it are stepped back over and the stack ends on its entry', () => {
+    const { history, coordinator, sheet, told } = harness();
+    const under = sheet({ name: 'under' });
+    const around = sheet({ name: 'around', modal: false });
+    const kept = sheet({ name: 'kept', keptAs: 'the sheet the arrival lands in' });
+    const over1 = sheet({ name: 'over1', leavesAtOnce: true });
+    const over2 = sheet({ name: 'over2' });
+    under.open();
+    around.open();
+    kept.open();
+    over1.open();
+    over2.open(); // [page, under, around, kept, over1, over2]
+    coordinator.dismiss(arrival(), { except: 'the sheet the arrival lands in' });
+    expect(told).toEqual(['over2: close', 'over1: at once', 'around: close', 'under: close']);
+    // The hosts close in the order they were told.
+    over2.close();
+    over1.close();
+    around.close();
+    under.close();
+    history.flush();
+    expect(history.popCount).toBe(2); // one step back for each entry over the kept sheet's
+    expect(history.position).toBe(3);
+    expect(history.currentMarker()).toBe(kept.instance.entryId);
+    expect(kept.closes()).toBe(0);
+    // One Back closes the kept sheet and reaches the page: the entries under it were let go, and are passed through.
+    history.userBack();
+    history.flush();
+    expect(kept.closes()).toBe(1);
+    expect(history.position).toBe(0);
+    expect(history.currentMarker()).toBeUndefined();
   });
 
   it('a sheet whose entry is still deferred behind a consumption was opened last: it is told, and told first', () => {
@@ -642,14 +693,22 @@ describe('SheetHistoryCoordinator', () => {
     expect(history.currentMarker()).toBeUndefined();
   });
 
-  it('every standing sheet is told even when one throws, and the first error surfaces after', () => {
-    const { coordinator, sheet, told } = harness();
+  it('a sheet whose close fails stops nothing: every standing sheet is still told, the caller is not thrown into, and the failure surfaces afterward by itself', () => {
+    const { history, coordinator, sheet, told } = harness();
     const beneath = sheet({ name: 'beneath' });
     const thrower = sheet({ name: 'thrower', throws: 'a close handler threw' });
     beneath.open();
     thrower.open(); // the newest: told first, and it throws
-    expect(() => coordinator.dismiss(arrival())).toThrow('a close handler threw');
+    let callerWentOn = false;
+    expect(() => {
+      coordinator.dismiss(arrival());
+      callerWentOn = true; // the caller's own work after the telling: the navigation the arrival is for
+    }).not.toThrow();
+    expect(callerWentOn).toBe(true);
     expect(told).toEqual(['thrower: close', 'beneath: close']);
+    // The failure is not lost: it comes out of a task of the list's own, once.
+    expect(() => history.drainMicrotasks()).toThrow('a close handler threw');
+    expect(() => history.drainMicrotasks()).not.toThrow();
   });
 
   it('the arrival replaces the top entry in the same task (a new screen takes the sheet’s entry): no step back is taken, and a later Back from the new screen reaches the screen beneath', () => {
@@ -690,7 +749,7 @@ describe('SheetHistoryCoordinator', () => {
     expect((history.getState() as Record<string, unknown>).key).toBe('k0');
   });
 
-  it('the page’s door (dismissStandingSheets): a page where no sheet has stood has no coordinator and is left with none; a page that has one tells its standing sheets with a real event', () => {
+  it('the page’s door (dismissStandingSheets): a page where no sheet has stood has no coordinator and is left with none; a page that has one tells its standing sheets with a real event, and hands on the name of the sheet an arrival lands in', () => {
     const page: Record<string, unknown> = {};
     (globalThis as { window?: unknown }).window = page;
     try {
@@ -712,6 +771,20 @@ describe('SheetHistoryCoordinator', () => {
       // A real Event, never a bare object: a host's close handler may call its methods.
       expect(seen[0]).toBeInstanceOf(Event);
       expect(() => seen[0].stopPropagation()).not.toThrow();
+      // An arrival that lands in a sheet: the door hands its name on, so that sheet hears nothing and the other is told.
+      const keptHeard: Event[] = [];
+      const kept: SheetHistoryInstance = {
+        open: true,
+        entryId: null,
+        consuming: false,
+        onClose: (event) => void keptHeard.push(event),
+        name: 'kept',
+      };
+      coordinator.register(kept);
+      coordinator.opened(kept);
+      dismissStandingSheets({ except: 'kept' });
+      expect(seen).toHaveLength(2);
+      expect(keptHeard).toHaveLength(0);
     } finally {
       delete (globalThis as { window?: unknown }).window;
     }

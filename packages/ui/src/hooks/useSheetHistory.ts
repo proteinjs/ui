@@ -27,6 +27,30 @@ export interface SheetHistoryOptions {
    * the new screen. A shell that passes none is told by its ordinary onClose and leaves with its own motion.
    */
   onDismissNow?: (event: Event) => void;
+  /**
+   * Whether the sheet stands OVER the page (the default, true). False declares a sheet the page stays live
+   * around: it has no scrim and the page under it is still in use. Back closes it like any sheet. An arrival
+   * from outside that lands on the page (`dismissStandingSheets()` with no `except`) leaves it standing — the
+   * new screen is not hidden by it. An arrival that lands in a named sheet (`except`) tells it like every other
+   * sheet: it shares that sheet's layer, and stands over it whenever it was mounted later.
+   */
+  modal?: boolean;
+  /**
+   * A name by which the caller that receives an arrival from outside can keep this sheet standing
+   * (`dismissStandingSheets({ except })`): the sheet the arrival lands in. A sheet with no name is never kept.
+   */
+  name?: string;
+}
+
+/** What the caller that receives an arrival from outside says about where it lands (`dismissStandingSheets`). */
+export interface SheetDismissOptions {
+  /**
+   * The name of the sheet the arrival LANDS IN (`SheetHistoryOptions.name`). That sheet is not told; every
+   * other open sheet is — those over it and those under it, a sheet whose `modal` is false included (it shares
+   * the kept sheet's layer and would stand over it). Absent, the arrival lands on the page: every sheet that
+   * stands over the page is told, and one whose `modal` is false is left standing.
+   */
+  except?: string;
 }
 
 /**
@@ -107,15 +131,21 @@ export interface SheetHistoryOptions {
  *
  * AN ARRIVAL FROM OUTSIDE (`dismissStandingSheets`, the coordinator's `dismiss`): the list of sheets
  * standing on the page is this coordinator's registry, so the one caller that receives a deep link from
- * the hosting shell asks it to tell every one to leave. Each is told through its own close
+ * the hosting shell asks it to tell them to leave. An arrival that lands on the page tells every sheet that
+ * stands over it (`modal`, the default) and leaves one the page stays live around; an arrival that lands in a
+ * sheet names it (`except`), and every other open sheet is told. Each is told through its own close
  * (onDismissNow where the shell has one), so every entry leaves by the roads above: stepped back over when
- * it is still the current entry, let go when the arrival's navigation took or buried it.
+ * it is still the current entry, let go when the arrival's navigation took or buried it. A sheet whose close
+ * fails never stops the caller, which has a navigation to make: the failure surfaces afterward, by itself.
  */
-export function useSheetHistory({ open, onClose, enabled, onDismissNow }: SheetHistoryOptions): void {
+export function useSheetHistory({ open, onClose, enabled, onDismissNow, modal, name }: SheetHistoryOptions): void {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const dismissRef = useRef(onDismissNow);
   dismissRef.current = onDismissNow;
+  // What the sheet declares of itself, current at every render like the callbacks: the telling reads the latest.
+  const declaredRef = useRef({ modal, name });
+  declaredRef.current = { modal, name };
   const instanceRef = useRef<SheetHistoryInstance | null>(null);
   const active = open && enabled;
   useEffect(() => {
@@ -130,6 +160,12 @@ export function useSheetHistory({ open, onClose, enabled, onDismissNow }: SheetH
         onClose: (event) => closeRef.current(event),
         // The latest callback at the telling; a shell with none is told by its ordinary close.
         onDismissNow: (event) => (dismissRef.current ?? closeRef.current)(event),
+        get modal() {
+          return declaredRef.current.modal;
+        },
+        get name() {
+          return declaredRef.current.name;
+        },
       };
     }
     // The instance object persists across open cycles: a consumption still in flight from the
@@ -183,6 +219,12 @@ export interface SheetHistoryInstance {
   /** Something from outside replaced what is under the sheets — told to leave at once (`dismiss`).
    *  Absent: told by onClose. */
   onDismissNow?: (event: Event) => void;
+  /** False: a sheet the page stays live around — an arrival that lands on the page leaves it standing
+   *  (`SheetHistoryOptions.modal`). The sheet's own declaration, read at the telling. */
+  readonly modal?: boolean;
+  /** The name an arrival's caller can keep standing (`SheetHistoryOptions.name`). The sheet's own
+   *  declaration, read at the telling. */
+  readonly name?: string;
 }
 
 /**
@@ -358,11 +400,19 @@ export class SheetHistoryCoordinator {
 
   /**
    * SOMETHING FROM OUTSIDE LANDED UNDER THE SHEETS (a deep link the hosting shell delivers — the screen
-   * beneath is being replaced by a caller that is not one of the sheets): every sheet standing is
-   * told to leave, the newest first — the push order, the order Back would close them in; a sheet whose
-   * entry is still deferred behind a consumption was opened last and is told first. A shell that can leave
-   * at once is told that way (onDismissNow), the others by their ordinary close; every one is told
-   * whatever any one of them does, and the first error surfaces after (the popstate sweep's convention).
+   * beneath is being replaced by a caller that is not one of the sheets): every sheet standing over the
+   * landing is told to leave, the newest first — the push order, the order Back would close them in; a sheet
+   * whose entry is still deferred behind a consumption was opened last and is told first. A shell that can
+   * leave at once is told that way (onDismissNow), the others by their ordinary close.
+   *
+   * WHICH SHEETS (`hearsArrival`): a landing on the page tells every open sheet that stands over the page and
+   * leaves one whose `modal` is false; a landing in a sheet (`options.except`, its name) keeps that sheet and
+   * tells every other open sheet, over it or under it, whatever its `modal`.
+   *
+   * A SHEET'S FAILURE NEVER STOPS THE CALLER. Every one is told whatever any one of them does (the popstate
+   * sweep's convention), but here the caller is not the browser: it has a navigation to make, and an error
+   * thrown into it would leave the old screen showing. The first error is thrown from a task of the
+   * coordinator's own instead (`env.defer`), after this method has returned normally.
    *
    * NOTHING IS DISOWNED AND NO HISTORY STEP IS TAKEN HERE. Each sheet's own close reaches `closed`, and the
    * flush already holds both answers: an entry still current is stepped back over (the arrival was for the
@@ -370,13 +420,19 @@ export class SheetHistoryCoordinator {
    * over the top entry) or buried (a push) is let go with no traversal, so Back from the new screen reaches
    * the screen beneath. Disowning here would leave the first case parked on a dead marker.
    */
-  dismiss(event: Event): void {
+  dismiss(event: Event, options: SheetDismissOptions = {}): void {
     const standing = Array.from(this.instances)
-      .filter((instance) => instance.open)
+      .filter((instance) => this.hearsArrival(instance, options))
       // Registration order, newest first: the tie's order among sheets that hold no entry yet.
       .reverse();
     standing.sort((a, b) => this.pushSeq(b) - this.pushSeq(a));
-    this.tellEach(standing, (instance) => (instance.onDismissNow ?? instance.onClose)(event));
+    try {
+      this.tellEach(standing, (instance) => (instance.onDismissNow ?? instance.onClose)(event));
+    } catch (error) {
+      this.env.defer(() => {
+        throw error;
+      });
+    }
   }
 
   /**
@@ -429,6 +485,18 @@ export class SheetHistoryCoordinator {
     if (threw) {
       throw error;
     }
+  }
+
+  /** Whether an arrival from outside tells this sheet (`dismiss`). Landing in a named sheet: every other
+   *  open sheet. Landing on the page: every open sheet that stands over it. */
+  private hearsArrival(instance: SheetHistoryInstance, options: SheetDismissOptions): boolean {
+    if (!instance.open) {
+      return false;
+    }
+    if (options.except !== undefined) {
+      return instance.name !== options.except;
+    }
+    return instance.modal !== false;
   }
 
   /** Consume parked closes: at most one traversal in flight — the rest resume on landing. */
@@ -520,14 +588,17 @@ interface NavigationLike {
 /**
  * SOMETHING FROM OUTSIDE THE PAGE REPLACED WHAT IS UNDER THE SHEETS — the door for the one caller that
  * receives such an arrival (a native shell's deep-link handler: a tapped system notification, a link opened
- * from another application): every phone sheet standing on the page is told to leave
- * (`SheetHistoryCoordinator.dismiss`). It has no event of the phone's to hand on, so it makes a plain one —
- * a real Event, because a host's close handler may call its methods. Only a page that already has a
- * coordinator is asked: a page where no sheet has ever stood has none standing, and this door never
+ * from another application): every phone sheet standing over the landing is told to leave
+ * (`SheetHistoryCoordinator.dismiss`). With no options the arrival lands on the page, and a sheet the page
+ * stays live around (`modal: false`) is left standing; `options.except` names the sheet the arrival lands in,
+ * which stays while every other open sheet is told. It never throws into its caller: a sheet's failure
+ * surfaces afterward as an uncaught error of the page. It has no event of the phone's to hand on, so it makes
+ * a plain one — a real Event, because a host's close handler may call its methods. Only a page that already
+ * has a coordinator is asked: a page where no sheet has ever stood has none standing, and this door never
  * installs one (the desktop installs no listener).
  */
-export function dismissStandingSheets(): void {
-  installedCoordinator()?.dismiss(new Event('sheetdismiss'));
+export function dismissStandingSheets(options?: SheetDismissOptions): void {
+  installedCoordinator()?.dismiss(new Event('sheetdismiss'), options);
 }
 
 function installedCoordinator(): SheetHistoryCoordinator | undefined {
