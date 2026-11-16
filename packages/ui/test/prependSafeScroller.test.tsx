@@ -6,6 +6,11 @@
  * scrollHeight and scrollTop, and every box's rect, are computed here from the DOM order, each row's declared
  * height (`data-h`) and the reservoir's own inline style — the geometry a real engine would give. `scrollTop`'s
  * setter is a spy: every programmatic write is counted, and a write IS the outcome these laws forbid or allow.
+ * Two things a real engine has, the model has too: A DRAWN SCALE (`drawnScale` — a host that draws the pane small,
+ * a card growing back: every rect is scaled about the pane's center, while the layout's own lengths — clientHeight,
+ * scrollTop, scrollHeight, the observers' sizes, the block's inline size — are untouched) and A PANE WITH NO BOX
+ * (`paneLosesItsBox` — a kept pane hidden with display: none: nothing in it has a rect, the scroller has no height,
+ * and every observed box reports a size of 0; `paneGetsItsBox` and the engine's next reports bring them back).
  *
  * The laws, asserted as outcomes:
  *  1. A landing of K rows at the start changes the scroller's scrollHeight by 0 and writes scrollTop never — the
@@ -28,6 +33,12 @@
  *  later) were judged against no viewport — the box gaining height re-judges the lead, by the same rule, once.
  *  The loading row renders at the reservoir's foot only while loading with rows remaining, height-neutrally.
  *  `onRest` fires at the rest and not before; `scrollend` short-circuits it. `apiRef` reads the geometry.
+ *  TRUE LENGTHS: every length the scroller and its reservoir hold, compare or write is the layout's own, whatever
+ *  scale the pane is drawn at — a refill step, a landing, a sizing, the judgment of growth above the reader and the
+ *  distance from the loaded start are the same at 0.95 as at 1; with nothing drawn to a scale every number is, bit
+ *  for bit, the one the rects give.
+ *  A PANE SHOWN AGAIN IS NOT ROWS GROWING: a size report from a pane with no box, and a row's first after the box
+ *  returns, is the size as mounted — the block is the one it was and no step is owed.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -70,8 +81,10 @@ class FakeResizeObserver {
   }
   observe(target: Element) {
     this.entry.targets.add(target);
-    // The observation's first report: the size as mounted.
-    this.entry.callback([entryFor(target)]);
+    // The observation's first report: the size as mounted — none in a pane with no box (a size of 0 is no report).
+    if (paneHasBox) {
+      this.entry.callback([entryFor(target)]);
+    }
   }
   unobserve(target: Element) {
     this.entry.targets.delete(target);
@@ -99,6 +112,30 @@ const resize = (box: Element, height: number) => {
     }
   });
 };
+/**
+ * The engine's size reports, to every observer once, in the order the observers were made: each observed box at the
+ * size it has now — 0 in a pane with no box.
+ */
+const engineReportsSizes = () => {
+  observers.forEach((observer) => {
+    const entries = Array.from(observer.targets).map((target) => {
+      const height = target.hasAttribute('data-model-scroller') ? target.clientHeight : heightOf(target);
+      return entryFor(target, paneHasBox ? height : 0);
+    });
+    if (entries.length > 0) {
+      observer.callback(entries);
+    }
+  });
+};
+/** The pane is hidden (display: none): nothing in it has a box from here, and the engine says so to every observer. */
+const paneLosesItsBox = () => {
+  paneHasBox = false;
+  engineReportsSizes();
+};
+/** The pane is shown again: its boxes are back. The engine's reports follow the consumer's own layout work (`engineReportsSizes`). */
+const paneGetsItsBox = () => {
+  paneHasBox = true;
+};
 /** The scroller's OWN box changes height (a pane laid out, grown or shrunk): the engine reports it to whoever observes the scroller. */
 const boxResizes = (scroller: Element, height: number) => {
   clientHeight = height;
@@ -114,6 +151,12 @@ const CLIENT_HEIGHT = 600;
 /** The scroller's own box height as the engine reports it — the cases move it (a pane laid out after its rows landed). */
 let clientHeight = CLIENT_HEIGHT;
 let scrollTopValue = 0;
+/** The scale the host draws the pane at: every rect is drawn at it; the layout's own lengths are untouched. */
+let drawnScale = 1;
+/** How far off its own length the engine reads the reservoir's ruler alone — its rounding of a long box on a zoomed page. */
+let rulerReadsOffBy = 0;
+/** Whether the pane has a box: without one (display: none) nothing in it has a rect, a height or a scroll offset. */
+let paneHasBox = true;
 const writes: number[] = [];
 const heightOf = (el: Element) => Number(el.getAttribute('data-h') ?? 0);
 const layoutOf = (scroller: Element) => {
@@ -140,28 +183,47 @@ const layoutOf = (scroller: Element) => {
 };
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
+/** A box as the host draws it: scaled about the pane's center. Drawn as laid out, it is the layout's own rect. */
+const drawnRect = (top: number, bottom: number): DOMRect => {
+  if (drawnScale === 1) {
+    return rect(top, bottom);
+  }
+  const center = clientHeight / 2;
+  return rect(center + (top - center) * drawnScale, center + (bottom - center) * drawnScale);
+};
 const realRect = Element.prototype.getBoundingClientRect;
 Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   const scroller = this.closest('[data-model-scroller]');
   if (!scroller) {
     return realRect.call(this);
   }
-  if (this === scroller) {
-    return rect(0, clientHeight);
+  if (!paneHasBox) {
+    return rect(0, 0); // no box: nothing in the pane has a rect either (the engine's own shape under display: none)
   }
-  const entry = layoutOf(scroller).rects.get(this);
-  return entry ? rect(entry.top - scrollTopValue, entry.bottom - scrollTopValue) : rect(0, 0);
+  if (this === scroller) {
+    return drawnRect(0, clientHeight);
+  }
+  const layout = layoutOf(scroller);
+  if (this.parentElement?.hasAttribute('data-prepend-ruler')) {
+    // The reservoir's ruler: a box of its own declared height at the block's top, clipped out of the scroll extent
+    // (it adds nothing to `contentHeight`) and drawn as every box is.
+    const top = layout.rects.get(reservoirOf(scroller as HTMLElement))!.top - scrollTopValue;
+    const drawn = drawnRect(top, top + (parseFloat((this as HTMLElement).style.height) || 0));
+    return rect(drawn.top, drawn.bottom + rulerReadsOffBy);
+  }
+  const entry = layout.rects.get(this);
+  return entry ? drawnRect(entry.top - scrollTopValue, entry.bottom - scrollTopValue) : rect(0, 0);
 };
 /** The scroller element takes the model's scroll geometry; its scrollTop setter is the write spy. */
 const modelScroller = (el: HTMLElement) => {
   el.setAttribute('data-model-scroller', '');
-  Object.defineProperty(el, 'clientHeight', { get: () => clientHeight, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { get: () => (paneHasBox ? clientHeight : 0), configurable: true });
   Object.defineProperty(el, 'scrollHeight', {
-    get: () => Math.max(clientHeight, layoutOf(el).contentHeight),
+    get: () => (paneHasBox ? Math.max(clientHeight, layoutOf(el).contentHeight) : 0),
     configurable: true,
   });
   Object.defineProperty(el, 'scrollTop', {
-    get: () => scrollTopValue,
+    get: () => (paneHasBox ? scrollTopValue : 0),
     set: (value: number) => {
       writes.push(value);
       scrollTopValue = Math.max(0, Math.min(value, Math.max(0, layoutOf(el).contentHeight - clientHeight)));
@@ -180,6 +242,9 @@ const fingerUp = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('to
 const rowBox = (scroller: HTMLElement, id: number) =>
   scroller.querySelector(`[data-prepend-row="${id}"] > [data-h]`) as HTMLElement;
 const offsetOf = (scroller: HTMLElement, id: number) => rowBox(scroller, id).getBoundingClientRect().top;
+/** A row's TRUE offset below the scroller's top edge — the layout's own length, whatever scale the pane is drawn at. */
+const trueOffsetOf = (scroller: HTMLElement, id: number) =>
+  layoutOf(scroller).rects.get(rowBox(scroller, id))!.top - scrollTopValue;
 const reservoirOf = (scroller: HTMLElement) => scroller.querySelector('[data-prepend-reservoir]') as HTMLElement;
 
 // ── The harness: a consumer with its own items, count and loading state. ──
@@ -262,6 +327,9 @@ beforeEach(() => {
   root = createRoot(container);
   scrollTopValue = 0;
   clientHeight = CLIENT_HEIGHT;
+  drawnScale = 1;
+  rulerReadsOffBy = 0;
+  paneHasBox = true;
   writes.length = 0;
   frameQueue.length = 0;
   observers.length = 0;
@@ -857,5 +925,184 @@ describe('apiRef', () => {
     expect(apiRef.current!.reservePx()).toBe(2000);
     expect(apiRef.current!.distanceFromLoadedStart()).toBe(350);
     expect(PrependReservoir.STEP_VIEWPORTS).toBe(1);
+  });
+});
+
+describe('true lengths — a pane drawn at a scale: every length is the layout’s own', () => {
+  test('a refill step with the pane drawn at 0.95 leaves the reader’s row at its true offset — the write is the step, never the step as drawn', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+    readerScrollsTo(scroller, 3900); // row 15 (top 3900) first visible at offset 0
+    drawnScale = 0.95; // the host draws the pane small: every rect at 0.95, the layout untouched
+    act(() => {
+      harness.setRemaining(40); // the target is now 4000: the block trails it by 1500 with rows still above — a refill
+    });
+    // A viewport per rest: the block grows by 600 TRUE px and the reader's row is held by a write of 600 — the drift
+    // as the rects draw it (570) written instead leaves the row 30 px lower at every step.
+    [3100, 3700].forEach((expected, index) => {
+      pumpFrames(ScrollRest.QUIET_FRAMES);
+      expect(reservoirOf(scroller).style.height).toBe(`${expected}px`);
+      expect(trueOffsetOf(scroller, 15)).toBe(0);
+      expect(scroller.scrollTop).toBe(3900 + 600 * (index + 1));
+      expect(writes.length).toBe(index + 1);
+    });
+    pumpFrames(12);
+    expect(writes.length).toBe(2); // 3700 is within a viewport of 4000: nothing more owed
+  });
+
+  test('a landing of older rows after a record taken with the pane drawn at 0.95 shrinks the block by the landed height and no more — and a landing read at 0.95 after a record at 1 the same', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 20 });
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
+    readerScrollsTo(scroller, 2350); // row 4 first visible, 50 px above the edge
+    drawnScale = 0.95;
+    act(() => {
+      harness.replace(rows(1, 10, 100)); // a commit that keeps the first row: its place is recorded under the scale
+    });
+    drawnScale = 1; // the host draws the pane at its size again
+    act(() => {
+      harness.prepend(rows(101, 105, 120)); // 600 px land above the reader
+    });
+    // The block gives up the 600 that landed — a place recorded as drawn (1900 for 2000) would take 100 more.
+    expect(reservoirOf(scroller).style.height).toBe('1400px');
+    expect(scroller.scrollHeight).toBe(3000);
+    expect(trueOffsetOf(scroller, 4)).toBe(-50);
+    drawnScale = 0.95; // and the other way: recorded at its size, landed under the scale
+    act(() => {
+      harness.prepend(rows(201, 205, 80)); // 400 px
+    });
+    expect(reservoirOf(scroller).style.height).toBe('1000px');
+    expect(scroller.scrollHeight).toBe(3000);
+    expect(trueOffsetOf(scroller, 4)).toBe(-50);
+    expect(writes.length).toBe(0);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0); // the block sits on its target: nothing owed
+  });
+
+  test('a block sized with the pane drawn at 0.95 is the size it is at 1', () => {
+    drawnScale = 0.95;
+    const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 20 });
+    // The mounted rows measure a mean of 100 whatever they are drawn at: 20 remaining → 2000, never 20 × 95.
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
+    expect(scroller.scrollHeight).toBe(3000);
+  });
+
+  test('growth above the reader is judged in the layout’s own lengths at 0.95: the reader’s own row growing is not absorbed, a row wholly above is', () => {
+    const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 20 });
+    readerScrollsTo(scroller, 2390); // row 4 is the reader's row: its top 90 px above the edge, its bottom 10 px below
+    drawnScale = 0.95;
+    resize(rowBox(scroller, 4), 500); // the reader's own row grows by 400 below the edge: nothing above the reader changed
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
+    expect(trueOffsetOf(scroller, 4)).toBe(-90);
+    resize(rowBox(scroller, 3), 40); // row 3, wholly above the edge, shrinks by 60: the block takes it
+    expect(reservoirOf(scroller).style.height).toBe('2060px');
+    expect(trueOffsetOf(scroller, 4)).toBe(-90);
+    expect(writes.length).toBe(0);
+  });
+
+  test('the distance from the loaded start is the true one at 0.95 — the api reads it and the gate asks by it', () => {
+    const asks: number[] = [];
+    const apiRef: React.MutableRefObject<PrependSafeScrollerApi | null> = { current: null };
+    const { scroller } = mount({
+      initial: rows(1, 30, 100),
+      remaining: 50,
+      apiRef,
+      onNeedMore: () => {
+        asks.push(1);
+      },
+    });
+    // Reservoir 5000 above 3000 px of rows; the lead is 2 × 600 = 1200 px from the loaded start.
+    readerScrollsTo(scroller, 7400);
+    pumpFrames(1); // the opening ask's frame: outside the lead
+    expect(asks.length).toBe(0);
+    drawnScale = 0.95;
+    readerScrollsTo(scroller, 6250); // 1250 from the start: outside the lead (as drawn, 937.5 — inside it)
+    expect(apiRef.current!.distanceFromLoadedStart()).toBe(1250);
+    expect(asks.length).toBe(0);
+    readerScrollsTo(scroller, 6100); // 1100 from the start: inside
+    expect(apiRef.current!.distanceFromLoadedStart()).toBe(1100);
+    expect(asks.length).toBe(1);
+  });
+});
+
+describe('true lengths — with nothing drawn to a scale every number is the one the rects give, bit for bit', () => {
+  /**
+   * Lengths no grid holds, through every length the scroller reads: a sizing, a landing, growth above the reader, a
+   * refill step with its write, and the distance from the loaded start.
+   */
+  const everyLength = (): Array<string | number> => {
+    const apiRef: React.MutableRefObject<PrependSafeScrollerApi | null> = { current: null };
+    const { harness, scroller } = mount({ initial: rows(1, 20, 33.3), remaining: 25, apiRef });
+    const read: Array<string | number> = [reservoirOf(scroller).style.height];
+    readerScrollsTo(scroller, 877.3);
+    act(() => {
+      harness.prepend(rows(101, 107, 41.9));
+    });
+    read.push(reservoirOf(scroller).style.height);
+    resize(rowBox(scroller, 103), 57.3);
+    read.push(reservoirOf(scroller).style.height);
+    act(() => {
+      harness.setRemaining(60);
+    });
+    pumpFrames(ScrollRest.QUIET_FRAMES);
+    read.push(reservoirOf(scroller).style.height, scroller.scrollTop, apiRef.current!.distanceFromLoadedStart());
+    read.push(writes.length);
+    return read;
+  };
+  /** What the rects give with no ruler at all (read at the scroller as it was before it had one). */
+  const AS_THE_RECTS_GIVE: Array<string | number> = [
+    '832.4999999999999px', // the block sized: 25 × the mounted rows' mean
+    '539.1999999999998px', // seven rows landed
+    '523.7999999999998px', // a row above the reader grew
+    '1123.7999999999997px', // one refill step …
+    1477.3000000000006, // … its write …
+    353.5000000000009, // … and the distance from the loaded start after it
+    1, // one write in all
+  ];
+
+  test('a pane drawn as laid out', () => {
+    expect(everyLength()).toEqual(AS_THE_RECTS_GIVE);
+  });
+
+  test('the ruler read a rounding off its own length (the engine’s arithmetic on a long box, a zoomed page): nothing is drawn to a scale, and nothing is converted', () => {
+    rulerReadsOffBy = 1 / 128;
+    expect(everyLength()).toEqual(AS_THE_RECTS_GIVE);
+  });
+});
+
+describe('a pane shown again is not rows growing', () => {
+  test('a scroller hidden and shown again with the reader mid-list has the block it had and owes no step at the next rest; a row that changed while the pane had no box is its size as mounted; growth above the reader is absorbed again from there', () => {
+    const apiRef: React.MutableRefObject<PrependSafeScrollerApi | null> = { current: null };
+    const { scroller } = mount({ initial: rows(1, 20, 100), remaining: 25, apiRef });
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+    readerScrollsTo(scroller, 3700); // mid-list: row 13 (top 3700) at the edge, rows 1–12 above it
+    paneLosesItsBox(); // the pane is kept and hidden: every observed box reports a size of 0
+    // With no box no rect holds a length and the ruler none to read a scale from: the distance is the room alone.
+    expect(apiRef.current!.distanceFromLoadedStart()).toBe(-2500);
+    paneGetsItsBox(); // shown again …
+    readerScrollsTo(scroller, 3700); // … the view where it was (the consumer's own park; the engine's kept offset) …
+    engineReportsSizes(); // … and every row reports its size: as mounted — not twelve rows growing above the reader
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+    expect(scroller.scrollHeight).toBe(4500);
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0); // no refill is owed: no step, no write
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+
+    paneLosesItsBox();
+    rowBox(scroller, 2).setAttribute('data-h', '160'); // a row above the reader changes while the pane has no box
+    paneGetsItsBox();
+    readerScrollsTo(scroller, 3760); // the consumer parks on the same row
+    engineReportsSizes(); // row 2's first report after the box returned is its size as mounted, never growth
+    expect(reservoirOf(scroller).style.height).toBe('2500px');
+    expect(scroller.scrollHeight).toBe(4560);
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(writes.length).toBe(0);
+
+    resize(rowBox(scroller, 1), 160); // with its box back, a row above the reader that grows is absorbed as ever
+    expect(reservoirOf(scroller).style.height).toBe('2440px');
+    expect(scroller.scrollHeight).toBe(4560);
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    expect(writes.length).toBe(0);
   });
 });
