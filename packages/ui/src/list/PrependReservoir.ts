@@ -36,6 +36,19 @@
  * negative margin), `windowAbove` the exact height of loaded rows the window left out. `distanceFromLoadedStart` reads
  * from the LOADED start — the window's rows above are inside the loaded span. With no window term (the default, 0)
  * every number below is the one it was.
+ *
+ * TRUE LENGTHS (the ruler): every length held, compared or written here is the layout's own. The block's size and a
+ * scroll offset are layout lengths; a rect is a DRAWN one — a host that draws the pane to a scale (a card drawn small
+ * and growing back to its size) scales every rect with it and neither of those. A drift read from two rects and
+ * written to `scrollTop` under a scale of 0.95 is short by a twentieth of the step, and the reader's row comes to
+ * rest that much lower; a place recorded under a scale and read at another makes a landing take the difference out of
+ * the block. So the reservoir carries a RULER: a box of a known true length (`RULER_PX`) inside the block, clipped by
+ * a box of no size so that it adds nothing to the scroller's extent. Its drawn length over its true one is the scale
+ * the pane is drawn at, and every length read from rects is divided by it — never by a drawn length over a rounded
+ * layout one (`offsetHeight` is a whole number: a pixel in a few thousand at rest). A ruler that reads its own length
+ * (to `RULER_SLACK_PX`, an engine's rounding of a long box on a zoomed page) says nothing is drawn to a scale, and
+ * every number is then, bit for bit, the one the rects give; so does a ruler with no drawn length (a pane with no
+ * box, where every rect is empty). A slide moves both ends of a length alike and needs no ruler.
  */
 export class PrependReservoir {
   /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
@@ -44,6 +57,15 @@ export class PrependReservoir {
   static readonly REFILL_BAND_VIEWPORTS = 1;
   /** The reservoir's ceiling — far beyond any list, inside every engine's layout range. */
   static readonly MAX_RESERVE_PX = 4_000_000;
+  /** The ruler's true length in px: long, so that the scale read from it is fine enough for a list of any length. */
+  static readonly RULER_PX = 65536;
+  /**
+   * A ruler drawn within this many px of its own length is drawn as laid out: an engine rounds a long box by a
+   * fraction of a layout step where the page is zoomed, and that is no scale.
+   */
+  static readonly RULER_SLACK_PX = 1 / 16;
+  /** The grid a layout length lies on, in steps per px: a length read under a scale is returned to it. */
+  static readonly LAYOUT_STEPS_PER_PX = 64;
 
   private reserve = 0;
   /** The measured height of the rows loaded above a windowed list's window — the block's second term (0 without a window). */
@@ -54,13 +76,17 @@ export class PrependReservoir {
   private measuredRows = 0;
   /** The first row's box top relative to the reservoir's box top, as of the last layout this owner saw. */
   private recordedFirstTop: number | null = null;
+  /** The box of known true length the drawn scale is read from. */
+  private readonly ruler: HTMLElement;
 
   constructor(
     private readonly scroller: HTMLElement,
     private readonly reservoir: HTMLElement,
     /** The rows' boxes in document order — the elements whose rects are the rows' geometry. */
     private readonly rowBoxes: () => HTMLElement[]
-  ) {}
+  ) {
+    this.ruler = this.seatRuler();
+  }
 
   /** The consumer's count of rows not yet loaded above, and the seed for the row-height estimate. */
   setRemaining(remaining: number, estimatedRowHeight: number): void {
@@ -84,7 +110,10 @@ export class PrependReservoir {
 
   /** A box's top relative to the reservoir's top, as the engine lays it out now — the one geometry the records use. */
   topOf(box: HTMLElement): number {
-    return box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top;
+    return this.trueLength(
+      box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top,
+      this.drawnScale()
+    );
   }
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
@@ -136,6 +165,17 @@ export class PrependReservoir {
     this.reserve -= delta;
     this.apply();
     this.record();
+  }
+
+  /**
+   * Whether a row that changed height by `delta` stood wholly above the reader before the change — its bottom then at
+   * or above the scroller's top edge — so that the whole change pushed the reader. `delta` is a layout length (the
+   * observer's); the rects are drawn, so the change and the half-pixel are taken as drawn too.
+   */
+  aboveReader(box: Element, delta: number): boolean {
+    const scale = this.drawnScale();
+    const edge = this.scroller.getBoundingClientRect().top;
+    return box.getBoundingClientRect().bottom - delta * scale <= edge + 0.5 * scale;
   }
 
   /** Re-record the first row's place after a commit that kept the same first row. */
@@ -200,7 +240,7 @@ export class PrependReservoir {
     // are loaded rows, inside the span. With no window term this is the block's bottom plus its negative margin.
     const scrollerTop = this.scroller.getBoundingClientRect().top;
     const reservoirTop = this.reservoir.getBoundingClientRect().top;
-    return scrollerTop - reservoirTop - this.reserve;
+    return this.trueLength(scrollerTop - reservoirTop, this.drawnScale()) - this.reserve;
   }
 
   /** The reservoir's signed size in px (a negative value is the debt). */
@@ -228,7 +268,7 @@ export class PrependReservoir {
     }
     const first = boxes[0].getBoundingClientRect();
     const last = boxes[boxes.length - 1].getBoundingClientRect();
-    const span = last.bottom - first.top;
+    const span = this.trueLength(last.bottom - first.top, this.drawnScale());
     if (span > 0) {
       this.measuredTotal = span;
       this.measuredRows = boxes.length;
@@ -249,13 +289,14 @@ export class PrependReservoir {
    * the edge instead) — and no write where the clamped offset is the one the scroller already has.
    */
   private applyWithDrift(next: number): number {
+    const scale = this.drawnScale();
     const anchor = this.anchorBox();
     const before = anchor ? anchor.getBoundingClientRect().top : null;
     this.reserve = next;
     this.apply();
     let written = 0;
     if (anchor && before !== null) {
-      const drift = anchor.getBoundingClientRect().top - before;
+      const drift = this.trueLength(anchor.getBoundingClientRect().top - before, scale);
       const current = this.scroller.scrollTop;
       const offset = Math.max(0, current + drift);
       if (Math.abs(drift) > 0.5 && Math.abs(offset - current) > 0.5) {
@@ -277,5 +318,56 @@ export class PrependReservoir {
       }
     }
     return boxes.length > 0 ? boxes[0] : null;
+  }
+
+  /**
+   * The scale the pane is drawn at: the ruler's drawn length over its true one. 1 where the ruler reads its own
+   * length (nothing is drawn to a scale) and where it has no drawn length at all (no box: no rect holds a length).
+   */
+  private drawnScale(): number {
+    const drawn = this.ruler.getBoundingClientRect().height;
+    if (!(drawn > 0) || Math.abs(drawn - PrependReservoir.RULER_PX) <= PrependReservoir.RULER_SLACK_PX) {
+      return 1;
+    }
+    return drawn / PrependReservoir.RULER_PX;
+  }
+
+  /**
+   * A length read from rects — a difference of two edges, drawn at `scale` — as the layout's own: divided by the
+   * scale and returned to the layout's grid, so that a whole number of px read under a scale is that whole number
+   * (an engine that keeps whole scroll offsets drops the fraction of a write a hair under one). Drawn as laid out,
+   * it is the length as read.
+   */
+  private trueLength(drawn: number, scale: number): number {
+    if (scale === 1) {
+      return drawn;
+    }
+    const steps = PrependReservoir.LAYOUT_STEPS_PER_PX;
+    return Math.round((drawn / scale) * steps) / steps;
+  }
+
+  /**
+   * The ruler in the block: a box `RULER_PX` tall inside a box of no size that clips it — out of the flow, unseen,
+   * and nothing to the scroller's extent (a short list stays unscrollable). The block is this owner's to fill, as its
+   * size is this owner's to write; an owner mounted again over the same block finds the ruler standing.
+   */
+  private seatRuler(): HTMLElement {
+    for (let i = 0; i < this.reservoir.children.length; i++) {
+      const seat = this.reservoir.children[i];
+      if (seat.hasAttribute('data-prepend-ruler') && seat.firstElementChild instanceof HTMLElement) {
+        return seat.firstElementChild;
+      }
+    }
+    const page = this.reservoir.ownerDocument;
+    const seat = page.createElement('div');
+    seat.setAttribute('data-prepend-ruler', '');
+    seat.setAttribute('aria-hidden', 'true');
+    seat.style.cssText =
+      'position:absolute;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
+    const ruler = page.createElement('div');
+    ruler.style.cssText = `width:1px;height:${PrependReservoir.RULER_PX}px`;
+    seat.appendChild(ruler);
+    this.reservoir.appendChild(seat);
+    return ruler;
   }
 }

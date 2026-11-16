@@ -7,7 +7,10 @@ import { ScrollRest } from './ScrollRest';
 export interface PrependSafeScrollerApi {
   /** The scroll container. */
   readonly scroller: HTMLDivElement | null;
-  /** How far the scroller's top edge sits below the loaded start, in px (negative inside the reservoir). */
+  /**
+   * How far the scroller's top edge sits below the loaded start, in px (negative inside the reservoir) — the layout's
+   * own length, whatever scale a host draws the pane at.
+   */
   distanceFromLoadedStart(): number;
   /** The reservoir's signed size in px: room above the loaded start, or (negative) a debt owed at the next rest. */
   reservePx(): number;
@@ -77,6 +80,9 @@ export const PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS = 2;
  * at the reservoir's foot for the consumer's loading row, and the one rest definition (`ScrollRest`) at which its
  * rare light writes land — the end collapse (the whole leftover or debt in one step) and a refill (by at most a
  * viewport per rest), each by the drift it measures.
+ * Every length it holds, compares or writes is the layout's own, whatever scale a host draws the pane at (the
+ * reservoir's ruler), and a pane that loses its box and gets it back is not rows growing: a size report from a pane
+ * with no box, and a row's first after the box returns, is the size as mounted.
  * It never reorders, virtualizes or styles rows, and never writes for the consumer's own deliberate moves. With
  * `remainingAbove` 0 it is a plain scroller.
  */
@@ -103,7 +109,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const engine = useRef<PrependReservoir | null>(null);
   const rest = useRef<ScrollRest | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
-  const observedHeights = useRef(new Map<Element, number>());
+  /** Each observed row's height as last reported — undefined while its next report is its size as mounted. */
+  const observedHeights = useRef(new Map<Element, number | undefined>());
   /** The observation of the scroller's OWN box, beside the rows' (`observer`). */
   const boxObserver = useRef<ResizeObserver | null>(null);
   /** The scroller's box height as last judged — growth re-judges the lead. */
@@ -180,7 +187,15 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     }
   }, []);
 
-  /** The rows above the first visible row that changed height: absorbed before paint. */
+  /**
+   * The rows above the first visible row that changed height: absorbed before paint.
+   *
+   * A PANE WITH NO BOX (a kept pane hidden with display: none — the scroller's own height is 0): no size reported from
+   * it is a row's size, and none remembered is one to measure the next against, so each row's next report — the first
+   * after the box returns — is its size as mounted. Remembered instead, every row reported its whole height as growth
+   * when the pane was shown again, the block gave up the height of every row above the reader's edge, and a refill
+   * was owed at every return.
+   */
   const onResize = useCallback(
     (entries: ResizeObserverEntry[]) => {
       const current = engine.current;
@@ -188,7 +203,10 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       if (!current || !scroller) {
         return;
       }
-      const scrollerTop = scroller.getBoundingClientRect().top;
+      if (scroller.clientHeight <= 0) {
+        observedHeights.current.forEach((_, box) => observedHeights.current.set(box, undefined));
+        return;
+      }
       let absorb = 0;
       for (const entry of entries) {
         const box = entry.target;
@@ -197,14 +215,14 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
         const last = observedHeights.current.get(box);
         observedHeights.current.set(box, height);
         if (last === undefined) {
-          continue; // the observation's first report: the size as mounted
+          continue; // the observation's first report, or the first since the pane's box returned: the size as mounted
         }
         const delta = height - last;
         if (delta === 0) {
           continue;
         }
         // The row's bottom BEFORE the change above the scroller's top edge: the whole change pushed the reader.
-        if (box.getBoundingClientRect().bottom - delta <= scrollerTop + 0.5) {
+        if (current.aboveReader(box, delta)) {
           absorb += delta;
         }
       }
