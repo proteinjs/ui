@@ -59,6 +59,12 @@
  * fewer than 2^21 px (2,097,152) of LOADED rows stand above the reader, whatever the block's size — its two edges
  * misread only where they stand either side of that length. A sticky holder holds to the nearest ancestor that scrolls
  * or clips: under one between the block and its scroller the ruler stays at the block's top.
+ * OUT OF THE BLOCK'S FLOW: the holder does not stand in the block itself but in a box of its own, out of the block's
+ * flow and stretched over the block from its top to its foot — the room the holder moves in. A sticky box stays in the
+ * flow, and this one clips its ruler, so it is a formatting context of its own: standing in a block 0 px tall it would
+ * stop the margins either side of the block from meeting through it — in a block layout a first row with a top margin
+ * would stand lower by that margin, and the list's own top would move by as much as a whole debt. With nothing of
+ * this owner's in its flow the block is to the layout the empty block it was before it carried a ruler, at any size.
  *
  * NO BOX (`boxless`): a pane that generates no box (a kept pane hidden with display: none) has no layout to read —
  * every rect in it is empty, its scroll offset reads 0 and every size its observers report is 0. THE ONE OWNER of the
@@ -448,26 +454,32 @@ export class PrependReservoir {
    * The ruler in the block: a box `RULER_PX` tall inside a holder of no size that clips it — unseen, no room taken in
    * the block, and nothing to the scroller's extent (a short list stays unscrollable). The holder is sticky at the
    * scroller's top edge (the header's THE RULER'S SEAT): the ruler is read where the reader is, never from the top of
-   * a block millions of px above. The block is this owner's to fill, as its size is this owner's to write; an owner
+   * a block millions of px above. The holder stands in a box that is OUT OF THE BLOCK'S FLOW and as tall as the block
+   * (the block is a positioned box; this box holds to its top and its foot and clips nothing, so the holder still
+   * sticks to the scroller): nothing of the ruler is in the block's flow, and margins meet through a block 0 px tall
+   * as they do through an empty one. The block is this owner's to fill, as its size is this owner's to write; an owner
    * mounted again over the same block finds the ruler standing.
    */
   private seatRuler(): HTMLElement {
     for (let i = 0; i < this.reservoir.children.length; i++) {
-      const seat = this.reservoir.children[i];
-      if (seat.hasAttribute('data-prepend-ruler') && seat.firstElementChild instanceof HTMLElement) {
+      const seat = this.reservoir.children[i].firstElementChild;
+      if (seat?.hasAttribute('data-prepend-ruler') && seat.firstElementChild instanceof HTMLElement) {
         return seat.firstElementChild;
       }
     }
     const page = this.reservoir.ownerDocument;
+    const outOfFlow = page.createElement('div');
+    outOfFlow.setAttribute('aria-hidden', 'true');
+    outOfFlow.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:0;visibility:hidden;pointer-events:none';
     const seat = page.createElement('div');
     seat.setAttribute('data-prepend-ruler', '');
-    seat.setAttribute('aria-hidden', 'true');
     seat.style.cssText =
       'position:sticky;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
     const ruler = page.createElement('div');
     ruler.style.cssText = `width:1px;height:${PrependReservoir.RULER_PX}px`;
     seat.appendChild(ruler);
-    this.reservoir.appendChild(seat);
+    outOfFlow.appendChild(seat);
+    this.reservoir.appendChild(outOfFlow);
     return ruler;
   }
 }

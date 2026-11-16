@@ -56,6 +56,9 @@
  *  THE RULER READS ITS OWN LENGTH AT ANY DEPTH (a block two million px tall, every edge in single precision), and the
  *  scale is never the scroller's drawn height over its layout height. A CONSUMER'S OWN LENGTHS go through the api's
  *  `trueLength`, the same conversion.
+ *  THE RULER STANDS OUT OF THE BLOCK'S FLOW: nothing the reservoir puts in its block is a box in the block's flow.
+ *  This model has no margins, so the outcome itself (a first row with a top margin stands where it stood with no
+ *  ruler) is read on real engines; the one case here holds what decides it.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -1143,6 +1146,15 @@ describe('true lengths — with nothing drawn to a scale every number is the one
     // A ruler read from the block's top there has its two edges either side of 2^21 px, held to a quarter and an
     // eighth of a px: it reads an eighth off its own length, is taken for a scale, and every length is converted.
     expect(offTheRects).toEqual(offTheRects.map(() => 0));
+  });
+
+  test('the ruler stands out of the block’s flow: the one box the reservoir puts in its block is out of the flow (a block 0 px tall stays an empty block to the layout, and the margins either side of it still meet), and an owner made again over the same block finds it standing', () => {
+    const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 0 });
+    const block = reservoirOf(scroller);
+    new PrependReservoir(scroller, block, () => []).initialize(); // a second owner, as a consumer mounted again makes one
+    // The modeled layout has no margins, so where a row with a top margin stands is an engine's to show; what the
+    // model can see is what decides it: nothing of the reservoir's is a box in the block's flow.
+    expect(Array.from(block.children).map((box) => getComputedStyle(box).position)).toEqual(['absolute']);
   });
 });
 
