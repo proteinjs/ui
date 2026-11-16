@@ -14,6 +14,12 @@ export interface PrependSafeScrollerApi {
   distanceFromLoadedStart(): number;
   /** The reservoir's signed size in px: room above the loaded start, or (negative) a debt owed at the next rest. */
   reservePx(): number;
+  /**
+   * A length read from rects inside this scroller — a difference of two edges, or a rect's own size — as the layout's
+   * own, whatever scale a host draws the pane at: the scroller's one conversion, for a consumer's own view math (a
+   * length it compares with a scroll offset or a client height, or writes as one).
+   */
+  trueLength(drawn: number): number;
 }
 
 export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' | 'ref'> {
@@ -415,6 +421,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       },
       distanceFromLoadedStart: () => engine.current?.distanceFromLoadedStart() ?? 0,
       reservePx: () => engine.current?.reservePx ?? 0,
+      trueLength: (drawn: number) => engine.current?.trueLength(drawn) ?? drawn,
     };
     return () => {
       apiRef.current = null;

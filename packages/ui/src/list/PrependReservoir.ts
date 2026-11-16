@@ -110,10 +110,17 @@ export class PrependReservoir {
 
   /** A box's top relative to the reservoir's top, as the engine lays it out now — the one geometry the records use. */
   topOf(box: HTMLElement): number {
-    return this.trueLength(
-      box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top,
-      this.drawnScale()
-    );
+    return this.trueLength(box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top);
+  }
+
+  /**
+   * A length read from rects inside this scroller — a difference of two edges, or a rect's own size — as the layout's
+   * own, whatever scale a host draws the pane at. THE ONE CONVERSION for this scroller's content: every read here goes
+   * through it, and a consumer's own view math reads through it too (`PrependSafeScrollerApi.trueLength`), never
+   * through a ruler of its own.
+   */
+  trueLength(drawn: number): number {
+    return this.layoutLength(drawn, this.drawnScale());
   }
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
@@ -240,7 +247,7 @@ export class PrependReservoir {
     // are loaded rows, inside the span. With no window term this is the block's bottom plus its negative margin.
     const scrollerTop = this.scroller.getBoundingClientRect().top;
     const reservoirTop = this.reservoir.getBoundingClientRect().top;
-    return this.trueLength(scrollerTop - reservoirTop, this.drawnScale()) - this.reserve;
+    return this.trueLength(scrollerTop - reservoirTop) - this.reserve;
   }
 
   /** The reservoir's signed size in px (a negative value is the debt). */
@@ -268,7 +275,7 @@ export class PrependReservoir {
     }
     const first = boxes[0].getBoundingClientRect();
     const last = boxes[boxes.length - 1].getBoundingClientRect();
-    const span = this.trueLength(last.bottom - first.top, this.drawnScale());
+    const span = this.trueLength(last.bottom - first.top);
     if (span > 0) {
       this.measuredTotal = span;
       this.measuredRows = boxes.length;
@@ -296,7 +303,7 @@ export class PrependReservoir {
     this.apply();
     let written = 0;
     if (anchor && before !== null) {
-      const drift = this.trueLength(anchor.getBoundingClientRect().top - before, scale);
+      const drift = this.layoutLength(anchor.getBoundingClientRect().top - before, scale);
       const current = this.scroller.scrollTop;
       const offset = Math.max(0, current + drift);
       if (Math.abs(drift) > 0.5 && Math.abs(offset - current) > 0.5) {
@@ -338,7 +345,7 @@ export class PrependReservoir {
    * (an engine that keeps whole scroll offsets drops the fraction of a write a hair under one). Drawn as laid out,
    * it is the length as read.
    */
-  private trueLength(drawn: number, scale: number): number {
+  private layoutLength(drawn: number, scale: number): number {
     if (scale === 1) {
       return drawn;
     }
