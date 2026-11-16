@@ -65,6 +65,9 @@
  * stop the margins either side of the block from meeting through it — in a block layout a first row with a top margin
  * would stand lower by that margin, and the list's own top would move by as much as a whole debt. With nothing of
  * this owner's in its flow the block is to the layout the empty block it was before it carried a ruler, at any size.
+ * WHAT THE SEAT NEEDS, and who sees to it: that box holds to the nearest positioned box above it, which must be the
+ * block — this class makes the block one where it arrives with no position (`positionBlock`), so no file that renders
+ * a block has to remember it.
  *
  * NO BOX (`boxless`): a pane that generates no box (a kept pane hidden with display: none) has no layout to read —
  * every rect in it is empty, its scroll offset reads 0 and every size its observers report is 0. THE ONE OWNER of the
@@ -455,12 +458,13 @@ export class PrependReservoir {
    * the block, and nothing to the scroller's extent (a short list stays unscrollable). The holder is sticky at the
    * scroller's top edge (the header's THE RULER'S SEAT): the ruler is read where the reader is, never from the top of
    * a block millions of px above. The holder stands in a box that is OUT OF THE BLOCK'S FLOW and as tall as the block
-   * (the block is a positioned box; this box holds to its top and its foot and clips nothing, so the holder still
-   * sticks to the scroller): nothing of the ruler is in the block's flow, and margins meet through a block 0 px tall
-   * as they do through an empty one. The block is this owner's to fill, as its size is this owner's to write; an owner
-   * mounted again over the same block finds the ruler standing.
+   * (the block is a positioned box, made one here if it arrived with no position; this box holds to its top and its
+   * foot and clips nothing, so the holder still sticks to the scroller): nothing of the ruler is in the block's flow,
+   * and margins meet through a block 0 px tall as they do through an empty one. The block is this owner's to fill, as
+   * its size is this owner's to write; an owner mounted again over the same block finds the ruler standing.
    */
   private seatRuler(): HTMLElement {
+    this.positionBlock();
     for (let i = 0; i < this.reservoir.children.length; i++) {
       const seat = this.reservoir.children[i].firstElementChild;
       if (seat?.hasAttribute('data-prepend-ruler') && seat.firstElementChild instanceof HTMLElement) {
@@ -481,5 +485,23 @@ export class PrependReservoir {
     outOfFlow.appendChild(seat);
     this.reservoir.appendChild(outOfFlow);
     return ruler;
+  }
+
+  /**
+   * THE SEAT'S OWN PRECONDITION, held by the seat's owner: the ruler's box holds to the nearest positioned box above
+   * it, and that must be the block. Held to any other (the scroller, the pane) the box is only as tall as that one,
+   * and the holder cannot follow a reader far down a long block: the ruler is left near the block's top. So a block
+   * with no position is made a positioned box where it stands (relative, with no offset: no box in the flow moves; a
+   * box out of the flow that stands in the block holds to the block from then on, as the scroller's loading row
+   * does), and a block a consumer positioned is left as it is. The word is the engine's computed one, which counts a
+   * style sheet's rule; an engine computes nothing for a block not yet in a document, and there the block's own
+   * declaration is read.
+   */
+  private positionBlock(): void {
+    const view = this.reservoir.ownerDocument.defaultView;
+    const position = (view ? view.getComputedStyle(this.reservoir).position : '') || this.reservoir.style.position;
+    if (position === '' || position === 'static') {
+      this.reservoir.style.position = 'relative';
+    }
   }
 }

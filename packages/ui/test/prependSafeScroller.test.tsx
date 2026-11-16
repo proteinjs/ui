@@ -13,8 +13,9 @@
  * and every observed box reports a size of 0; `paneGetsItsBox` and the engine's next reports bring them back).
  * Three more, each an engine's own: EVERY EDGE IN SINGLE PRECISION under a transform that scales nothing
  * (`heldInFloats` — a slide: an engine maps a rect through any transform in floats, so an edge two million px away is
- * held to an eighth or a quarter of a px); THE RULER PLACED BY ITS SEAT (a sticky holder stands at the scroller's top
- * edge while the block holds the edge, at the block's foot once the block is above it; any other at the block's top);
+ * held to an eighth or a quarter of a px); THE RULER PLACED BY ITS SEAT (a sticky holder whose room spans the block —
+ * `holderFollowsTheReader` — stands at the scroller's top edge while the block holds the edge, at the block's foot
+ * once the block is above it; any other at the block's top);
  * and THE SCROLLER'S OWN DRAWN HEIGHT apart from its layout height (`scrollerDrawnHeight` — a layout height is a whole
  * number, the height a pane is drawn at is not). A SCROLLER OF NO HEIGHT WHOSE ROWS KEEP THEIR BOXES is the model's
  * `clientHeight = 0` with the pane's box standing: every rect is there, the ruler's among them. A LAYOUT THAT DRAWS NO
@@ -56,9 +57,11 @@
  *  THE RULER READS ITS OWN LENGTH AT ANY DEPTH (a block two million px tall, every edge in single precision), and the
  *  scale is never the scroller's drawn height over its layout height. A CONSUMER'S OWN LENGTHS go through the api's
  *  `trueLength`, the same conversion.
- *  THE RULER STANDS OUT OF THE BLOCK'S FLOW: nothing the reservoir puts in its block is a box in the block's flow.
- *  This model has no margins, so the outcome itself (a first row with a top margin stands where it stood with no
- *  ruler) is read on real engines; the one case here holds what decides it.
+ *  THE RULER'S ROOM: the holder stands in a box of the reservoir's own, out of the block's flow. This model has no
+ *  margins, so what that is for (a first row with a top margin stands where it stood with no ruler) is read on real
+ *  engines. What the model holds is the seat that box now carries: the far case reads true only while the holder's
+ *  room spans the block — out of the flow, top 0 and bottom 0, clipping nothing, in a block that is a positioned box,
+ *  which the reservoir sees to itself. AN OWNER MADE AGAIN over the same block seats no second ruler.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -210,6 +213,25 @@ const layoutOf = (scroller: Element) => {
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
 /**
+ * THE HOLDER'S ROOM. A sticky holder moves in its PARENT'S box, never past it: it follows the scroller's top edge down
+ * the block only where that box spans the block — the block itself, or a box out of the flow with top 0 and bottom 0
+ * that clips nothing, in a block that is a positioned box (in a block that is not, such a box holds to some other
+ * ancestor and is not as tall as the block). In any other room the holder cannot leave the block's top.
+ */
+const holderFollowsTheReader = (holder: HTMLElement, block: HTMLElement): boolean => {
+  const room = holder.parentElement as HTMLElement;
+  const spansTheBlock =
+    room === block ||
+    (room.parentElement === block &&
+      room.style.position === 'absolute' &&
+      parseFloat(room.style.top) === 0 &&
+      parseFloat(room.style.bottom) === 0 &&
+      (room.style.overflow === '' || room.style.overflow === 'visible') &&
+      block.style.position !== '' &&
+      block.style.position !== 'static');
+  return holder.style.position === 'sticky' && spansTheBlock;
+};
+/**
  * A box as the host draws it: scaled about the pane's center, its edges held in single precision — an engine maps a
  * rect through a transform in floats, so a length read back from two drawn edges is a hair off the layout's own.
  * Drawn as laid out, it is the layout's own rect.
@@ -239,12 +261,14 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
       return rect(0, 0);
     }
     // The reservoir's ruler: a box of its own declared height, clipped out of the scroll extent (it adds nothing to
-    // `contentHeight`) and drawn as every box is — placed by its holder's seat: a sticky holder at the scroller's top
-    // edge while the block holds the edge, at the block's foot once the block is above it; any other at the block's top.
-    const block = layout.rects.get(reservoirOf(scroller as HTMLElement))!;
+    // `contentHeight`) and drawn as every box is — placed by its holder's seat: a sticky holder whose room spans the
+    // block at the scroller's top edge while the block holds the edge, at the block's foot once the block is above it;
+    // any other at the block's top.
+    const blockEl = reservoirOf(scroller as HTMLElement);
+    const block = layout.rects.get(blockEl)!;
     const blockTop = block.top - scrollTopValue;
-    const sticky = (this.parentElement as HTMLElement).style.position === 'sticky';
-    const top = sticky ? Math.min(Math.max(blockTop, 0), block.bottom - scrollTopValue) : blockTop;
+    const follows = holderFollowsTheReader(this.parentElement as HTMLElement, blockEl);
+    const top = follows ? Math.min(Math.max(blockTop, 0), block.bottom - scrollTopValue) : blockTop;
     const drawn = drawnRect(top, top + (parseFloat((this as HTMLElement).style.height) || 0));
     return rect(drawn.top, drawn.bottom + rulerReadsOffBy);
   }
@@ -1148,13 +1172,11 @@ describe('true lengths — with nothing drawn to a scale every number is the one
     expect(offTheRects).toEqual(offTheRects.map(() => 0));
   });
 
-  test('the ruler stands out of the block’s flow: the one box the reservoir puts in its block is out of the flow (a block 0 px tall stays an empty block to the layout, and the margins either side of it still meet), and an owner made again over the same block finds it standing', () => {
+  test('an owner made again over the same block finds the ruler standing: the block holds one ruler, never a second', () => {
     const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 0 });
     const block = reservoirOf(scroller);
     new PrependReservoir(scroller, block, () => []).initialize(); // a second owner, as a consumer mounted again makes one
-    // The modeled layout has no margins, so where a row with a top margin stands is an engine's to show; what the
-    // model can see is what decides it: nothing of the reservoir's is a box in the block's flow.
-    expect(Array.from(block.children).map((box) => getComputedStyle(box).position)).toEqual(['absolute']);
+    expect(block.querySelectorAll('[data-prepend-ruler]').length).toBe(1);
   });
 });
 

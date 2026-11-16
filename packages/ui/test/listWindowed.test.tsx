@@ -241,6 +241,25 @@ const layoutOf = (scroller: Element) => {
 };
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
+/**
+ * THE HOLDER'S ROOM. A sticky holder moves in its PARENT'S box, never past it: it follows the scroller's top edge down
+ * the block only where that box spans the block — the block itself, or a box out of the flow with top 0 and bottom 0
+ * that clips nothing, in a block that is a positioned box (in a block that is not, such a box holds to some other
+ * ancestor and is not as tall as the block). In any other room the holder cannot leave the block's top.
+ */
+const holderFollowsTheReader = (holder: HTMLElement, block: HTMLElement): boolean => {
+  const room = holder.parentElement as HTMLElement;
+  const spansTheBlock =
+    room === block ||
+    (room.parentElement === block &&
+      room.style.position === 'absolute' &&
+      parseFloat(room.style.top) === 0 &&
+      parseFloat(room.style.bottom) === 0 &&
+      (room.style.overflow === '' || room.style.overflow === 'visible') &&
+      block.style.position !== '' &&
+      block.style.position !== 'static');
+  return holder.style.position === 'sticky' && spansTheBlock;
+};
 /** The scale the host draws the pane at: every rect is drawn at it; the layout's own lengths are untouched. */
 let drawnScale = 1;
 /** A box as the host draws it: scaled about the pane's center, its edges held in single precision (an engine's own). */
@@ -270,13 +289,14 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   const layout = layoutOf(scroller);
   if (this.parentElement?.hasAttribute('data-prepend-ruler')) {
     // The reservoir's ruler: a box of its own declared height, out of the scroll extent, placed by its holder's seat —
-    // a sticky holder at the scroller's top edge while the block holds the edge, at the block's foot once the block is
-    // above it; any other at the block's top.
-    const block = layout.rects.get(scroller.querySelector('[data-list-reservoir]') as Element);
+    // a sticky holder whose room spans the block at the scroller's top edge while the block holds the edge, at the
+    // block's foot once the block is above it; any other at the block's top.
+    const blockEl = scroller.querySelector('[data-list-reservoir]') as HTMLElement;
+    const block = layout.rects.get(blockEl);
     const blockTop = hostTop + (block ? block.top : 0) - scrollTopValue;
     const blockBottom = hostTop + (block ? block.bottom : 0) - scrollTopValue;
-    const sticky = (this.parentElement as HTMLElement).style.position === 'sticky';
-    const top = sticky ? Math.min(Math.max(blockTop, hostTop), blockBottom) : blockTop;
+    const follows = holderFollowsTheReader(this.parentElement as HTMLElement, blockEl);
+    const top = follows ? Math.min(Math.max(blockTop, hostTop), blockBottom) : blockTop;
     return drawnRect(top, top + (parseFloat((this as HTMLElement).style.height) || 0));
   }
   let entry = layout.rects.get(this);
