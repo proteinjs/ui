@@ -88,7 +88,9 @@ export const PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS = 2;
  * viewport per rest), each by the drift it measures.
  * Every length it holds, compares or writes is the layout's own, whatever scale a host draws the pane at (the
  * reservoir's ruler), and a pane that loses its box and gets it back is not rows growing: a size report from a pane
- * with no box, and a row's first after the box returns, is the size as mounted.
+ * with no box, and a row's first after the box returns, is the size as mounted. "No box" is the reservoir's word
+ * (`PrependReservoir.boxless`) and every read passes it there: with no box nothing is recorded, compared, absorbed,
+ * stepped or owed, and what could not be paid is asked of the rest when the box returns.
  * It never reorders, virtualizes or styles rows, and never writes for the consumer's own deliberate moves. With
  * `remainingAbove` 0 it is a plain scroller.
  */
@@ -196,11 +198,14 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   /**
    * The rows above the first visible row that changed height: absorbed before paint.
    *
-   * A PANE WITH NO BOX (a kept pane hidden with display: none — the scroller's own height is 0): no size reported from
-   * it is a row's size, and none remembered is one to measure the next against, so each row's next report — the first
-   * after the box returns — is its size as mounted. Remembered instead, every row reported its whole height as growth
-   * when the pane was shown again, the block gave up the height of every row above the reader's edge, and a refill
-   * was owed at every return.
+   * A PANE WITH NO BOX (a kept pane hidden with display: none — the reservoir's word, `PrependReservoir.boxless`, the
+   * one owner's: never this scroller's own height, which a scroller squeezed to nothing with its rows laid out has
+   * too): no size reported from it is a row's size, and none remembered is one to measure the next against, so each
+   * row's next report — the first after the box returns — is its size as mounted. Remembered instead, every row
+   * reported its whole height as growth when the pane was shown again, the block gave up the height of every row above
+   * the reader's edge, and a refill was owed at every return. That holds for a row that changed while the pane had no
+   * box as well: a consumer places its view against the layout as it is when the pane is shown, before these reports,
+   * and a change absorbed then would move the reader's row by it.
    */
   const onResize = useCallback(
     (entries: ResizeObserverEntry[]) => {
@@ -209,7 +214,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       if (!current || !scroller) {
         return;
       }
-      if (scroller.clientHeight <= 0) {
+      if (current.boxless()) {
         observedHeights.current.forEach((_, box) => observedHeights.current.set(box, undefined));
         return;
       }
@@ -249,6 +254,10 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
    * flight). The height is read from the box itself, after layout, never from the entry (a consumer's own observer
    * may deliver the same moment). A shrink asks nothing — the lead shrinks with it; growth while an ask is out is
    * judged again at that ask's landing.
+   *
+   * The same moment is THE BOX'S RETURN: what a pane with no box could not pay (a debt, a refill, a leftover — with no
+   * box nothing is owed, so no rest was asked for it) is asked of the rest here, beside the lead, with no scroll of
+   * the consumer's needed to reach it.
    */
   const onBoxResize = useCallback(() => {
     const scroller = scrollerEl.current;
@@ -260,8 +269,9 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     boxHeight.current = height;
     if (height > last) {
       askIfNeeded();
+      requestReconcile();
     }
-  }, [askIfNeeded]);
+  }, [askIfNeeded, requestReconcile]);
 
   /** The observer follows the rows in the document. */
   const syncObserved = useCallback(() => {

@@ -44,11 +44,33 @@
  * rest that much lower; a place recorded under a scale and read at another makes a landing take the difference out of
  * the block. So the reservoir carries a RULER: a box of a known true length (`RULER_PX`) inside the block, clipped by
  * a box of no size so that it adds nothing to the scroller's extent. Its drawn length over its true one is the scale
- * the pane is drawn at, and every length read from rects is divided by it — never by a drawn length over a rounded
- * layout one (`offsetHeight` is a whole number: a pixel in a few thousand at rest). A ruler that reads its own length
- * (to `RULER_SLACK_PX`, an engine's rounding of a long box on a zoomed page) says nothing is drawn to a scale, and
- * every number is then, bit for bit, the one the rects give; so does a ruler with no drawn length (a pane with no
- * box, where every rect is empty). A slide moves both ends of a length alike and needs no ruler.
+ * the pane is drawn at, and every length read from rects is divided by it (`trueLength`, the one conversion, public for
+ * a consumer's own view math) — never by a drawn length over a rounded layout one (`offsetHeight` is a whole number: a
+ * pixel in a few thousand at rest). A ruler that reads its own length (to `RULER_SLACK_PX`, an engine's rounding of a
+ * long box on a zoomed page) says nothing is drawn to a scale, and every number is then, bit for bit, the one the rects
+ * give; so does a ruler with no drawn length (a pane with no box, where every rect is empty). A slide moves both ends
+ * of a length alike and needs no ruler.
+ * THE RULER'S SEAT: its holder is STICKY at the scroller's top edge, inside the block — at the edge while the reader is
+ * in the block, at the block's foot once the reader is below it — so the ruler's two edges are never farther from the
+ * reader than the loaded rows above plus its own length. An engine holds a rect's edges in single precision once the
+ * pane is drawn through a transform, a slide among them: a ruler left at the block's top, two million px above a reader
+ * deep in a long list, read an eighth of a px off its own length there and was taken for a scale. THE BOUND, as
+ * measured on Chromium and WebKit: the ruler reads its own length through any transform that scales nothing while
+ * fewer than 2^21 px (2,097,152) of LOADED rows stand above the reader, whatever the block's size — its two edges
+ * misread only where they stand either side of that length. A sticky holder holds to the nearest ancestor that scrolls
+ * or clips: under one between the block and its scroller the ruler stays at the block's top.
+ *
+ * NO BOX (`boxless`): a pane that generates no box (a kept pane hidden with display: none) has no layout to read —
+ * every rect in it is empty, its scroll offset reads 0 and every size its observers report is 0. THE ONE OWNER of the
+ * word is here, by what the engine reports of the one box whose size nothing else decides: the ruler has no drawn
+ * length (and the scroller no height — the word of a layout that draws no ruler). A scroller of no height whose rows
+ * keep their boxes (squeezed for a moment, mounted before its height) IS laid out: its ruler reads its own length and
+ * it is read as any other. EVERY READ PASSES THE WORD: with no box nothing is recorded (`record`), compared (`land` —
+ * rows that land there take nothing out of the block), judged (`aboveReader`), absorbed (`absorbGrowth`), stepped
+ * (`step`) or owed (`owed` — what cannot be paid is not asked of the rest), and the rows' span there, 0, is no
+ * measurement. The first comparison after the box returns takes the record fresh, from the layout as it is; what the
+ * pane could not pay while it had no box its owner asks of the rest when the box returns, and the step pays it by its
+ * own law.
  */
 export class PrependReservoir {
   /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
@@ -76,6 +98,11 @@ export class PrependReservoir {
   private measuredRows = 0;
   /** The first row's box top relative to the reservoir's box top, as of the last layout this owner saw. */
   private recordedFirstTop: number | null = null;
+  /**
+   * The record does not say where the first row is: it was asked for while the pane had no box, or the block has moved
+   * by a write of this owner's own since it was taken. The next comparison against it takes it fresh first.
+   */
+  private recordStale = false;
   /** The box of known true length the drawn scale is read from. */
   private readonly ruler: HTMLElement;
 
@@ -105,6 +132,11 @@ export class PrependReservoir {
       return;
     }
     this.windowAbove = next;
+    // The block moves by this owner's own write: the record no longer says where the first row is. Marked, not retaken,
+    // and no word is asked of the engine here: a windowed list calls this in its commit's insertion pass, where a read
+    // of the layout BEFORE the block stands for the rows the window left out is the read that pass exists to prevent
+    // (the engine clamps the offset to the short content), and one after it is a layout the commit did not ask for.
+    this.recordStale = true;
     this.apply();
   }
 
@@ -121,6 +153,17 @@ export class PrependReservoir {
    */
   trueLength(drawn: number): number {
     return this.layoutLength(drawn, this.drawnScale());
+  }
+
+  /**
+   * NO BOX: the pane this scroller is in generates no box (a kept pane hidden with display: none), so nothing in it
+   * has a length to read. The engine says so of the one box here whose size nothing else decides — the ruler has no
+   * drawn length — and a layout that draws no ruler says it with the scroller's own height, so the two are asked
+   * together. A scroller of no height whose rows keep their boxes is laid out, and is not this. THE ONE OWNER of the
+   * word: every read of this class passes it, and its consumers ask it here.
+   */
+  boxless(): boolean {
+    return this.scroller.clientHeight <= 0 && !(this.ruler.getBoundingClientRect().height > 0);
   }
 
   /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
@@ -151,6 +194,16 @@ export class PrependReservoir {
    * Returns the height absorbed.
    */
   land(previousFirstBox: HTMLElement | null, landedCount: number): number {
+    if (!this.readable()) {
+      // Rows landed in a pane with no box: their height is no length yet, so nothing is taken out of the block. The
+      // room then owed is paid at the rest, by the step's own law, once the box is back.
+      return 0;
+    }
+    if (this.recordStale) {
+      // The first row in the document stands at the block's foot, where the row that was first stood before these
+      // rows landed above it: its place now is the record this landing is measured against.
+      this.takeRecord();
+    }
     if (!previousFirstBox || this.recordedFirstTop === null) {
       this.reset();
       return 0;
@@ -160,18 +213,18 @@ export class PrependReservoir {
     this.measuredTotal += landed;
     this.measuredRows += landedCount;
     this.apply();
-    this.record();
+    this.takeRecord();
     return landed;
   }
 
   /** A row above the first visible row changed height by `delta`: absorbed height-neutrally. */
   absorbGrowth(delta: number): void {
-    if (delta === 0) {
+    if (delta === 0 || !this.readable()) {
       return;
     }
     this.reserve -= delta;
     this.apply();
-    this.record();
+    this.takeRecord();
   }
 
   /**
@@ -180,6 +233,9 @@ export class PrependReservoir {
    * observer's); the rects are drawn, so the change and the half-pixel are taken as drawn too.
    */
   aboveReader(box: Element, delta: number): boolean {
+    if (this.boxless()) {
+      return false; // no box: no row stands anywhere, and a size reported from there is no change to judge
+    }
     const scale = this.drawnScale();
     const edge = this.scroller.getBoundingClientRect().top;
     return box.getBoundingClientRect().bottom - delta * scale <= edge + 0.5 * scale;
@@ -187,20 +243,18 @@ export class PrependReservoir {
 
   /** Re-record the first row's place after a commit that kept the same first row. */
   record(): void {
-    const boxes = this.rowBoxes();
-    this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
+    if (this.readable()) {
+      this.takeRecord();
+    }
   }
 
-  /** Whether a reconcile step is wanted at the next rest. */
+  /**
+   * Whether a reconcile step is wanted at the next rest. Never with no box: nothing can be paid there, so nothing is
+   * owed — a rest asked for it would step nothing and ask again, for as long as the pane is hidden. What stands unpaid
+   * is asked of the rest by the owner when the box returns.
+   */
   owed(clientHeight: number): boolean {
-    if (this.reserve < -0.5) {
-      return true;
-    }
-    if (this.remaining <= 0) {
-      return this.reserve > 0.5;
-    }
-    const band = Math.max(1, clientHeight * PrependReservoir.REFILL_BAND_VIEWPORTS);
-    return Math.abs(this.target() - this.reserve) > band;
+    return this.wanted(clientHeight) && !this.boxless();
   }
 
   /**
@@ -222,6 +276,9 @@ export class PrependReservoir {
    * Returns the write made (0 for none).
    */
   step(clientHeight: number): number {
+    if (!this.readable()) {
+      return 0; // no box: a drift read here is 0 whatever moved, and no write would hold the reader's row
+    }
     const atEnd = this.remaining <= 0;
     const want = atEnd ? 0 : this.target();
     const gap = want - this.reserve;
@@ -265,7 +322,22 @@ export class PrependReservoir {
     return Math.min(PrependReservoir.MAX_RESERVE_PX, this.remaining * this.estimate);
   }
 
-  /** The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without rows. */
+  /** Whether the block stands off where it should: a debt, a leftover at the end, or a target more than the band away. */
+  private wanted(clientHeight: number): boolean {
+    if (this.reserve < -0.5) {
+      return true;
+    }
+    if (this.remaining <= 0) {
+      return this.reserve > 0.5;
+    }
+    const band = Math.max(1, clientHeight * PrependReservoir.REFILL_BAND_VIEWPORTS);
+    return Math.abs(this.target() - this.reserve) > band;
+  }
+
+  /**
+   * The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without
+   * rows. A span of 0 is no measurement — rows in a pane with no box read one — and the measure there was stands.
+   */
   private measureMounted(): void {
     const boxes = this.rowBoxes();
     if (boxes.length === 0) {
@@ -311,7 +383,7 @@ export class PrependReservoir {
         written = offset - current;
       }
     }
-    this.record();
+    this.takeRecord();
     return written;
   }
 
@@ -325,6 +397,25 @@ export class PrependReservoir {
       }
     }
     return boxes.length > 0 ? boxes[0] : null;
+  }
+
+  /**
+   * THE GATE every read of the layout passes: whether the pane has a box to read. With none the record is marked — it
+   * says nothing of a layout that is not there — and the caller reads, compares and writes nothing.
+   */
+  private readable(): boolean {
+    if (this.boxless()) {
+      this.recordStale = true;
+      return false;
+    }
+    return true;
+  }
+
+  /** The first row's place, from the layout as it is. */
+  private takeRecord(): void {
+    const boxes = this.rowBoxes();
+    this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
+    this.recordStale = false;
   }
 
   /**
@@ -354,9 +445,11 @@ export class PrependReservoir {
   }
 
   /**
-   * The ruler in the block: a box `RULER_PX` tall inside a box of no size that clips it — out of the flow, unseen,
-   * and nothing to the scroller's extent (a short list stays unscrollable). The block is this owner's to fill, as its
-   * size is this owner's to write; an owner mounted again over the same block finds the ruler standing.
+   * The ruler in the block: a box `RULER_PX` tall inside a holder of no size that clips it — unseen, no room taken in
+   * the block, and nothing to the scroller's extent (a short list stays unscrollable). The holder is sticky at the
+   * scroller's top edge (the header's THE RULER'S SEAT): the ruler is read where the reader is, never from the top of
+   * a block millions of px above. The block is this owner's to fill, as its size is this owner's to write; an owner
+   * mounted again over the same block finds the ruler standing.
    */
   private seatRuler(): HTMLElement {
     for (let i = 0; i < this.reservoir.children.length; i++) {
@@ -370,7 +463,7 @@ export class PrependReservoir {
     seat.setAttribute('data-prepend-ruler', '');
     seat.setAttribute('aria-hidden', 'true');
     seat.style.cssText =
-      'position:absolute;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
+      'position:sticky;top:0;left:0;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none';
     const ruler = page.createElement('div');
     ruler.style.cssText = `width:1px;height:${PrependReservoir.RULER_PX}px`;
     seat.appendChild(ruler);

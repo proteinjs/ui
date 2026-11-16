@@ -492,6 +492,9 @@ export function List<T>({
    * and no zero taken as a measurement (`onCellResize`), no reconcile step (the rest). Two writers: `readBox` opens it
    * (a box of 0; false from the mount until the first frame), the frame with a box closes it, deriving the window and
    * the anchors fresh from the layout as it is.
+   * Not a second word for "no box" (that word is the reservoir's, `PrependReservoir.boxless`, and every call made into
+   * the reservoir passes it there): this interval is wider on purpose — a viewport of no height leaves no window to
+   * derive, box or no box — and under it the list measures and does not judge.
    */
   const laidOut = useRef(false);
   const frame = useRef(0);
@@ -636,9 +639,9 @@ export function List<T>({
 
   /**
    * THE FRAME: one per scroll burst — reads the scroll position, derives the window from the height map and commits
-   * one update only when the window moves; then judges the lead. Its geometry reads are two rects on a clean layout
-   * (the list's offset inside a shared scroller whose content above it may move) and the scroll offset — never a
-   * read per row, never a read in the scroll listener.
+   * one update only when the window moves; then judges the lead. Its geometry reads are three rects on a clean layout
+   * (the list's offset inside a shared scroller whose content above it may move, as the layout's own length through
+   * the reservoir's ruler) and the scroll offset — never a read per row, never a read in the scroll listener.
    */
   const onFrame = useCallback(() => {
     frame.current = 0;
@@ -671,7 +674,10 @@ export function List<T>({
       requestReconcile();
     }
     const scrollTop = host.scrollTop;
-    const listTop = root.getBoundingClientRect().top - host.getBoundingClientRect().top + scrollTop;
+    // The list's offset in its scroller is read from two rects — a drawn length — and added to a scroll offset, the
+    // layout's own: through the reservoir's one conversion it is the layout's own too, whatever the pane is drawn at.
+    const drawnOffset = root.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    const listTop = (engine.current ? engine.current.trueLength(drawnOffset) : drawnOffset) + scrollTop;
     const viewportTop = scrollTop - listTop;
     const viewportBottom = viewportTop + height;
     const margin = (options.windowScreens ?? LIST_WINDOW_SCREENS) * height;
@@ -703,7 +709,6 @@ export function List<T>({
       }
       let absorb = 0;
       let changed = false;
-      let hostTop: number | null = null;
       for (const entry of entries) {
         const box = entry.target;
         const key = keyOfBox.current.get(box);
@@ -743,11 +748,9 @@ export function List<T>({
           continue;
         }
         changed = true;
-        if (hostTop === null) {
-          hostTop = host.getBoundingClientRect().top;
-        }
-        // The row's bottom BEFORE the change above the scroller's top edge: the whole change pushed the reader.
-        if (box.getBoundingClientRect().bottom - delta <= hostTop + 0.5) {
+        // The row's bottom BEFORE the change above the scroller's top edge: the whole change pushed the reader — the
+        // reservoir's judgment, the one owner's (a drawn edge is never set against the layout's own change here).
+        if (current.aboveReader(box, delta)) {
           absorb += delta;
         }
       }

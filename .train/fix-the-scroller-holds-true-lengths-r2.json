@@ -1,5 +1,5 @@
 {
-  "branch": "fix/the-scroller-holds-true-lengths",
+  "branch": "fix/the-scroller-holds-true-lengths-r2",
   "packages": ["ui"],
   "suites": [
     "packages/ui/test/prependSafeScroller.test.tsx",

@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  *
  * PrependSafeScroller (src/list/PrependSafeScroller.tsx) with its reservoir (PrependReservoir) and the one rest
- * definition (ScrollRest), under a MODELLED LAYOUT: jsdom lays nothing out, so the scroller's clientHeight,
+ * definition (ScrollRest), under a MODELED LAYOUT: jsdom lays nothing out, so the scroller's clientHeight,
  * scrollHeight and scrollTop, and every box's rect, are computed here from the DOM order, each row's declared
  * height (`data-h`) and the reservoir's own inline style — the geometry a real engine would give. `scrollTop`'s
  * setter is a spy: every programmatic write is counted, and a write IS the outcome these laws forbid or allow.
@@ -11,6 +11,14 @@
  * scrollTop, scrollHeight, the observers' sizes, the block's inline size — are untouched) and A PANE WITH NO BOX
  * (`paneLosesItsBox` — a kept pane hidden with display: none: nothing in it has a rect, the scroller has no height,
  * and every observed box reports a size of 0; `paneGetsItsBox` and the engine's next reports bring them back).
+ * Three more, each an engine's own: EVERY EDGE IN SINGLE PRECISION under a transform that scales nothing
+ * (`heldInFloats` — a slide: an engine maps a rect through any transform in floats, so an edge two million px away is
+ * held to an eighth or a quarter of a px); THE RULER PLACED BY ITS SEAT (a sticky holder stands at the scroller's top
+ * edge while the block holds the edge, at the block's foot once the block is above it; any other at the block's top);
+ * and THE SCROLLER'S OWN DRAWN HEIGHT apart from its layout height (`scrollerDrawnHeight` — a layout height is a whole
+ * number, the height a pane is drawn at is not). A SCROLLER OF NO HEIGHT WHOSE ROWS KEEP THEIR BOXES is the model's
+ * `clientHeight = 0` with the pane's box standing: every rect is there, the ruler's among them. A LAYOUT THAT DRAWS NO
+ * RULER (`rulerIsDrawn = false`) is a consumer's own modeled layout: the ruler reads nothing there, box or no box.
  *
  * The laws, asserted as outcomes:
  *  1. A landing of K rows at the start changes the scroller's scrollHeight by 0 and writes scrollTop never — the
@@ -39,6 +47,15 @@
  *  for bit, the one the rects give.
  *  A PANE SHOWN AGAIN IS NOT ROWS GROWING: a size report from a pane with no box, and a row's first after the box
  *  returns, is the size as mounted — the block is the one it was and no step is owed.
+ *  NO BOX HAS ONE OWNER, AND EVERY READ PASSES IT: with no box nothing is recorded, compared, absorbed, stepped or
+ *  owed — a commit while hidden leaves no record to throw the next landing by, rows that land hidden take nothing out
+ *  of the block unread, a rest pending at the hide fires once and asks for no frame after it — and what could not be
+ *  paid is paid at the first rests after the box returns, with no scroll of the consumer's. The word is the engine's
+ *  (the ruler has no drawn length), never the scroller's own height: a scroller of no height whose rows keep their
+ *  boxes is read as any other.
+ *  THE RULER READS ITS OWN LENGTH AT ANY DEPTH (a block two million px tall, every edge in single precision), and the
+ *  scale is never the scroller's drawn height over its layout height. A CONSUMER'S OWN LENGTHS go through the api's
+ *  `trueLength`, the same conversion.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -157,6 +174,12 @@ let drawnScale = 1;
 let rulerReadsOffBy = 0;
 /** Whether the pane has a box: without one (display: none) nothing in it has a rect, a height or a scroll offset. */
 let paneHasBox = true;
+/** The pane is drawn through a transform that scales nothing (a slide): the engine holds every edge in single precision. */
+let heldInFloats = false;
+/** The scroller's own DRAWN height where it differs from its whole-number layout height (a pane 599.67 px tall reads 600). */
+let scrollerDrawnHeight: number | null = null;
+/** Whether the layout draws the reservoir's ruler: a consumer's own modeled layout knows no ruler, and reads nothing of it. */
+let rulerIsDrawn = true;
 const writes: number[] = [];
 const heightOf = (el: Element) => Number(el.getAttribute('data-h') ?? 0);
 const layoutOf = (scroller: Element) => {
@@ -190,7 +213,7 @@ const rect = (top: number, bottom: number): DOMRect =>
  */
 const drawnRect = (top: number, bottom: number): DOMRect => {
   if (drawnScale === 1) {
-    return rect(top, bottom);
+    return heldInFloats ? rect(Math.fround(top), Math.fround(bottom)) : rect(top, bottom);
   }
   const center = clientHeight / 2;
   return rect(Math.fround(center + (top - center) * drawnScale), Math.fround(center + (bottom - center) * drawnScale));
@@ -205,13 +228,20 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
     return rect(0, 0); // no box: nothing in the pane has a rect either (the engine's own shape under display: none)
   }
   if (this === scroller) {
-    return drawnRect(0, clientHeight);
+    return drawnRect(0, scrollerDrawnHeight ?? clientHeight);
   }
   const layout = layoutOf(scroller);
   if (this.parentElement?.hasAttribute('data-prepend-ruler')) {
-    // The reservoir's ruler: a box of its own declared height at the block's top, clipped out of the scroll extent
-    // (it adds nothing to `contentHeight`) and drawn as every box is.
-    const top = layout.rects.get(reservoirOf(scroller as HTMLElement))!.top - scrollTopValue;
+    if (!rulerIsDrawn) {
+      return rect(0, 0);
+    }
+    // The reservoir's ruler: a box of its own declared height, clipped out of the scroll extent (it adds nothing to
+    // `contentHeight`) and drawn as every box is — placed by its holder's seat: a sticky holder at the scroller's top
+    // edge while the block holds the edge, at the block's foot once the block is above it; any other at the block's top.
+    const block = layout.rects.get(reservoirOf(scroller as HTMLElement))!;
+    const blockTop = block.top - scrollTopValue;
+    const sticky = (this.parentElement as HTMLElement).style.position === 'sticky';
+    const top = sticky ? Math.min(Math.max(blockTop, 0), block.bottom - scrollTopValue) : blockTop;
     const drawn = drawnRect(top, top + (parseFloat((this as HTMLElement).style.height) || 0));
     return rect(drawn.top, drawn.bottom + rulerReadsOffBy);
   }
@@ -325,7 +355,7 @@ const mount = (props: Omit<HarnessProps, 'scrollerRef'>) => {
   return { harness: harness.current!, scroller: scrollerRef.current! };
 };
 
-beforeEach(() => {
+const setUp = () => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -334,17 +364,21 @@ beforeEach(() => {
   drawnScale = 1;
   rulerReadsOffBy = 0;
   paneHasBox = true;
+  heldInFloats = false;
+  scrollerDrawnHeight = null;
+  rulerIsDrawn = true;
   writes.length = 0;
   frameQueue.length = 0;
   observers.length = 0;
-});
-
-afterEach(() => {
+};
+const tearDown = () => {
   act(() => {
     root.unmount();
   });
   container.remove();
-});
+};
+beforeEach(setUp);
+afterEach(tearDown);
 
 describe('law 1 — the landing is height-neutral and writes nothing', () => {
   test('K rows at the start: scrollHeight unchanged, scrollTop never written, the reservoir shrunk by the landed height, the reader’s row holding', () => {
@@ -1026,6 +1060,21 @@ describe('true lengths — a pane drawn at a scale: every length is the layout�
     expect(apiRef.current!.distanceFromLoadedStart()).toBe(1100);
     expect(asks.length).toBe(1);
   });
+
+  test('a consumer’s own length — a row’s edge below the scroller’s top, a row’s own height — read through the api’s trueLength is the layout’s own at 0.95; with nothing drawn to a scale it is the length as read', () => {
+    const apiRef: React.MutableRefObject<PrependSafeScrollerApi | null> = { current: null };
+    const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 20, apiRef });
+    readerScrollsTo(scroller, 2350); // row 4 first visible, 50 px above the edge; row 9 450 px below it
+    const edgeBelowTheTop = (id: number) =>
+      rowBox(scroller, id).getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const asRead = edgeBelowTheTop(9) + 0.123456789; // a length no grid holds
+    expect(Object.is(apiRef.current!.trueLength(asRead), asRead)).toBe(true);
+    drawnScale = 0.95;
+    expect(edgeBelowTheTop(9)).not.toBe(450); // as drawn: 427.5
+    expect(apiRef.current!.trueLength(edgeBelowTheTop(9))).toBe(450);
+    expect(apiRef.current!.trueLength(edgeBelowTheTop(4))).toBe(-50);
+    expect(apiRef.current!.trueLength(rowBox(scroller, 9).getBoundingClientRect().height)).toBe(100);
+  });
 });
 
 describe('true lengths — with nothing drawn to a scale every number is the one the rects give, bit for bit', () => {
@@ -1071,6 +1120,30 @@ describe('true lengths — with nothing drawn to a scale every number is the one
     rulerReadsOffBy = 1 / 128;
     expect(everyLength()).toEqual(AS_THE_RECTS_GIVE);
   });
+
+  test('never a drawn length over the scroller’s layout height: a pane drawn 599.67 px tall where the layout says 600, nothing scaled — every number is the one it is at a whole height', () => {
+    scrollerDrawnHeight = 599.67;
+    expect(everyLength()).toEqual(AS_THE_RECTS_GIVE);
+  });
+
+  test('far down a long list: a block of 2,130,000 px drawn through a transform that scales nothing (every edge in single precision) — the ruler reads its own length where the reader is, and the distance from the loaded start is the rects’ own, bit for bit, at sixteen places of the reader', () => {
+    const apiRef: React.MutableRefObject<PrependSafeScrollerApi | null> = { current: null };
+    const { scroller } = mount({ initial: rows(1, 20, 100), remaining: 21300, apiRef });
+    expect(reservoirOf(scroller).style.height).toBe('2130000px');
+    heldInFloats = true;
+    const offTheRects: number[] = [];
+    for (const back of [0, 137, 700, 1400]) {
+      for (const fraction of [0.4, 0.1, 0.6, 0.9]) {
+        readerScrollsTo(scroller, 2130000 - back + fraction); // the reader at, and just above, the loaded start
+        const asTheRectsGive =
+          scroller.getBoundingClientRect().top - reservoirOf(scroller).getBoundingClientRect().top - 2130000;
+        offTheRects.push(apiRef.current!.distanceFromLoadedStart() - asTheRectsGive);
+      }
+    }
+    // A ruler read from the block's top there has its two edges either side of 2^21 px, held to a quarter and an
+    // eighth of a px: it reads an eighth off its own length, is taken for a scale, and every length is converted.
+    expect(offTheRects).toEqual(offTheRects.map(() => 0));
+  });
 });
 
 describe('a pane shown again is not rows growing', () => {
@@ -1108,5 +1181,218 @@ describe('a pane shown again is not rows growing', () => {
     expect(scroller.scrollHeight).toBe(4560);
     expect(trueOffsetOf(scroller, 13)).toBe(0);
     expect(writes.length).toBe(0);
+  });
+});
+
+describe('no box has one owner, and every read passes it', () => {
+  const layoutTopOf = (scroller: HTMLElement, id: number) => layoutOf(scroller).rects.get(rowBox(scroller, id))!.top;
+  /** The consumer places its view on a row when the pane is shown (its own park). */
+  const park = (scroller: HTMLElement, id: number) => readerScrollsTo(scroller, layoutTopOf(scroller, id));
+
+  test('a commit that keeps the first row while the pane has no box, the pane shown again, then older rows land: the reader’s row holds and the landing is height-neutral', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    readerScrollsTo(scroller, 3700); // row 13 at the edge
+    paneLosesItsBox();
+    act(() => {
+      harness.replace(rows(1, 20, 100)); // a commit while hidden (a reply that streams on): the same first row
+    });
+    paneGetsItsBox();
+    park(scroller, 13);
+    engineReportsSizes();
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    const offsetBefore = trueOffsetOf(scroller, 13);
+    const extentBefore = scroller.scrollHeight;
+    act(() => {
+      harness.prepend(rows(101, 105, 120)); // 600 px land above the reader
+    });
+    // A place recorded from a pane with no box is 0, and the landing measured against it takes the whole block.
+    expect(reservoirOf(scroller).style.height).toBe('1900px');
+    expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
+    expect(trueOffsetOf(scroller, 13)).toBe(offsetBefore);
+    expect(scroller.scrollHeight).toBe(extentBefore);
+    expect(writes.length).toBe(0);
+  });
+
+  test('a pane MOUNTED with no box and shown later, then older rows land: no place was ever recorded, and the landing is measured from the first row’s place as it is — the reader’s row holds, height-neutral', () => {
+    paneHasBox = false; // a kept pane mounted hidden
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    expect(reservoirOf(scroller).style.height).toBe('2500px'); // 25 × the seed: no row there has a length to measure
+    paneGetsItsBox();
+    park(scroller, 13);
+    engineReportsSizes();
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    const offsetBefore = trueOffsetOf(scroller, 13);
+    const extentBefore = scroller.scrollHeight;
+    act(() => {
+      harness.prepend(rows(101, 105, 120)); // 600 px land above the reader
+    });
+    expect(reservoirOf(scroller).style.height).toBe('1900px');
+    expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
+    expect(trueOffsetOf(scroller, 13)).toBe(offsetBefore);
+    expect(scroller.scrollHeight).toBe(extentBefore);
+    expect(writes.length).toBe(0);
+  });
+
+  test('older rows land WHILE the pane has no box: nothing is taken out of the block unread, and the room owed is paid at the rest with the reader’s row held where the consumer put it', () => {
+    const { harness, scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    readerScrollsTo(scroller, 3700);
+    paneLosesItsBox();
+    act(() => {
+      harness.prepend(rows(101, 108, 120)); // eight rows (960 px) land above while hidden; seventeen remain
+    });
+    expect(reservoirOf(scroller).style.height).toBe('2500px'); // their height is no length yet: nothing taken
+    paneGetsItsBox();
+    // Held from where the CONSUMER puts the view at the return: the scroller cannot hold what it could not read. A
+    // consumer that places nothing there finds the row lower by the landed height.
+    park(scroller, 13);
+    engineReportsSizes();
+    const before = trueOffsetOf(scroller, 13);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(reservoirOf(scroller).style.height).toBe('1900px'); // one viewport toward the room for seventeen
+    expect(trueOffsetOf(scroller, 13)).toBe(before);
+    expect(writes.length).toBe(1);
+  });
+
+  test('a rest pending when the pane loses its box fires once and asks for no frame after it, nothing is stepped unread, and what was owed is paid at the first rests after the box returns with no scroll of the consumer’s — a shrink owed at the hide; and a block merely inside its band, the reader’s last scroll just before the hide', () => {
+    let rests = 0;
+    const onRest = () => {
+      rests++;
+    };
+    // A SHRINK OWED AT THE HIDE.
+    const shrink = mount({ initial: rows(1, 10, 100), remaining: 20, onRest });
+    readerScrollsTo(shrink.scroller, 2350); // row 4 first visible, 50 px above the edge
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    act(() => {
+      shrink.harness.setRemaining(10); // the target is 1000 for a block of 2000: a shrink is owed at the next rest …
+    });
+    paneLosesItsBox(); // … and the pane is hidden before that rest
+    rests = 0;
+    pumpFrames(600); // ten seconds of frames with the pane hidden
+    expect(rests).toBe(1);
+    expect(frameQueue.length).toBe(0);
+    expect(reservoirOf(shrink.scroller).style.height).toBe('2000px');
+    expect(writes.length).toBe(0);
+    paneGetsItsBox();
+    engineReportsSizes(); // the engine's reports at the return, the offset as it was kept: nobody scrolls
+    expect(trueOffsetOf(shrink.scroller, 4)).toBe(-50);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 12);
+    // Two steps, each bounded by the reader's 350 px from the loaded start, bring the block inside its band.
+    expect(reservoirOf(shrink.scroller).style.height).toBe('1300px');
+    expect(trueOffsetOf(shrink.scroller, 4)).toBe(-50);
+    expect(frameQueue.length).toBe(0);
+
+    // A BLOCK MERELY INSIDE ITS BAND: nothing is owed with a box, and nothing with none.
+    tearDown();
+    setUp();
+    const inBand = mount({ initial: rows(1, 10, 100), remaining: 20, onRest });
+    readerScrollsTo(inBand.scroller, 2350);
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    act(() => {
+      inBand.harness.prepend(rows(101, 103, 130)); // a landing leaves the block about 208 px off its target
+    });
+    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    expect(reservoirOf(inBand.scroller).style.height).toBe('1610px');
+    readerScrollsTo(inBand.scroller, 2400); // the reader's last scroll …
+    paneLosesItsBox(); // … and the pane is hidden before its rest
+    rests = 0;
+    pumpFrames(600);
+    expect(rests).toBe(1);
+    expect(frameQueue.length).toBe(0);
+    expect(reservoirOf(inBand.scroller).style.height).toBe('1610px');
+    expect(writes.length).toBe(0);
+  });
+
+  test('a scroller rendered with no height of its own, its rows laid out, is not a pane with no box: given its height later, growth above the reader is absorbed', () => {
+    clientHeight = 0; // mounted before its height: every row has its box
+    const { scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    boxResizes(scroller, 600);
+    readerScrollsTo(scroller, 3700); // row 13 at the edge, rows 1–12 above it
+    resize(rowBox(scroller, 2), 160);
+    expect(reservoirOf(scroller).style.height).toBe('2440px');
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    expect(writes.length).toBe(0);
+  });
+
+  test('a scroller squeezed to no height for a moment while a row below the reader changes, then given its height back: growth above the reader is absorbed', () => {
+    const { scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    readerScrollsTo(scroller, 3700);
+    boxResizes(scroller, 0); // squeezed: no height, every row still laid out
+    resize(rowBox(scroller, 20), 130); // a row below the reader reports under it
+    boxResizes(scroller, 600);
+    readerScrollsTo(scroller, 3700);
+    resize(rowBox(scroller, 2), 160);
+    expect(reservoirOf(scroller).style.height).toBe('2440px');
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    expect(writes.length).toBe(0);
+  });
+
+  test('a scroller squeezed to no height while a row ABOVE the reader grows: absorbed there and then, as with a height', () => {
+    const { scroller } = mount({ initial: rows(1, 20, 100), remaining: 25 });
+    readerScrollsTo(scroller, 3700);
+    boxResizes(scroller, 0);
+    resize(rowBox(scroller, 2), 160);
+    expect(reservoirOf(scroller).style.height).toBe('2440px');
+    expect(trueOffsetOf(scroller, 13)).toBe(0);
+    expect(writes.length).toBe(0);
+  });
+
+  test('a layout that draws no ruler (a consumer’s own modeled layout) says no box with the scroller’s height — with a height it is read as ever: a landing is absorbed, growth above the reader is absorbed', () => {
+    rulerIsDrawn = false;
+    const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 20 });
+    expect(reservoirOf(scroller).style.height).toBe('2000px');
+    readerScrollsTo(scroller, 2350); // row 4 first visible, 50 px above the edge
+    act(() => {
+      harness.prepend(rows(101, 105, 120)); // 600 px land above the reader
+    });
+    expect(reservoirOf(scroller).style.height).toBe('1400px');
+    expect(offsetOf(scroller, 4)).toBe(-50);
+    resize(rowBox(scroller, 1), 160);
+    expect(reservoirOf(scroller).style.height).toBe('1340px');
+    expect(offsetOf(scroller, 4)).toBe(-50);
+    expect(writes.length).toBe(0);
+  });
+
+  test('the reservoir’s own doors, whoever calls them: with no box growth is neither judged above the reader nor absorbed, nothing is owed and a step moves nothing; and after the block moved by the reservoir’s own write a landing is measured from the first row’s place as it is', () => {
+    // The reservoir alone over a bare scroller, as its second consumer (a windowed list) drives it.
+    const scroller = document.createElement('div');
+    modelScroller(scroller);
+    container.appendChild(scroller);
+    const block = document.createElement('div');
+    block.setAttribute('data-prepend-reservoir', '');
+    scroller.appendChild(block);
+    const addRow = (id: number, before: Element | null) => {
+      const wrapper = document.createElement('div');
+      wrapper.setAttribute('data-prepend-row', String(id));
+      const box = document.createElement('div');
+      box.setAttribute('data-h', '100');
+      wrapper.appendChild(box);
+      scroller.insertBefore(wrapper, before);
+    };
+    rows(1, 20, 100).forEach((row) => addRow(row.id, null));
+    const boxes = () => Array.from(scroller.querySelectorAll<HTMLElement>('[data-prepend-row] > [data-h]'));
+    const reservoir = new PrependReservoir(scroller, block, boxes);
+    reservoir.setRemaining(25, 100);
+    reservoir.initialize();
+    expect(block.style.height).toBe('2500px');
+    readerScrollsTo(scroller, 3700); // row 13 at the edge, rows 1–12 above it
+
+    paneHasBox = false;
+    expect(reservoir.aboveReader(rowBox(scroller, 2), 60)).toBe(false);
+    reservoir.absorbGrowth(60);
+    expect(block.style.height).toBe('2500px');
+    reservoir.setRemaining(10, 100); // a shrink of 1500 px is wanted
+    expect(reservoir.owed(600)).toBe(false);
+    expect(reservoir.step(600)).toBe(0);
+    expect(block.style.height).toBe('2500px');
+    reservoir.setRemaining(25, 100);
+
+    paneHasBox = true;
+    reservoir.record(); // the first row's place, with the box back
+    reservoir.setWindowAbove(300); // the block grows by a window's rows above: the reservoir's own write
+    expect(block.style.height).toBe('2800px');
+    const first = boxes()[0];
+    rows(101, 105, 100).forEach((row) => addRow(row.id, first.parentElement)); // 500 px land above the first row
+    expect(reservoir.land(first, 5)).toBe(500);
+    expect(block.style.height).toBe('2300px');
   });
 });

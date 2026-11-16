@@ -2,18 +2,23 @@
  * @jest-environment jsdom
  *
  * `List`'s WINDOWED MODE (src/list/List.tsx, `windowed`) over the reservoir (src/list/PrependReservoir.ts) under a
- * MODELLED LAYOUT (the scroller suite's shape): jsdom lays nothing out, so the scroller's clientHeight, scrollHeight
+ * MODELED LAYOUT (the scroller suite's shape): jsdom lays nothing out, so the scroller's clientHeight, scrollHeight
  * and scrollTop and every box's rect are computed here from the document order, each row's declared height (`data-h`)
  * and the two spacers' inline styles. `scrollTop`'s setter is a spy — a write IS the outcome the laws forbid or allow —
  * and `getBoundingClientRect` is counted on the scroll path. The budgets the pins read: `LIST_WINDOW_SCREENS` (the
- * margin) and `PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS` (the lead — the library's one lead constant).
+ * margin) and `PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS` (the lead — the library's one lead constant). As in the scroller
+ * suite, the model has A DRAWN SCALE (`drawnScale` — a host that draws the pane small: every rect scaled about the
+ * pane's center and held in single precision, the layout's own lengths untouched) and the reservoir's RULER, placed by
+ * its holder's seat. And a read of the scroller's own height asks the browser for a layout, as a read of a rect does.
  *
  * The pins, as outcomes (the rows 3234 bar — a list that mounts every row is the class his finding names):
  *  1. THE MOUNTED DOM IS BOUNDED BY THE VIEWPORT: 1,000 loaded rows, at most the viewport plus a margin each side in
  *     the document (read from the DOM), the rows above as the reservoir, the rows below as the spacer; the scroll
  *     height is the whole list's; a jump to the middle mounts the middle.
- *  2. THE SCROLL PATH: a scroll event does no layout read and renders no row; the frame reads at most two rects and the
- *     offset; a scroll shorter than half the margin commits nothing; a longer one commits the moved window once.
+ *  2. THE SCROLL PATH: a scroll event does no layout read and renders no row; the frame reads at most three rects (the
+ *     list, the scroller and the reservoir's ruler — the third after the layout the first two asked for, never one per
+ *     row) and the offset; a scroll shorter than half the margin commits nothing; a longer one commits the moved
+ *     window once.
  *  3. THE LEAD: the next window is asked while the loaded end is two viewports below the reader — never at the end, the
  *     sentinel untouched — once per read, re-judged at the landing; an under-filled lead chains at the opening.
  *  4. MEASURED ONCE: a row's height is measured on its mount and read from the map ever after — a scroll down and back
@@ -67,7 +72,14 @@
  *     anchoring a jump down the list was thrown back, 5,320 px of 5,320): a row that reads the layout in its own layout
  *     effect asks the browser for a layout in the middle of the list's commit, and the browser clamps the offset to
  *     the content it finds — so the reservoir takes the rows above the window before any layout effect runs. The
- *     reader jumps several screens down: the offset stays where the reader put it.
+ *     reader jumps several screens down: the offset stays where the reader put it. The reservoir itself asks for no
+ *     layout before it stands: a read of the scroller's height there is the same read.
+ * 14. A PANE DRAWN AT A SCALE (0.95): THE LIST JUDGES AND DERIVES IN THE LAYOUT'S OWN LENGTHS. Growth above the reader
+ *     has one judge (the reservoir's `aboveReader`): the reader's OWN row, its bottom 3 px below the scroller's top
+ *     edge, grows by 100 and nothing is absorbed — a drawn bottom less the layout's change, set against a drawn edge,
+ *     takes it for a row wholly above — and a row wholly above is absorbed whole. And the list's offset in its
+ *     scroller is the layout's own (the reservoir's `trueLength`): after a jump the window stands where the reader is —
+ *     a drawn offset added to a scroll offset derives it a twentieth of the way short.
  */
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -229,6 +241,16 @@ const layoutOf = (scroller: Element) => {
 };
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
+/** The scale the host draws the pane at: every rect is drawn at it; the layout's own lengths are untouched. */
+let drawnScale = 1;
+/** A box as the host draws it: scaled about the pane's center, its edges held in single precision (an engine's own). */
+const drawnRect = (top: number, bottom: number): DOMRect => {
+  if (drawnScale === 1) {
+    return rect(top, bottom);
+  }
+  const center = hostTop + clientHeight / 2;
+  return rect(Math.fround(center + (top - center) * drawnScale), Math.fround(center + (bottom - center) * drawnScale));
+};
 const realRect = Element.prototype.getBoundingClientRect;
 let rectReads = 0;
 Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
@@ -239,20 +261,31 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   }
   browserLaysOut(scroller as HTMLElement);
   if (this === scroller) {
-    return rect(hostTop, hostTop + clientHeight);
+    return drawnRect(hostTop, hostTop + clientHeight);
   }
   if (clientHeight <= 0) {
     // A hidden pane (the box 0): nothing inside it has a rect either — the engine's own shape (display: none).
     return rect(0, 0);
   }
   const layout = layoutOf(scroller);
+  if (this.parentElement?.hasAttribute('data-prepend-ruler')) {
+    // The reservoir's ruler: a box of its own declared height, out of the scroll extent, placed by its holder's seat —
+    // a sticky holder at the scroller's top edge while the block holds the edge, at the block's foot once the block is
+    // above it; any other at the block's top.
+    const block = layout.rects.get(scroller.querySelector('[data-list-reservoir]') as Element);
+    const blockTop = hostTop + (block ? block.top : 0) - scrollTopValue;
+    const blockBottom = hostTop + (block ? block.bottom : 0) - scrollTopValue;
+    const sticky = (this.parentElement as HTMLElement).style.position === 'sticky';
+    const top = sticky ? Math.min(Math.max(blockTop, hostTop), blockBottom) : blockTop;
+    return drawnRect(top, top + (parseFloat((this as HTMLElement).style.height) || 0));
+  }
   let entry = layout.rects.get(this);
   if (!entry) {
     // A container (the list's root): its top is its first laid-out descendant's.
     const inner = this.querySelector('[data-list-reservoir], [data-h], [data-list-below]');
     entry = inner ? layout.rects.get(inner) : undefined;
   }
-  return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
+  return entry ? drawnRect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
 // ── THE BROWSER'S SCROLL ANCHORING, ITS ANIMATED SCROLL AND ITS FLING (pin 11; the witnesses are the simulator on
 //    iOS 27.2 and the harness's WebKit and Chromium over the real Home, 2026-11-11 and 11-12). The stand-in has TWO
@@ -483,7 +516,14 @@ const modelScroller = (el: HTMLElement) => {
     rowChosenAtALayout = false;
   };
   Object.defineProperty(el, 'clientWidth', { get: () => 390, configurable: true });
-  Object.defineProperty(el, 'clientHeight', { get: () => clientHeight, configurable: true });
+  // A read of the scroller's own height asks the browser for a layout, as a read of a rect does (pin 13).
+  Object.defineProperty(el, 'clientHeight', {
+    get: () => {
+      browserLaysOut(el);
+      return clientHeight;
+    },
+    configurable: true,
+  });
   Object.defineProperty(el, 'scrollHeight', {
     get: () => Math.max(clientHeight, layoutOf(el).contentHeight),
     configurable: true,
@@ -703,6 +743,7 @@ describe('List — the windowed mode over the reservoir', () => {
     rectReads = 0;
     clientHeight = CLIENT_HEIGHT;
     hostTop = 0;
+    drawnScale = 1;
     scrollTopValue = 0;
     animation = null;
     momentum = false;
@@ -749,7 +790,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(writes).toEqual([]);
   });
 
-  test('2. the scroll path: a scroll event reads no layout and renders no row; the frame reads at most two rects; a scroll under half the margin commits nothing, a longer one commits the window once', async () => {
+  test('2. the scroll path: a scroll event reads no layout and renders no row; the frame reads at most three rects; a scroll under half the margin commits nothing, a longer one commits the window once', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -765,10 +806,11 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(renderCount).toBe(rendersBefore);
     expect(mountedIds()).toEqual(before);
 
-    // The frame: at most two rects (the list's offset in its scroller) and no commit — 200 px is under half the margin.
+    // The frame: at most three rects (the list's offset in its scroller — the list, the scroller, and the reservoir's
+    // ruler that makes the length the layout's own) and no commit — 200 px is under half the margin.
     rectReads = 0;
     await frame();
-    expect(rectReads).toBeLessThanOrEqual(2);
+    expect(rectReads).toBeLessThanOrEqual(3);
     expect(renderCount).toBe(rendersBefore);
     expect(mountedIds()).toEqual(before);
 
@@ -1673,5 +1715,39 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(mountedIds()).toContain(299);
     expect(reservoirPx()).toBe(mountedIds()[0] * ROW_H);
     expect(writes).toEqual([]);
+  });
+
+  test('14. a pane drawn at 0.95 — the list judges and derives in the layout’s own lengths: the reader’s OWN row, its bottom 3 px below the scroller’s top edge, grows by 100 and nothing is absorbed; a row wholly above grows and is absorbed whole; after a jump the window stands where the reader is', async () => {
+    const loader = new CorpusLoader(keys(), corpusOf(300));
+    await mountList(loader, 300);
+    await frame();
+    const readers = 39;
+    readerScrollsTo(scroller, (readers + 1) * ROW_H - 3); // row 39's bottom is 3 px below the scroller's top edge
+    await frame();
+    await rest();
+    expect(mountedIds()).toContain(readers);
+    expect(readerRow()).toBe(readers);
+    drawnScale = 0.95; // the host draws the pane small: every rect at 0.95, the layout untouched
+    const before = reservoirPx();
+    // As drawn the row's bottom is 2.85 px below the edge, and after it grew 97.85: less the layout's 100 that is
+    // 2.15 px ABOVE the edge — a row wholly above, to a judge that sets a drawn edge against the layout's change.
+    await grows(readers, 100);
+    expect(reservoirPx()).toBe(before);
+    await grows(mountedIds()[0], 40);
+    expect(reservoirPx()).toBe(before - 40);
+    expect(writes).toEqual([]);
+    await rest(); // the 40 px absorbed are paid at the rest in one write: the document and the list's heights agree
+    expect(writes.length).toBe(1);
+
+    // A JUMP down the list, still drawn at 0.95: the window's first row is the one a margin above the reader's edge.
+    // The list's offset read as drawn (0.95 of the 10,400 px scrolled) puts it 520 px, ten rows, short of there.
+    const at = 200 * ROW_H;
+    readerScrollsTo(scroller, at);
+    await frame();
+    const first = layoutOf(scroller).rects.get(boxOf(mountedIds()[0]))!;
+    const windowTop = at - CLIENT_HEIGHT * LIST_WINDOW_SCREENS;
+    expect(first.top).toBeLessThanOrEqual(windowTop);
+    expect(first.bottom).toBeGreaterThan(windowTop);
+    expect(writes.length).toBe(1);
   });
 });
