@@ -183,13 +183,17 @@ const layoutOf = (scroller: Element) => {
 };
 const rect = (top: number, bottom: number): DOMRect =>
   ({ top, bottom, height: bottom - top, left: 0, right: 390, width: 390, x: 0, y: top, toJSON() {} }) as DOMRect;
-/** A box as the host draws it: scaled about the pane's center. Drawn as laid out, it is the layout's own rect. */
+/**
+ * A box as the host draws it: scaled about the pane's center, its edges held in single precision — an engine maps a
+ * rect through a transform in floats, so a length read back from two drawn edges is a hair off the layout's own.
+ * Drawn as laid out, it is the layout's own rect.
+ */
 const drawnRect = (top: number, bottom: number): DOMRect => {
   if (drawnScale === 1) {
     return rect(top, bottom);
   }
   const center = clientHeight / 2;
-  return rect(center + (top - center) * drawnScale, center + (bottom - center) * drawnScale);
+  return rect(Math.fround(center + (top - center) * drawnScale), Math.fround(center + (bottom - center) * drawnScale));
 };
 const realRect = Element.prototype.getBoundingClientRect;
 Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
