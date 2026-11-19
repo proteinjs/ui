@@ -1,0 +1,29 @@
+{
+  "branch": "feat/table-groups-like-the-list",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/list.test.tsx",
+    "packages/ui/test/listFoot.test.tsx",
+    "packages/ui/test/listRowMemo.test.tsx",
+    "packages/ui/test/listWindowed.test.tsx",
+    "packages/ui/test/prependSafeScroller.test.tsx",
+    "packages/ui/test/scrollTopButton.test.tsx",
+    "packages/ui/test/tableDefaultCellValues.test.tsx",
+    "packages/ui/test/tableInfiniteScroll.test.tsx",
+    "packages/ui/test/tableLoadErrorStability.test.tsx",
+    "packages/ui/test/tablePhoneFace.test.tsx",
+    "packages/ui/test/tableRowClickable.test.tsx",
+    "packages/ui/test/tableSelectionServesAnAct.test.tsx",
+    "packages/ui/test/tableSettledColumns.test.tsx",
+    "packages/ui/test/tableStickyHeader.test.tsx",
+    "packages/ui/test/topScrollFade.test.tsx"
+  ],
+  "removes": [],
+  "section": {
+    "heading": "## Lists (proteinjs ui) \u2014 a table can draw a head over each group of its rows",
+    "text": "- A table can group its rows the way a list does: one head before each run of rows that share a key, on the phone and on the desktop, while every row looks and works exactly as before. A table with no groups is unchanged.",
+    "smoke": [
+      "- Nothing to try on its own: it is what lets a space's chats list and thoughts list sit under day headings, which ride a later space change with their own smoke line."
+    ]
+  }
+}

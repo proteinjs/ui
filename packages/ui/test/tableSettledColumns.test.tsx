@@ -16,6 +16,7 @@
  *  3. The pins release for a NEW DATA SET (the loader's keys) and settle again from ITS first
  *     page; a resized scroller releases them too and the next paint settles at the new width.
  *  4. Without geometry (a non-visual environment) the table stays auto — nothing is pinned to 0.
+ *  5. With a group key the columns still settle from a DATA row, never from a group's head (one cell spanning them).
  *
  * jsdom has no layout, so the geometry here is a FAKE AUTO LAYOUT: a cell is as wide as the
  * longest text in its column among the rows in the DOM (8 px a character) — exactly the
@@ -200,12 +201,12 @@ describe('Table — column widths settle on the first page and hold', () => {
     container.remove();
   });
 
-  const render = async (loader: TableLoader<Row>) => {
+  const render = async (loader: TableLoader<Row>, props: Partial<React.ComponentProps<typeof Table<Row>>> = {}) => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter>
-            <Table<Row> columns={['name', 'status']} tableLoader={loader} />
+            <Table<Row> columns={['name', 'status']} tableLoader={loader} {...props} />
           </MemoryRouter>
         </QueryClientProvider>
       );
@@ -309,5 +310,17 @@ describe('Table — column widths settle on the first page and hold', () => {
     expect(mode()).toBe('settled');
     expect(initialObservations).toBe(2);
     expect(roInstances.filter((entry) => entry.targets.length > 0)).toHaveLength(1);
+  });
+  it('with a group key the columns still settle from a data row', async () => {
+    await render(new PagedLoader([pageOne]), {
+      groupKey: () => 'T',
+      renderGroupHeader: (key) => <span>{key}</span>,
+    });
+    const bodyRows = Array.from(table().tBodies[0].rows);
+    expect(bodyRows[0].hasAttribute('data-table-group-head')).toBe(true);
+    expect(rowCount()).toBe(11);
+    expect(mode()).toBe('settled');
+    // The data row's cells, one width for each column: 'Ada' → 24 px, 'on'/'ok' → 16 px.
+    expect(pins()).toEqual(['24px', '16px']);
   });
 });

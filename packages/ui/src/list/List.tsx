@@ -15,6 +15,7 @@ import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/Scroll
 import { PrependReservoir } from './PrependReservoir';
 import { PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS } from './PrependSafeScroller';
 import { ScrollRest } from './ScrollRest';
+import { RowGroup, RowGroups } from './RowGroups';
 
 /**
  * The windowed mode's margin: the rows mounted beyond the viewport on each side, in client heights. The window is
@@ -149,32 +150,6 @@ export interface ListFootState {
   fetchingNextWindow: boolean;
 }
 
-/** One consecutive run of rows sharing a group key. */
-type ListGroup<T> = {
-  key: string;
-  /** React key: the group key, disambiguated only when the same key recurs non-adjacently. */
-  reactKey: string;
-  rows: T[];
-  /** The full-list index of the group's first row (threads `renderRow`'s global index). */
-  startIndex: number;
-};
-
-const groupConsecutive = <T,>(rows: T[], groupKey: (row: T) => string): ListGroup<T>[] => {
-  const groups: ListGroup<T>[] = [];
-  const runCounts: { [key: string]: number } = {};
-  rows.forEach((row, index) => {
-    const key = groupKey(row);
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup && lastGroup.key === key) {
-      lastGroup.rows.push(row);
-      return;
-    }
-    const runCount = (runCounts[key] = (runCounts[key] ?? 0) + 1);
-    groups.push({ key, reactKey: runCount === 1 ? key : `${key}#${runCount}`, rows: [row], startIndex: index });
-  });
-  return groups;
-};
-
 type ListRowProps<T> = {
   row: T;
   /** The row's position in the full list — threaded to `renderRow`. */
@@ -238,13 +213,13 @@ const stickyHostSx = (hostSx: ScrollTopButtonStyleProps['hostSx'], rowsHeldAlone
 
 /** One thing the windowed list lays out in order: a group header, or a row. */
 type ListCell<T> =
-  | { key: string; kind: 'head'; group: ListGroup<T>; groupIndex: number }
+  | { key: string; kind: 'head'; group: RowGroup<T>; groupIndex: number }
   | { key: string; kind: 'row'; row: T; index: number; groupIndex: number };
 
 /** The rows (and group headers, where a header renderer exists) as the cells the window ranges over, in document order. */
 const buildCells = <T,>(
   rows: T[],
-  groups: ListGroup<T>[] | undefined,
+  groups: RowGroup<T>[] | undefined,
   rowId: (row: T) => string | number,
   withHeads: boolean
 ): ListCell<T>[] => {
@@ -455,7 +430,10 @@ export function List<T>({
     return () => observer.disconnect();
   }, [rows, hasMore, fetchNextWindow]);
 
-  const groups = useMemo(() => (rows && groupKey ? groupConsecutive(rows, groupKey) : undefined), [rows, groupKey]);
+  const groups = useMemo(
+    () => (rows && groupKey ? RowGroups.consecutive(rows, groupKey) : undefined),
+    [rows, groupKey]
+  );
 
   // ── The windowed mode ────────────────────────────────────────────────────────────────────────────────────────────
   const isWindowed = windowed !== undefined;
