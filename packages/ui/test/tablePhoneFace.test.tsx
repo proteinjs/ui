@@ -231,6 +231,23 @@ describe('Table phone card face', () => {
       ]);
     });
 
+    it('two runs that share a key draw their heads with no key given twice', async () => {
+      const errors: string[] = [];
+      const spy = jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(' '));
+      });
+      try {
+        await render(
+          { columns: ['name'], hideColumnHeaders: true, groupKey: byStatus, renderGroupHeader: head },
+          new RowsLoader(keyed(['A', 'A', 'B', 'A']))
+        );
+      } finally {
+        spy.mockRestore();
+      }
+      expect(headNodes()).toHaveLength(3);
+      expect(errors.filter((line) => line.includes('same key'))).toEqual([]);
+    });
+
     it('a head that is nothing draws nothing', async () => {
       const props = {
         columns: ['name'] as Array<keyof Row>,
