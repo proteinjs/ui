@@ -36,6 +36,7 @@ import {
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
 import { TopScrollFade } from '../components/TopScrollFade';
 import { useFormFactor } from '../hooks/useFormFactor';
+import { RowGroups } from '../list/RowGroups';
 
 /**
  * The round-2 cell grammar (reference-driven: Linear's borderless lists, Stripe's density):
@@ -46,6 +47,14 @@ import { useFormFactor } from '../hooks/useFormFactor';
 const bodyCellSx = { borderBottom: 'none', py: 1.25, px: 2 } as const;
 /** How many times a rows-paint may release stale pins before the table accepts them as they render. */
 const MAX_SETTLE_ATTEMPTS = 3;
+/** The one marker a group's head carries on both faces (never a row's own marker). */
+const GROUP_HEAD_ATTRIBUTE = 'data-table-group-head';
+/**
+ * Heads and rows are one flat run of siblings on both faces, never a wrapper around a group or around a row and its
+ * head. This package compiles to es5, so no `flatMap`.
+ */
+const flattenSiblings = (lists: React.ReactNode[][]): React.ReactNode[] =>
+  lists.reduce<React.ReactNode[]>((all, list) => all.concat(list), []);
 const headCellSx = {
   py: 0.75,
   px: 2,
@@ -137,6 +146,19 @@ export type TableProps<T> = {
    * it); the cue carries the phone card face and headerless tables. Off by default.
    */
   topScrollFade?: boolean;
+  /**
+   * Grouping, as the list groups (`List`'s props of the same names, the same shared rule): rows next to each other
+   * that share a key are one group, and a key that comes back later is its own group. The table groups the rows it
+   * holds at every render, so a key that reads the clock (a day's words) is right at the first re-read after
+   * midnight whatever its host last rendered. Absent, the table renders exactly as it does without groups.
+   */
+  groupKey?: (row: T) => string;
+  /**
+   * The head drawn before each group's first row: the consumer's pixels, in a box of the table's with no padding,
+   * hairline, hover or click of its own (on the desk face, one cell spanning every column). A head that comes back
+   * as nothing (null, undefined, false) draws nothing. `groupIndex` lets a consumer treat the first group specially.
+   */
+  renderGroupHeader?: (key: string, rows: T[], groupIndex: number) => React.ReactNode;
 };
 
 export function Table<T>({
@@ -163,6 +185,8 @@ export function Table<T>({
   infiniteScrollLoader,
   scrollTopButton,
   topScrollFade,
+  groupKey,
+  renderGroupHeader,
 }: TableProps<T>) {
   const infiniteScroll = !pagination;
   /**
@@ -259,7 +283,10 @@ export function Table<T>({
     if (isPhone || bodyState !== 'rows') {
       return;
     }
-    const firstRow = tableRef.current?.tBodies[0]?.rows[0];
+    // The first DATA row: a group's head is one cell spanning every column and has no widths to settle.
+    const firstRow = Array.from(tableRef.current?.tBodies[0]?.rows ?? []).find(
+      (row) => !row.hasAttribute(GROUP_HEAD_ATTRIBUTE)
+    );
     const scroller = infScrollContainer;
     if (!firstRow || !scroller) {
       return;
@@ -516,6 +543,24 @@ export function Table<T>({
     );
   };
 
+  /**
+   * The group heads by the index of their group's first row, made at EVERY render over the rows the table holds:
+   * one pass, never a memo. The rows are memoized on the query's data, so a re-read of equal rows hands back the
+   * same rows; a memo on them would keep yesterday's words through midnight's re-read.
+   */
+  const groupHeads: { [startIndex: number]: { key: string; node: React.ReactNode } } = {};
+  if (groupKey && renderGroupHeader) {
+    RowGroups.consecutive(rows, groupKey).forEach((group, groupIndex) => {
+      const node = renderGroupHeader(group.key, group.rows, groupIndex);
+      if (node === null || node === undefined || node === false) {
+        return;
+      }
+      // Keyed by its group, under the table's own prefix: a head that stays through a re-read stays the same
+      // element while rows move between groups, and a group key that reads like a row's index ("0") never meets one.
+      groupHeads[group.startIndex] = { key: `group:${group.reactKey}`, node };
+    });
+  }
+
   /** The phone card list: same body states and handlers as the table face, presented as
    *  stacked hairline-divided cards that can never require horizontal scroll. */
   const renderPhoneList = () => {
@@ -540,64 +585,73 @@ export function Table<T>({
           </Box>
         )}
         {bodyState === 'rows' &&
-          rows.map((row, index) => {
-            index = rowsPerPage * page + index;
-            const isSelected = typeof selectedRows[index] !== 'undefined';
-            const { clickable, disabled } = rowAffordance(row);
-            return (
-              <Box
-                data-table-phone-row
-                key={index}
-                aria-disabled={disabled || undefined}
-                onPointerDown={
-                  clickable
-                    ? (event: React.PointerEvent) => {
-                        pointerDownAt.current = { x: event.clientX, y: event.clientY };
-                      }
-                    : undefined
-                }
-                onClick={
-                  clickable
-                    ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
-                    : undefined
-                }
-                sx={(theme) => ({
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 1,
-                  px: 2,
-                  py: 1.5,
-                  minWidth: 0,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  '&:last-of-type': { borderBottom: 'none' },
-                  ...(isSelected ? { backgroundColor: 'action.selected' } : {}),
-                  ...(clickable ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
-                  ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
-                })}
-              >
-                {selectable && (
-                  <Checkbox
-                    checked={isSelected}
-                    onChange={(event) => {
-                      event.stopPropagation();
-                      toggleSelectRow(index, row);
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                    inputProps={{
-                      'aria-label': 'Select row',
-                    }}
-                    // pulls the checkbox's built-in padding out of the card's edge so the
-                    // glyph aligns with the card gutter and the first label's baseline
-                    sx={{ ml: -1, mt: -1 }}
-                  />
-                )}
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  {columns.map((column, columnIndex) => renderPhoneCardField(row, column, columnIndex))}
-                </Box>
-              </Box>
-            );
-          })}
+          flattenSiblings(
+            rows.map((row, index) => {
+              const head = groupHeads[index];
+              index = rowsPerPage * page + index;
+              const isSelected = typeof selectedRows[index] !== 'undefined';
+              const { clickable, disabled } = rowAffordance(row);
+              return [
+                head ? (
+                  // A plain box before its group's first row: the head is the consumer's pixels.
+                  <Box data-table-group-head key={head.key}>
+                    {head.node}
+                  </Box>
+                ) : null,
+                <Box
+                  data-table-phone-row
+                  key={index}
+                  aria-disabled={disabled || undefined}
+                  onPointerDown={
+                    clickable
+                      ? (event: React.PointerEvent) => {
+                          pointerDownAt.current = { x: event.clientX, y: event.clientY };
+                        }
+                      : undefined
+                  }
+                  onClick={
+                    clickable
+                      ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
+                      : undefined
+                  }
+                  sx={(theme) => ({
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1,
+                    px: 2,
+                    py: 1.5,
+                    minWidth: 0,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    '&:last-of-type': { borderBottom: 'none' },
+                    ...(isSelected ? { backgroundColor: 'action.selected' } : {}),
+                    ...(clickable ? { cursor: 'pointer', '&:active': { backgroundColor: 'action.selected' } } : {}),
+                    ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
+                  })}
+                >
+                  {selectable && (
+                    <Checkbox
+                      checked={isSelected}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        toggleSelectRow(index, row);
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                      inputProps={{
+                        'aria-label': 'Select row',
+                      }}
+                      // pulls the checkbox's built-in padding out of the card's edge so the
+                      // glyph aligns with the card gutter and the first label's baseline
+                      sx={{ ml: -1, mt: -1 }}
+                    />
+                  )}
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    {columns.map((column, columnIndex) => renderPhoneCardField(row, column, columnIndex))}
+                  </Box>
+                </Box>,
+              ];
+            })
+          )}
       </Box>
     );
   };
@@ -706,75 +760,87 @@ export function Table<T>({
           )}
           {bodyState === 'rows' && (
             <TableBody>
-              {rows.map((row, index) => {
-                index = rowsPerPage * page + index;
-                const isSelected = typeof selectedRows[index] !== 'undefined';
-                const { clickable, disabled } = rowAffordance(row);
-                return (
-                  <TableRow
-                    // A row judged not clickable neither lights on hover nor says it would.
-                    hover={!disabled}
-                    tabIndex={-1}
-                    key={index}
-                    selected={isSelected}
-                    aria-disabled={disabled || undefined}
-                    // Clickable rows say so: the framework never signaled the row-click door.
-                    sx={(theme) => ({
-                      ...(clickable ? { cursor: 'pointer' } : {}),
-                      ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
-                    })}
-                    onPointerDown={
-                      clickable
-                        ? (event: React.PointerEvent) => {
-                            pointerDownAt.current = { x: event.clientX, y: event.clientY };
-                          }
-                        : undefined
-                    }
-                    onClick={
-                      clickable
-                        ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
-                        : undefined
-                    }
-                  >
-                    {selectable && (
-                      <TableCell padding='checkbox' sx={{ borderBottom: 'none' }}>
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={(event) => {
-                            event.stopPropagation();
-                            toggleSelectRow(index, row);
-                          }}
-                          onClick={(event) => event.stopPropagation()}
-                          inputProps={{
-                            'aria-label': 'Select row',
-                          }}
-                        />
-                      </TableCell>
-                    )}
-                    {columns.map((column, index) => {
-                      const { value: cellValue, isCustomRendered, text } = formatCellValue(row[column], column, row);
-                      const { sx: cellSx, ...cellRest } = columnConfig?.[column]?.cellProps ?? {};
-                      return (
-                        <TableCell
-                          key={index}
-                          // Base grammar first, the consumer's cellProps.sx after — per-column
-                          // overrides always win.
-                          sx={[bodyCellSx, ...(Array.isArray(cellSx) ? cellSx : [cellSx])]}
-                          {...cellRest}
-                        >
-                          {isCustomRendered || text === undefined ? (
-                            cellValue
-                          ) : (
-                            // Plain text sits on body2 and clamps at three lines: a long value
-                            // gets a bounded seat, never the whole row.
-                            <ClampedTextCellValue>{text}</ClampedTextCellValue>
-                          )}
+              {flattenSiblings(
+                rows.map((row, index) => {
+                  const head = groupHeads[index];
+                  index = rowsPerPage * page + index;
+                  const isSelected = typeof selectedRows[index] !== 'undefined';
+                  const { clickable, disabled } = rowAffordance(row);
+                  return [
+                    head ? (
+                      // One cell spanning every column (the checkbox column included): no hover, no click handler, no
+                      // border and no padding of its own.
+                      <TableRow data-table-group-head key={head.key}>
+                        <TableCell colSpan={totalColumns} sx={{ p: 0, borderBottom: 'none' }}>
+                          {head.node}
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                );
-              })}
+                      </TableRow>
+                    ) : null,
+                    <TableRow
+                      // A row judged not clickable neither lights on hover nor says it would.
+                      hover={!disabled}
+                      tabIndex={-1}
+                      key={index}
+                      selected={isSelected}
+                      aria-disabled={disabled || undefined}
+                      // Clickable rows say so: the framework never signaled the row-click door.
+                      sx={(theme) => ({
+                        ...(clickable ? { cursor: 'pointer' } : {}),
+                        ...(disabled ? { opacity: theme.palette.action.disabledOpacity } : {}),
+                      })}
+                      onPointerDown={
+                        clickable
+                          ? (event: React.PointerEvent) => {
+                              pointerDownAt.current = { x: event.clientX, y: event.clientY };
+                            }
+                          : undefined
+                      }
+                      onClick={
+                        clickable
+                          ? (event: React.MouseEvent) => handleRowOnClick(row, event, rowOnClick!, navigate)
+                          : undefined
+                      }
+                    >
+                      {selectable && (
+                        <TableCell padding='checkbox' sx={{ borderBottom: 'none' }}>
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              toggleSelectRow(index, row);
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            inputProps={{
+                              'aria-label': 'Select row',
+                            }}
+                          />
+                        </TableCell>
+                      )}
+                      {columns.map((column, index) => {
+                        const { value: cellValue, isCustomRendered, text } = formatCellValue(row[column], column, row);
+                        const { sx: cellSx, ...cellRest } = columnConfig?.[column]?.cellProps ?? {};
+                        return (
+                          <TableCell
+                            key={index}
+                            // Base grammar first, the consumer's cellProps.sx after — per-column
+                            // overrides always win.
+                            sx={[bodyCellSx, ...(Array.isArray(cellSx) ? cellSx : [cellSx])]}
+                            {...cellRest}
+                          >
+                            {isCustomRendered || text === undefined ? (
+                              cellValue
+                            ) : (
+                              // Plain text sits on body2 and clamps at three lines: a long value
+                              // gets a bounded seat, never the whole row.
+                              <ClampedTextCellValue>{text}</ClampedTextCellValue>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>,
+                  ];
+                })
+              )}
             </TableBody>
           )}
         </MuiTable>
