@@ -102,13 +102,13 @@ describe('Table infinite scroll — the pager pages and the loader tells the tru
     container.remove();
   });
 
-  const mount = async (loader: ScriptedLoader) => {
+  const mount = async (loader: ScriptedLoader, props: Partial<React.ComponentProps<typeof Table<Row>>> = {}) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } });
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter>
-            <Table<Row> title='Migrations' columns={['description', 'status']} tableLoader={loader} />
+            <Table<Row> title='Migrations' columns={['description', 'status']} tableLoader={loader} {...props} />
           </MemoryRouter>
         </QueryClientProvider>
       );
@@ -167,5 +167,29 @@ describe('Table infinite scroll — the pager pages and the loader tells the tru
     // Data ended: no more sentinel, no loader — an honest, quiet bottom.
     expect(sentinel()).toBeFalsy();
     expect(loaderShown()).toBe(false);
+  });
+
+  it('a grouped table pages the same way, and a group that carries across a page boundary keeps its one head', async () => {
+    // Rows 1 to 15 share a key and rows 16 to 23 share another: at ten rows a page each group carries across a
+    // boundary. The table groups every row it holds, so each has one head however many pages have landed.
+    const loader = new ScriptedLoader();
+    await mount(loader, {
+      groupKey: (row) => (Number(row.description.replace('Migration ', '')) <= 15 ? 'first fifteen' : 'the rest'),
+      renderGroupHeader: (key) => <span>{key}</span>,
+    });
+    const heads = () =>
+      Array.from(container.querySelectorAll('tbody tr[data-table-group-head]')).map((head) => head.textContent);
+    const dataRows = () => container.querySelectorAll('tbody tr:not([data-table-group-head])').length;
+    expect([heads(), dataRows()]).toEqual([['first fifteen'], 10]);
+
+    await fireSentinel();
+    expect([heads(), dataRows()]).toEqual([['first fifteen', 'the rest'], 20]);
+    await fireSentinel();
+    expect([heads(), dataRows()]).toEqual([['first fifteen', 'the rest'], ROW_COUNT]);
+    // Each head stands before its group's first row.
+    const body = Array.from(container.querySelectorAll('tbody tr'));
+    expect(body[0].textContent).toBe('first fifteen');
+    expect(body[16].textContent).toBe('the rest');
+    expect(body[17].textContent).toContain('Migration 16');
   });
 });
