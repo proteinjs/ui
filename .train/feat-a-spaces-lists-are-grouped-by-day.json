@@ -1,12 +1,13 @@
 {
-  "branch": "feat/table-groups-like-the-list",
-  "packages": ["ui"],
+  "branch": "feat/a-spaces-lists-are-grouped-by-day",
+  "packages": [
+    "ui"
+  ],
   "suites": [
     "packages/ui/test/list.test.tsx",
     "packages/ui/test/listFoot.test.tsx",
     "packages/ui/test/listRowMemo.test.tsx",
     "packages/ui/test/listWindowed.test.tsx",
-    "packages/ui/test/prependSafeScroller.test.tsx",
     "packages/ui/test/scrollTopButton.test.tsx",
     "packages/ui/test/tableDefaultCellValues.test.tsx",
     "packages/ui/test/tableInfiniteScroll.test.tsx",
@@ -20,10 +21,11 @@
   ],
   "removes": [],
   "section": {
-    "heading": "## Lists (proteinjs ui) \u2014 a table can draw a head over each group of its rows",
-    "text": "- A table can group its rows the way a list does: one head before each run of rows that share a key, on the phone and on the desktop, while every row looks and works exactly as before. A table with no groups is unchanged.",
+    "heading": "## Lists (proteinjs ui) — a table can show a heading over each group of its rows",
+    "text": "- A table can show a heading over each group of its rows, as a list already can, however many pages of rows it has loaded; a table with no groups looks and works as before.",
     "smoke": [
-      "- Nothing to try on its own: it is what lets a space's chats list and thoughts list sit under day headings, which ride a later space change with their own smoke line."
+      "- In a space, open the Chats list: its rows sit under day headings (Today, Yesterday and earlier).",
+      "- Scroll a long Chats list until more rows load: each day still has one heading."
     ]
   }
 }
