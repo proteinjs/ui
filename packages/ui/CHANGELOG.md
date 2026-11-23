@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [4.24.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.23.1...@proteinjs/ui@4.24.0) (2026-11-23)
+
+
+### Features
+
+* **table:** group rows under heads the way the list does ([3368779](https://github.com/proteinjs/ui/commit/3368779ac7a4709b21ffa370b57c34d360726881))
+
+
+
+
+
 ## [4.23.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.23.0...@proteinjs/ui@4.23.1) (2026-11-12)
 
 
