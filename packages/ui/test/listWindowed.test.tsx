@@ -46,9 +46,10 @@
  * 11. THE LAW (row 3435 — his finding on test, 2026-11-11: on his phone one press of Home's back-to-top ended short of
  *     the top): THE BROWSER HOLDS THE LIST'S PLACE UNDER WHAT STANDS ABOVE IT; THE LIST HOLDS ITS ROWS. Under a browser
  *     that ANCHORS (WebKit from iOS 27; the stand-in below): several screens down, ONE press, the motion settled — the
- *     scroller at its top, the first row first in view, the button gone, nothing written (11a); under a fling no rest
- *     is declared at a window commit while the scroll goes on, so what is owed is written at the fling's own end, never
- *     under its momentum (11b). Who declares what (11c): while the window's engine is mounted the list's root is a
+ *     scroller at its top, the first row first in view, the button gone, nothing written (11a). No 11b: a fling's
+ *     case left when the rest came to be judged by the clock (prependSafeScroller's `onRest` cases hold that a
+ *     `scrollend` with the scroll going on is no rest). Who declares what (11c): while the window's engine is mounted
+ *     the list's root is a
  *     candidate of the browser's anchoring and every child of the root is not — the foot's box from its first render,
  *     each element of a row, a row that replaces its own box on a commit that is not the list's and a child the list's
  *     own later commit adds among them — a sibling of the list in the same scroller stays one and the scroller declares
@@ -277,12 +278,12 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   }
   return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
-// ── THE BROWSER'S SCROLL ANCHORING, ITS ANIMATED SCROLL AND ITS FLING (pin 11; the witnesses are the simulator on
+// ── THE BROWSER'S SCROLL ANCHORING AND ITS ANIMATED SCROLL (pin 11; the witnesses are the simulator on
 //    iOS 27.2 and the harness's WebKit and Chromium over the real Home, 2026-11-11 and 11-12). The stand-in has TWO
 //    JOBS. (i) THE ROWS: a browser that anchors answers a layout change inside a scroller with an adjustment on a
 //    candidate row. Under `scrollTo({ behavior: 'smooth' })` — an animation the browser steps per tick, a scroll event
 //    each, never a write — that adjustment ends the animation where it stands: a `scrollend`, short of the target.
-//    Under a fling it fires `scrollend` and the momentum goes on. A write to scrollTop ends an animation too. The
+//    A write to scrollTop ends an animation too. The
 //    browser chooses its anchor at a LAYOUT, and a page that reads a rect asks for one: a row that is a candidate at
 //    any layout since the last tick is a row the adjustment can land on. (ii) THE LIST'S PLACE: what stands above the
 //    list in the same scroller changes height, and the browser moves the offset by as much — its own adjustment, a
@@ -356,8 +357,6 @@ const layoutSignature = (scroller: HTMLElement): string => {
   return `${reservoir ? `${reservoir.style.height}/${reservoir.style.marginBottom}` : ''}|${rows.length}|${rows.length > 0 ? rows[0].getAttribute('data-row') : ''}`;
 };
 let animation: { target: number } | null = null;
-/** A fling's momentum runs (11b): the browser lays out under it as it does under its own animation. */
-let momentum = false;
 let layoutAtLastTick = '';
 /** A row was a candidate at a layout since the last tick. */
 let rowChosenAtALayout = false;
@@ -370,7 +369,7 @@ let rowChosenAtALayout = false;
  * (iOS 27.2 and WebKit at round 4's tip: thrown back), and none ever did where the browser does not anchor.
  */
 const browserLaysOut = (scroller: HTMLElement) => {
-  if ((animation || momentum) && !rowChosenAtALayout) {
+  if (animation && !rowChosenAtALayout) {
     rowChosenAtALayout = anchoringHasACandidate(scroller);
   }
   if (clientHeight > 0) {
@@ -412,14 +411,6 @@ const engineTick = (scroller: HTMLElement, stepPx: number): boolean => {
     scroller.dispatchEvent(new Event('scrollend'));
   }
   return true;
-};
-/** One tick of a fling's momentum, downward: where the anchoring adjusts it fires `scrollend` — and the scroll goes on. */
-const flingTick = (scroller: HTMLElement, stepPx: number) => {
-  if (anchoringAdjusts(scroller)) {
-    scroller.dispatchEvent(new Event('scrollend'));
-  }
-  scrollTopValue += stepPx;
-  scroller.dispatchEvent(new Event('scroll'));
 };
 /**
  * The stand-in's second job: the block above the list (`above`, the list's root its next sibling) grows by `px`, and
@@ -728,7 +719,6 @@ describe('List — the windowed mode over the reservoir', () => {
     hostTop = 0;
     scrollTopValue = 0;
     animation = null;
-    momentum = false;
     rowChosenAtALayout = false;
     scroller = document.createElement('div');
     modelScroller(scroller);
@@ -1307,50 +1297,6 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(reservoirPx()).toBe(0);
     expect(writes).toEqual([]);
     expect(button().getAttribute('data-shown')).toBe('false');
-  });
-
-  test('11b. the list holds its rows, under a fling: no rest is declared at a window commit while the scroll goes on — what is owed is written at the fling’s own end, never under its momentum', async () => {
-    const loader = new CorpusLoader(keys(), corpusOf(300));
-    await mountList(loader, 300);
-    await frame();
-    await readerScrollsDownTo(2_000);
-    // The finger flicks and lifts; as the momentum begins a row above the reader grows — absorbed, owed to the rest.
-    await act(async () => {
-      const row = boxOf(readerRow());
-      row.dispatchEvent(new Event('touchstart', { bubbles: true }));
-      row.dispatchEvent(new Event('touchend', { bubbles: true }));
-    });
-    layoutAtLastTick = layoutSignature(scroller);
-    momentum = true;
-    await grows(rowAbove(), 40);
-    expect(writes).toEqual([]);
-
-    // The momentum, a scroll event per tick, through several window commits. The red: the anchoring answers each
-    // commit with a `scrollend`, the rest is declared under the momentum and the debt's write lands under it.
-    let commits = 0;
-    let first = mountedIds()[0];
-    for (let k = 0; k < 12; k++) {
-      flingTick(scroller, 200);
-      await frame();
-      if (mountedIds()[0] !== first) {
-        commits++;
-        first = mountedIds()[0];
-      }
-      expect(writes).toEqual([]);
-    }
-    expect(commits).toBeGreaterThanOrEqual(2);
-    // The fling's own end — the browser's one `scrollend`, a true stop — and the rest after it: the debt paid, once,
-    // the reader's row holding.
-    momentum = false;
-    const reader = readerRow();
-    const offset = topOf(reader);
-    await act(async () => {
-      scroller.dispatchEvent(new Event('scrollend'));
-    });
-    expect(writes).toEqual([]);
-    await rest();
-    expect(writes.length).toBe(1);
-    expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
   });
 
   test('11c. who declares what: while the window’s engine is mounted the list’s root is a candidate of the browser’s anchoring and every child of the root is not — the foot’s box from its first render, each element of a row, a row that replaces its own box on a commit that is not the list’s and a child the list’s own later commit adds among them — a sibling of the list stays one and the scroller declares nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed with no scrollable ancestor, declares nothing', async () => {
