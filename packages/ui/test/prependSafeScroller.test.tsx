@@ -549,7 +549,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(reservoirOf(scroller).style.height).toBe('0px');
     act(() => {
       harness.replace(rows(1, 10, 100)); // the head page lands …
-      harness.setRemaining(40); // … with the consumer's count of rows above, in the same commit (a chat's own shape)
+      harness.setRemaining(40); // … with the consumer's count of rows above, in the same commit
     });
     // AT THE COMMIT: the room for 40 rows at the seed estimate (no row was measured while the list was empty), the
     // scroller's height with it, and nothing written — the consumer's own park is the one write of an open.
@@ -591,7 +591,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(reservoirOf(scroller).style.height).toBe('600px');
   });
 
-  test('the list REPLACED (another chat’s rows and count in one commit): sized at the commit the same way, no step', () => {
+  test('the list REPLACED (another list’s rows and count in one commit): sized at the commit the same way, no step', () => {
     const { harness, scroller } = mount({ initial: rows(1, 10, 100), remaining: 0 });
     expect(reservoirOf(scroller).style.height).toBe('0px');
     act(() => {
@@ -773,7 +773,7 @@ describe('the gate — one reopen per commit', () => {
 
 describe('the gate — the scroller’s own box', () => {
   test('rows that landed while the scroller had no box: the box arriving re-judges the lead — asked once, not at the mount, not at the landing, not again in flight, never on a shrink; the landing re-judges as ever', () => {
-    clientHeight = 0; // the pane has no geometry yet: a chat pane mounted display:none and laid out later
+    clientHeight = 0; // the pane has no geometry yet: a pane mounted display:none and laid out later
     const asks: number[] = [];
     const { harness, scroller } = mount({
       initial: rows(1, 10, 100),
@@ -999,7 +999,7 @@ describe('onRest — the one rest definition', () => {
     scroller.appendChild(word);
     touch('touchstart', word, 1);
     expect(rest.armDown).toBe(true);
-    // A streaming reply replaces the text under the finger; the engine sends the lift to the element the touch
+    // The content under the finger is replaced; the engine sends the lift to the element the touch
     // began on, which no longer has the scroller above it.
     word.remove();
     touch('touchend', word, 1);

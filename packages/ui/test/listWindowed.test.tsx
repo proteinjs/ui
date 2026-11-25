@@ -8,7 +8,7 @@
  * and `getBoundingClientRect` is counted on the scroll path. The budgets the pins read: `LIST_WINDOW_SCREENS` (the
  * margin) and `PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS` (the lead — the library's one lead constant).
  *
- * The pins, as outcomes (the rows 3234 bar — a list that mounts every row is the class his finding names):
+ * The pins, as outcomes (the bar: a windowed list does not mount every row):
  *  1. THE MOUNTED DOM IS BOUNDED BY THE VIEWPORT: 1,000 loaded rows, at most the viewport plus a margin each side in
  *     the document (read from the DOM), the rows above as the reservoir, the rows below as the spacer; the scroll
  *     height is the whole list's; a jump to the middle mounts the middle.
@@ -26,24 +26,24 @@
  *  7. GROUP HEADS: a group's head renders once; a group cut by the window keeps its container and its rows.
  *  8. NO GEOMETRY, EVERY ROW (the hidden pane; jsdom): without a box the list mounts every row as it always has, the
  *     sentinel still pulling; the window begins when the box arrives.
- *  9. HIDDEN AFTER A WINDOW, THEN SHOWN (round 2 — the refuter's R1/R2): a pane whose box goes to 0 after a window
+ *  9. HIDDEN AFTER A WINDOW, THEN SHOWN: a pane whose box goes to 0 after a window
  *     stood mounts every row as 8 says, and the FIRST frame with the box back resumes the window, bounded — from the
  *     top and from the middle at the same offset; the reservoir is the rows above the window alone (no drift absorbed
  *     against the hidden layout) and nothing is written.
- * 10. THE HIDDEN INTERVAL (round 3 — the refuter's R4/R5/R6; the display:none shape in full: the box's observer AND the
+ * 10. THE HIDDEN INTERVAL (the display:none shape in full: the box's observer AND the
  *     cells' zero report and re-report, in the spec's order): while the box is 0 and until the first frame after it
  *     returns, no judgment against layout — the anchors neither recorded nor read, a cell's report a measurement never
  *     growth, no reconcile step — so a show at the end, from the middle and at the top resumes the window on the first
  *     frame with the reservoir the rows above it, nothing absorbed (the paint the show's reports leave is the hidden
  *     one), nothing written, the reader's row held; a debt the hide interrupted stands through the interval and is
  *     paid at the first rest after the show, in one write.
- *     Round 4 (the refuter's R7/R17b), the scroller BELOW A BAR (the real Home: the greeting and the pins above the
+ *     The scroller BELOW A BAR (a page's own header above the
  *     list — at viewport top 0 a hide whose cells report before its box absorbs nothing): a cell's ZERO under the box
  *     of 0 is no measurement — the map keeps its last real height, so a reveal staged over two commits (the box back
  *     and its first frame before the cells' re-report) derives that frame's window from the rows' heights (10e); and
  *     the box's observer is created before the cells', so the hide's one broadcast opens the interval before a cell
  *     reports under it (10f — red when the order is swapped).
- * 11. THE LAW (row 3435 — his finding on test, 2026-11-11: on his phone one press of Home's back-to-top ended short of
+ * 11. THE LAW (seen on iOS 27: one press of the list's scroll-to-top button ended short of
  *     the top): THE BROWSER HOLDS THE LIST'S PLACE UNDER WHAT STANDS ABOVE IT; THE LIST HOLDS ITS ROWS. Under a browser
  *     that ANCHORS (WebKit from iOS 27; the stand-in below): several screens down, ONE press, the motion settled — the
  *     scroller at its top, the first row first in view, the button gone, nothing written (11a). No 11b: a fling's
@@ -55,7 +55,7 @@
  *     own later commit adds among them — a sibling of the list in the same scroller stays one and the scroller declares
  *     nothing; all of it is taken back when the list leaves the windowed mode; a list that is not windowed, or windowed
  *     with no scrollable ancestor, declares nothing. The browser's side (11d): what stands above the list grows under a
- *     reader deep in it — the reader's row does not move. HOME'S SHAPE (11e — the one windowed list in the house is
+ *     reader deep in it — the reader's row does not move. THE GROUPED SHAPE (11e — a windowed list whose rows are
  *     GROUPED): the same one press under the same browser, each group box out with its rows, the root in. THE FOOT AT
  *     THE TAIL (11f): a child of the root left a candidate is the only one under it, and the browser holds IT — so the
  *     consumer's foot is drawn inside a box of the list's own that is out from its first render: bare text, a box
@@ -224,7 +224,7 @@ const paneDisplay = (scroller: Element, height: number, part: 'all' | 'box' | 'c
 // ── The layout model: the document order of the reservoir, the cell boxes (`data-h`) and the spacer below. ──
 const CLIENT_HEIGHT = 600;
 const ROW_H = 52;
-/** The bar above the scroller (the real Home: the greeting and the pins): the scroller's top in the viewport. */
+/** The bar above the scroller (a page's own header above the list): the scroller's top in the viewport. */
 const BAR_H = 56;
 let clientHeight = CLIENT_HEIGHT;
 /** The scroller's top in the viewport — 0, or `BAR_H` for a list mounted below the bar. */
@@ -279,7 +279,7 @@ Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
   return entry ? rect(hostTop + entry.top - scrollTopValue, hostTop + entry.bottom - scrollTopValue) : rect(0, 0);
 };
 // ── THE BROWSER'S SCROLL ANCHORING AND ITS ANIMATED SCROLL (pin 11; the witnesses are the simulator on
-//    iOS 27.2 and the harness's WebKit and Chromium over the real Home, 2026-11-11 and 11-12). The stand-in has TWO
+//    iOS 27.2 and a harness's WebKit and Chromium over a real page, 2026-11-11 and 11-12). The stand-in has TWO
 //    JOBS. (i) THE ROWS: a browser that anchors answers a layout change inside a scroller with an adjustment on a
 //    candidate row. Under `scrollTo({ behavior: 'smooth' })` — an animation the browser steps per tick, a scroll event
 //    each, never a write — that adjustment ends the animation where it stands: a `scrollend`, short of the target.
@@ -701,7 +701,7 @@ describe('List — the windowed mode over the reservoir', () => {
   /** What declares `overflow-anchor: none` at a list: its root, or a box under it. */
   const declaring = (listRootEl: HTMLElement) =>
     (declaresAnchorNone(listRootEl) ? ['root'] : []).concat(kinds(boxesUnder(listRootEl).filter(declaresAnchorNone)));
-  /** The list mounted in a scroller below the bar (the real Home) — where a hide's judgment against layout bites. */
+  /** The list mounted in a scroller below the bar (a page header) — where a hide's judgment against layout bites. */
   const mountBelowABar = async (loader: CorpusLoader, windowSize: number) => {
     hostTop = BAR_H;
     await mountList(loader, windowSize);
@@ -1020,7 +1020,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(belowPx()).toBe((60 - mountedIds().length) * ROW_H);
   });
 
-  test('9a. hidden after a window, then shown at the top (round 2, the refuter’s R1): every row mounts while the box is 0, and the first frame with the box back resumes the window, bounded', async () => {
+  test('9a. hidden after a window, then shown at the top: every row mounts while the box is 0, and the first frame with the box back resumes the window, bounded', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -1045,7 +1045,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(writes).toEqual([]);
   });
 
-  test('9b. the same from the middle, shown at the same offset (the refuter’s R2): the window resumes bounded on the first frame and the reservoir is the rows above it alone — no drift absorbed against the hidden layout, nothing written', async () => {
+  test('9b. the same from the middle, shown at the same offset: the window resumes bounded on the first frame and the reservoir is the rows above it alone — no drift absorbed against the hidden layout, nothing written', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -1106,7 +1106,7 @@ describe('List — the windowed mode over the reservoir', () => {
     return { atReports, atFrame, atRest };
   };
 
-  test('10a. hidden with the reader at the END, then shown (round 3, the refuter’s R4): no anchor is recorded against the hidden layout — the window resumes at the end on the first frame, the reservoir the rows above it, nothing absorbed, nothing written, the reader’s row held', async () => {
+  test('10a. hidden with the reader at the END, then shown: no anchor is recorded against the hidden layout — the window resumes at the end on the first frame, the reservoir the rows above it, nothing absorbed, nothing written, the reader’s row held', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -1131,7 +1131,7 @@ describe('List — the windowed mode over the reservoir', () => {
     });
   });
 
-  test('10b. hidden from the MIDDLE, then shown (the refuter’s R5): the cells’ re-reports are measurements, not growth above the reader — nothing absorbed, nothing written at the rest, the reader’s row held', async () => {
+  test('10b. hidden from the MIDDLE, then shown: the cells’ re-reports are measurements, not growth above the reader — nothing absorbed, nothing written at the rest, the reader’s row held', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -1154,7 +1154,7 @@ describe('List — the windowed mode over the reservoir', () => {
     });
   });
 
-  test('10c. hidden at the TOP, then shown (the refuter’s R6): the first row’s re-report is not absorbed — the paint the show’s reports leave is the hidden one, not a row cut by its own height; nothing written, the reader on row 0', async () => {
+  test('10c. hidden at the TOP, then shown: the first row’s re-report is not absorbed — the paint the show’s reports leave is the hidden one, not a row cut by its own height; nothing written, the reader on row 0', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountList(loader, 1000);
     await frame();
@@ -1206,7 +1206,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(topOf(reader)).toBe(offset);
   });
 
-  test('10e. the show STAGED over two commits — the box back and its first frame BEFORE the cells’ re-report (round 4, the refuter’s R7): a cell’s zero under the hidden box is no measurement — the frame derives the window from the rows’ heights, the whole height counting every row; the re-reports measure, absorb nothing, write nothing', async () => {
+  test('10e. the show STAGED over two commits — the box back and its first frame BEFORE the cells’ re-report: a cell’s zero under the hidden box is no measurement — the frame derives the window from the rows’ heights, the whole height counting every row; the re-reports measure, absorb nothing, write nothing', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountBelowABar(loader, 1000);
     await frame();
@@ -1254,7 +1254,7 @@ describe('List — the windowed mode over the reservoir', () => {
     });
   });
 
-  test('10f. the observers’ order, the scroller below a bar (round 4, the refuter’s R17b): the box’s observer is created before the cells’, so the hide’s one broadcast opens the interval before a cell reports under it — the reservoir untouched while hidden, nothing written at the rest, the reader’s row held', async () => {
+  test('10f. the observers’ order, the scroller below a bar: the box’s observer is created before the cells’, so the hide’s one broadcast opens the interval before a cell reports under it — the reservoir untouched while hidden, nothing written at the rest, the reader’s row held', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     await mountBelowABar(loader, 1000);
     await frame();
@@ -1277,7 +1277,7 @@ describe('List — the windowed mode over the reservoir', () => {
     });
   });
 
-  test('11a. the list holds its rows, under a browser that anchors (row 3435 — his phone on iOS 27: one press ended short): several screens down, ONE press, the motion settled — the scroller at its top, the first row first in view, the button gone, nothing written', async () => {
+  test('11a. the list holds its rows, under a browser that anchors (iOS 27: one press ended short): several screens down, ONE press, the motion settled — the scroller at its top, the first row first in view, the button gone, nothing written', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     await mountList(loader, 300, { scrollTopButton: true });
     await frame();
@@ -1288,7 +1288,7 @@ describe('List — the windowed mode over the reservoir', () => {
 
     // The red: the first window commit under the animation is a layout change with the rows as the anchoring's
     // candidates — the adjustment ends the animation, the scroller rests where that left it (5,600 of 6,000), the button
-    // still up: his "it takes two taps".
+    // still up: it takes two presses.
     await press();
     await settle();
     expect(scrollTopValue).toBe(0);
@@ -1394,7 +1394,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(kindsUnder(listRoot())).toEqual(['row', 'sentinel', 'span', 'strip']);
     expect(declaring(listRoot())).toEqual([]);
 
-    // NO ENGINE — `windowed` handed to a list with no scrollable ancestor (round 2's review, RT2): nothing is declared;
+    // NO ENGINE — `windowed` handed to a list with no scrollable ancestor: nothing is declared;
     // the browser's anchoring is the only holder its rows have, and keeps them.
     const plain = document.createElement('div');
     document.body.appendChild(plain);
@@ -1426,7 +1426,7 @@ describe('List — the windowed mode over the reservoir', () => {
     }
   });
 
-  test('11d. the browser holds the list’s place under what stands above it (the pins row appearing above a reader deep in Home): the block above the list grows — the reader’s row does not move, nothing written', async () => {
+  test('11d. the browser holds the list’s place under what stands above it (a strip appearing above a reader deep in the list): the block above the list grows — the reader’s row does not move, nothing written', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     render(
       <>
@@ -1447,7 +1447,7 @@ describe('List — the windowed mode over the reservoir', () => {
     const offset = topOf(reader);
 
     // The red at round 3's tip (the list's ROOT out of the anchoring): nothing in the list is the browser's to hold,
-    // the offset stays and the reader's row moves down by the growth — 108 px, the pins row on the real Home.
+    // the offset stays and the reader's row moves down by the growth — 108 px, the strip that appears above the list.
     await act(async () => {
       growsAboveTheList(scroller, above(), 108);
     });
@@ -1457,7 +1457,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(writes).toEqual([]);
   });
 
-  test('11e. Home’s shape — a GROUPED windowed list under a browser that anchors (the one windowed list in the house is grouped): several screens down, ONE press, the motion settled — the scroller at its top, the first head and its first row first in view, the button gone, nothing written; each group box out of the anchoring, the root in it', async () => {
+  test('11e. the grouped shape — a GROUPED windowed list under a browser that anchors: several screens down, ONE press, the motion settled — the scroller at its top, the first head and its first row first in view, the button gone, nothing written; each group box out of the anchoring, the root in it', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(300));
     const HEAD_H = 40;
     await mountList(loader, 300, {
