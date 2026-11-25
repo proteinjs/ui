@@ -1,0 +1,21 @@
+{
+  "branch": "fix/a-lists-rest-is-judged-by-the-clock",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/list.test.tsx",
+    "packages/ui/test/listFoot.test.tsx",
+    "packages/ui/test/listRowMemo.test.tsx",
+    "packages/ui/test/listWindowed.test.tsx",
+    "packages/ui/test/prependSafeScroller.test.tsx",
+    "packages/ui/test/scrollTopButton.test.tsx"
+  ],
+  "removes": [],
+  "section": {
+    "heading": "## Lists (proteinjs ui) — a scrolling list adjusts its position once it has been still",
+    "text": "- A list that loads more rows as you scroll adjusts its position once it has been still for 150 ms with no finger on it.",
+    "smoke": [
+      "- In a long list that loads earlier rows as you scroll up, flick, then catch the list with a finger and hold a second before lifting: the rows stay where your finger stopped them.",
+      "- In a long windowed list, scroll far down and press its scroll-to-top button once: the list reaches the top."
+    ]
+  }
+}
