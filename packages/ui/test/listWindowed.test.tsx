@@ -80,7 +80,26 @@ import { ScrollRest } from '../src/list/ScrollRest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-// ── Frames: requestAnimationFrame as a manual pump. ──
+// ── The clock: the engine's rest is CLOCK time (ScrollRest.QUIET_MS), so the suite holds jest's timers and their
+//    clock and moves them a frame at a time. A real task's wait (the loader's promises, react-query's deliveries)
+//    keeps the real timer, and the suite's deadlines the real date. ──
+const realSetTimeout = setTimeout;
+jest.useFakeTimers({
+  doNotFake: [
+    'Date',
+    'hrtime',
+    'nextTick',
+    'queueMicrotask',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'requestIdleCallback',
+    'cancelIdleCallback',
+    'setImmediate',
+    'clearImmediate',
+  ],
+});
+
+// ── Frames: requestAnimationFrame as a manual pump; a frame takes a 60 Hz screen's FRAME_MS of the clock. ──
 const frameQueue: Array<{ id: number; cb: FrameRequestCallback }> = [];
 let frameSeq = 0;
 window.requestAnimationFrame = (cb: FrameRequestCallback) => {
@@ -94,12 +113,16 @@ window.cancelAnimationFrame = (id: number) => {
     frameQueue.splice(index, 1);
   }
 };
+const FRAME_MS = 16;
 const pumpFrames = (count: number) => {
   for (let k = 0; k < count; k++) {
+    jest.advanceTimersByTime(FRAME_MS);
     const batch = frameQueue.splice(0);
     batch.forEach((frame) => frame.cb(performance.now()));
   }
 };
+/** The frames in which the engine's rest is reached with nothing scrolling — QUIET_MS on the clock — and one more. */
+const REST_FRAMES = Math.ceil(ScrollRest.QUIET_MS / FRAME_MS) + 1;
 
 // ── IntersectionObserver stub: the sentinel's observer, never intersecting unless a case fires it. ──
 type IOCallback = (entries: Array<{ isIntersecting: boolean }>) => void;
@@ -555,7 +578,7 @@ describe('List — the windowed mode over the reservoir', () => {
 
   const flush = async () => {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => realSetTimeout(resolve, 0));
     });
   };
   const waitFor = async (predicate: () => boolean, what: string) => {
@@ -606,16 +629,16 @@ describe('List — the windowed mode over the reservoir', () => {
     await waitFor(() => loader.loads.length >= 1 && scroller.querySelector('[data-row]') !== null, 'the first window');
   };
   const button = () => scroller.querySelector('button[aria-label="Back to top"]') as HTMLButtonElement;
-  /** The engine's rest: QUIET_FRAMES quiet frames, and one more. */
+  /** The engine's rest: QUIET_MS on the clock with no scroll event, and one more frame. */
   const rest = async () => {
     await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
+      pumpFrames(REST_FRAMES);
     });
   };
   /**
    * THE PRESS, as a finger makes it: the touch lands on the button (inside the scroller), lifts, the click follows —
-   * and the lift's watch reaches its rest BEFORE the animation's first scroll event (the device: the click 49 ms after
-   * the touchend, the first scroll event 38 ms after the click; three frames are 50 ms, 25 at 120 Hz).
+   * and the lift on a still list is its rest, reached BEFORE the animation's first scroll event (the device: the click
+   * 49 ms after the touchend, the first scroll event 38 ms after the click).
    */
   const press = async () => {
     await act(async () => {
@@ -901,10 +924,8 @@ describe('List — the windowed mode over the reservoir', () => {
     const offset = topOf(anchor);
     expect(reservoirPx()).toBeLessThan(0);
 
-    // The rest: QUIET_FRAMES quiet frames — ONE write, the reader's row still at its offset, the debt paid.
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
-    });
+    // The rest — ONE write, the reader's row still at its offset, the debt paid.
+    await rest();
     expect(writes.length).toBe(1);
     expect(Math.abs(topOf(anchor) - offset)).toBeLessThanOrEqual(0.5);
     expect(reservoirPx()).toBe(0);
@@ -917,9 +938,7 @@ describe('List — the windowed mode over the reservoir', () => {
     await frame();
     readerScrollsTo(scroller, 2_000);
     await frame();
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1); // at rest, nothing owed
-    });
+    await rest(); // at rest, nothing owed
     expect(writes).toEqual([]);
     const above = mountedIds()[0];
     expect(boxOf(above).getBoundingClientRect().bottom).toBeLessThan(0);
@@ -939,9 +958,7 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(Math.abs(topOf(anchor) - offset)).toBeLessThanOrEqual(0.5);
     expect(writes).toEqual([]);
 
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
-    });
+    await rest();
     expect(writes.length).toBe(1);
     expect(Math.abs(topOf(anchor) - offset)).toBeLessThanOrEqual(0.5);
     // The measure stands: once the grown row leaves the window, the reservoir counts it at its new height.
@@ -1088,9 +1105,7 @@ describe('List — the windowed mode over the reservoir', () => {
       reservoir: reservoirPx(),
       writes: [...writes],
     };
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
-    });
+    await rest();
     const atRest = {
       first: mountedIds()[0],
       reservoir: reservoirPx(),
@@ -1184,13 +1199,11 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(topOf(reader)).toBe(offset);
     expect(writes).toEqual([]);
 
-    // Hidden through QUIET_FRAMES frames: the rest arrives under the box of 0 and steps nothing — the debt stands. The
+    // Hidden through a rest: it arrives under the box of 0 and steps nothing — the debt stands. The
     // red: a step here measures a drift of 0 against the hidden rects and zeroes the reserve, the hold silently dropped
     // (the reservoir 0 while hidden; the reader on row 499 at the show, 40 px off, and no write to pay it).
     await hidden();
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES);
-    });
+    await rest();
     expect(mountedIds().length).toBe(1000);
     expect(reservoirPx()).toBe(-40);
     expect(writes).toEqual([]);
@@ -1230,9 +1243,7 @@ describe('List — the windowed mode over the reservoir', () => {
     };
     paneDisplay(scroller, CLIENT_HEIGHT, 'cells');
     const atReports = { first: mountedIds()[0], reservoir: reservoirPx(), writes: [...writes] };
-    await act(async () => {
-      pumpFrames(ScrollRest.QUIET_FRAMES + 1);
-    });
+    await rest();
     const atRest = {
       first: mountedIds()[0],
       reservoir: reservoirPx(),
@@ -1328,13 +1339,16 @@ describe('List — the windowed mode over the reservoir', () => {
       expect(writes).toEqual([]);
     }
     expect(commits).toBeGreaterThanOrEqual(2);
-    // The fling's own end — the browser's one `scrollend`, a true stop: the debt paid, once, the reader's row holding.
+    // The fling's own end — the browser's one `scrollend`, a true stop — and the rest after it: the debt paid, once,
+    // the reader's row holding.
     momentum = false;
     const reader = readerRow();
     const offset = topOf(reader);
     await act(async () => {
       scroller.dispatchEvent(new Event('scrollend'));
     });
+    expect(writes).toEqual([]);
+    await rest();
     expect(writes.length).toBe(1);
     expect(Math.abs(topOf(reader) - offset)).toBeLessThanOrEqual(0.5);
   });

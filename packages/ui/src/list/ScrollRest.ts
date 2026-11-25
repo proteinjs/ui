@@ -1,43 +1,62 @@
 /**
- * THE ENGINE'S REST — one definition for every scroller that must wait for the engine to stop before it writes a
+ * THE LIST AT REST — one definition for every scroller that must wait for the engine to stop before it writes a
  * scroll position.
  *
  * On iOS WebKit an overflow scroller's offset belongs to the UI process while a finger is down or a fling runs: a
  * programmatic `scrollTop` write under a pan is re-derived away on the pan's next update, a write under momentum
  * ends the deceleration, and the main thread's getter can lag a frame behind the write. Chromium honours a write
  * mid-pan but re-asserts a scrollbar-thumb drag's position over the next frames. So an owner whose scroll write
- * must be invisible waits for the engine's REST, judged here one way:
+ * must be invisible waits for the list to be AT REST, judged here one way. The list is at rest when all four hold:
  *
- *   • an ARM is down — a finger on the scroller (touchstart … touchend / touchcancel) or a mouse button on the
- *     scroller's own scrollbar (a pointerdown whose offset lies outside the client box … pointerup / pointercancel)
- *     — and the engine is not at rest, whatever the scroll events say;
- *   • a scroll event is motion; the rest is QUIET_FRAMES animation frames after the last one with no arm down and
- *     the scroller inside its scroll range (not stretched past an edge by a rubber band); `scrollend` short-circuits
- *     the count where the engine fires it (WebKit fires one per programmatic write and one at a fling's end — each
- *     a true stop);
- *   • a lifted arm may START motion (a lift into momentum, a band's spring-back), so a lift re-opens the watch
- *     rather than declaring the rest.
+ *   R1 NO ARM IS DOWN — no touch the page was told of that began on the scroller (each counted by its identifier,
+ *      so one of two fingers lifting is not "no finger"), and no mouse button on the scroller's own scrollbar (a
+ *      pointerdown whose offset lies outside the client box … pointerup / pointercancel). A touch's end is heard on
+ *      the touch's OWN target, bound when it begins: the engine sends a touch's later events to the element it
+ *      began on, and when that element has left the document (a streaming reply replaces its text under the
+ *      finger) they no longer reach the scroller — a lift heard only there left the finger down for good.
+ *   R2 INSIDE A GESTURE A FINGER BEGAN, THE ENGINE HAS ENDED THE SCROLL — a `scrollend` has come since the last
+ *      `scroll` event. A gesture opens at the first scroll event seen with a known touch down and closes at the
+ *      rest that ends it, so the glide after the lift is inside it — and so is a finger that CATCHES that glide: a
+ *      catch reaches the page as no event at all, the scroll events simply stop, and the engine withholds its
+ *      `scrollend` until that finger lifts. Outside a gesture (a script's write, an engine's clamp, a wheel, a
+ *      write on a hidden scroller) this condition holds: such a scroll ends by the window alone, never waiting on
+ *      an event that needs a gesture it cannot take. An engine with no `scrollend` opens no gesture: the window is
+ *      its whole rule — one predicate, "the engine has ended the scroll", from one of two sources, chosen once per
+ *      instance.
+ *   R3 THE WINDOW — `QUIET_MS` of clock time have passed since the last `scroll` event. Clock time, not animation
+ *      frames: three frames are 50 ms at 60 Hz and 25 ms at 120 Hz, shorter than the gaps between a glide's last
+ *      scroll events and than the pause between a lift and the motion it starts.
+ *   R4 THE SCROLLER IS INSIDE ITS SCROLL RANGE — not stretched past an edge by a rubber band, where a write lands
+ *      off by the stretch.
  *
- * Never a settle timer: the quiet is counted in animation frames, so a throttled tab and a 120 Hz phone judge the
- * same stillness. `request()` asks for the next rest explicitly: the watch runs from an idle engine too, so work owed
- * to the rest lands QUIET_FRAMES frames later, never inside the task that asked for it.
+ * `onRest` fires once when the four first hold together after motion, an arm or a `request()`. The rest is judged
+ * by ONE timer, armed for what is left of the window: an arm's lift, a `scrollend` and a `request()` only ask for
+ * the judgment, so nothing fires inside the task that asked — from an idle list it fires in the next task.
  */
 export class ScrollRest {
-  /** Animation frames with no scroll event, and no arm down, that count as the engine's rest. */
+  /** Clock time with no `scroll` event that counts as the scroll's end (R3). */
+  static readonly QUIET_MS = 150;
+  /** Nothing in this library reads it any longer (see `QUIET_MS`); it stays for those who import it. */
   static readonly QUIET_FRAMES = 3;
+  /** The identifier a touch event that names no touch stands for (a synthetic event: one touch down, one lifted). */
+  private static readonly UNNAMED_TOUCH = -1;
 
   private scroller: HTMLElement | null = null;
   private detachListeners: (() => void) | null = null;
-  private fingerDown = false;
-  private pointerDown = false;
-  /** Motion seen (a scroll event, an arm) and no rest reached since. */
-  private moving = false;
-  /** A rest was asked for explicitly (`request`) and has not been reached since. */
-  private requested = false;
-  private scrollSeq = 0;
-  private watchSeq = 0;
-  private quietFrames = 0;
-  private frame = 0;
+  /** The touches down that the page was told of, by identifier, each with the element its end is heard on. */
+  private readonly touches = new Map<number, EventTarget>();
+  private scrollbarPress = false;
+  /** A rest is owed to the owner: motion or an arm was seen, or a rest was asked for, and none was reached since. */
+  private owed = false;
+  /** A scroll a known finger began is open: its end is the engine's `scrollend` (R2). */
+  private gesture = false;
+  /** A `scrollend` has come since the last `scroll` event. */
+  private scrollEnded = false;
+  /** The clock at the last `scroll` event. */
+  private lastScrollAt = Number.NEGATIVE_INFINITY;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether this engine fires `scrollend` — the source of "the engine has ended the scroll", chosen once. */
+  private readonly engineEndsScrolls = typeof window !== 'undefined' && 'onscrollend' in window;
 
   constructor(private readonly onRest: () => void) {}
 
@@ -45,41 +64,33 @@ export class ScrollRest {
   attach(scroller: HTMLElement): () => void {
     this.detach();
     this.scroller = scroller;
-    const onTouchStart = () => {
-      this.fingerDown = true;
-      this.moving = true;
-      this.cancelWatch();
-    };
-    const onTouchEnd = () => {
-      this.fingerDown = false;
-      this.armLifted();
-    };
+    const onTouchStart = (event: Event) => this.touchBegan(event);
     const onPointerDown = (event: PointerEvent) => {
       if (ScrollRest.onScrollbar(scroller, event)) {
-        this.pointerDown = true;
-        this.moving = true;
-        this.cancelWatch();
+        this.scrollbarPress = true;
+        this.owed = true;
       }
     };
     const onPointerEnd = () => {
-      if (this.pointerDown) {
-        this.pointerDown = false;
-        this.armLifted();
+      if (this.scrollbarPress) {
+        this.scrollbarPress = false;
+        this.judgeWhenQuiet();
       }
     };
     const onScroll = () => {
-      this.scrollSeq++;
-      this.moving = true;
-      this.ensureWatch();
+      this.lastScrollAt = performance.now();
+      this.scrollEnded = false;
+      if (this.engineEndsScrolls && this.touches.size > 0) {
+        this.gesture = true;
+      }
+      this.owed = true;
+      this.judgeWhenQuiet();
     };
     const onScrollEnd = () => {
-      if (!this.armDown && this.inRange()) {
-        this.reachRest();
-      }
+      this.scrollEnded = true;
+      this.judgeWhenQuiet();
     };
     scroller.addEventListener('touchstart', onTouchStart, { passive: true });
-    scroller.addEventListener('touchend', onTouchEnd, { passive: true });
-    scroller.addEventListener('touchcancel', onTouchEnd, { passive: true });
     scroller.addEventListener('pointerdown', onPointerDown, { passive: true });
     scroller.addEventListener('pointerup', onPointerEnd, { passive: true });
     scroller.addEventListener('pointercancel', onPointerEnd, { passive: true });
@@ -87,8 +98,6 @@ export class ScrollRest {
     scroller.addEventListener('scrollend', onScrollEnd, { passive: true });
     this.detachListeners = () => {
       scroller.removeEventListener('touchstart', onTouchStart);
-      scroller.removeEventListener('touchend', onTouchEnd);
-      scroller.removeEventListener('touchcancel', onTouchEnd);
       scroller.removeEventListener('pointerdown', onPointerDown);
       scroller.removeEventListener('pointerup', onPointerEnd);
       scroller.removeEventListener('pointercancel', onPointerEnd);
@@ -99,94 +108,109 @@ export class ScrollRest {
   }
 
   detach(): void {
-    this.cancelWatch();
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     if (this.detachListeners) {
       this.detachListeners();
       this.detachListeners = null;
     }
+    new Set(this.touches.values()).forEach((target) => this.unbindTouchEnd(target));
+    this.touches.clear();
     this.scroller = null;
-    this.fingerDown = false;
-    this.pointerDown = false;
-    this.moving = false;
-    this.requested = false;
+    this.scrollbarPress = false;
+    this.owed = false;
+    this.gesture = false;
+    this.scrollEnded = false;
+    this.lastScrollAt = Number.NEGATIVE_INFINITY;
   }
 
-  /** Something waits for the rest: `onRest` fires at the next rest — QUIET_FRAMES frames from now at the soonest. */
+  /** Something waits for the rest: `onRest` fires at the next rest — in the next task at the soonest. */
   request(): void {
-    this.requested = true;
-    this.ensureWatch();
+    this.owed = true;
+    this.judgeWhenQuiet();
   }
 
-  /** A finger on the scroller, or a mouse button on its scrollbar. */
+  /** A touch the page was told of on the scroller, or a mouse button on its scrollbar (R1). */
   get armDown(): boolean {
-    return this.fingerDown || this.pointerDown;
+    return this.touches.size > 0 || this.scrollbarPress;
   }
 
-  /** No arm down and no motion since the last rest. */
+  /** The four conditions, read now. */
   get atRest(): boolean {
-    return !this.moving && !this.armDown;
+    return (
+      !this.armDown &&
+      (!this.gesture || this.scrollEnded) &&
+      performance.now() - this.lastScrollAt >= ScrollRest.QUIET_MS &&
+      this.inRange()
+    );
+  }
+
+  /** A touch began on the scroller: counted by identifier, its end bound on the element it began on. */
+  private touchBegan(event: Event): void {
+    const target = event.target;
+    if (!target) {
+      return;
+    }
+    ScrollRest.touchIds(event).forEach((id) => this.touches.set(id, target));
+    // The same listener on the same target is one listener, however many touches began there.
+    target.addEventListener('touchend', this.touchEnded, { passive: true });
+    target.addEventListener('touchcancel', this.touchEnded, { passive: true });
+    this.owed = true;
+  }
+
+  /** A touch ended or was cancelled, heard on its own target: with no touch left, the rest is judged. */
+  private readonly touchEnded = (event: Event): void => {
+    ScrollRest.touchIds(event).forEach((id) => this.touches.delete(id));
+    const target = event.currentTarget;
+    if (target && !Array.from(this.touches.values()).includes(target)) {
+      this.unbindTouchEnd(target);
+    }
+    if (this.touches.size === 0) {
+      this.judgeWhenQuiet();
+    }
+  };
+
+  private unbindTouchEnd(target: EventTarget): void {
+    target.removeEventListener('touchend', this.touchEnded);
+    target.removeEventListener('touchcancel', this.touchEnded);
+  }
+
+  /** The one timer, armed for what is left of the window (idempotent); nothing is armed with no rest owed. */
+  private judgeWhenQuiet(): void {
+    if (this.timer !== null || !this.owed) {
+      return;
+    }
+    const left = this.lastScrollAt + ScrollRest.QUIET_MS - performance.now();
+    this.timer = setTimeout(this.judge, Math.max(0, left));
   }
 
   /**
-   * An arm lifted: a lift may start motion (momentum, a band's spring-back), so the engine is not taken to be at
-   * rest — the watch re-confirms it. With the other arm still down, nothing changes.
+   * The judgment: a scroll event since the timer was armed moves the window, and the timer follows it; conditions
+   * that do not hold yet are each re-judged by the event that turns them (a lift, a `scrollend`, the next scroll).
    */
-  private armLifted(): void {
-    if (this.armDown) {
+  private readonly judge = (): void => {
+    this.timer = null;
+    if (!this.owed) {
       return;
     }
-    this.moving = true;
-    this.ensureWatch();
-  }
-
-  /** The watch: an animation-frame loop that counts quiet frames; idempotent; never runs under an arm. */
-  private ensureWatch(): void {
-    if (this.frame !== 0 || this.armDown || !(this.moving || this.requested)) {
+    if (performance.now() - this.lastScrollAt < ScrollRest.QUIET_MS) {
+      this.judgeWhenQuiet();
       return;
     }
-    this.watchSeq = this.scrollSeq;
-    this.quietFrames = 0;
-    this.frame = requestAnimationFrame(this.tick);
-  }
-
-  private readonly tick = (): void => {
-    this.frame = 0;
-    if (this.armDown || !(this.moving || this.requested)) {
-      return; // the lift re-arms the watch; nothing owed stops it
-    }
-    if (this.scrollSeq !== this.watchSeq || !this.inRange()) {
-      // the engine moved since the last frame, or sits stretched inside a rubber band: the count restarts
-      this.watchSeq = this.scrollSeq;
-      this.quietFrames = 0;
-      this.frame = requestAnimationFrame(this.tick);
+    if (!this.atRest) {
       return;
     }
-    this.quietFrames++;
-    if (this.quietFrames >= ScrollRest.QUIET_FRAMES) {
-      this.reachRest();
-      return;
-    }
-    this.frame = requestAnimationFrame(this.tick);
-  };
-
-  private reachRest(): void {
-    this.cancelWatch();
-    this.moving = false;
-    this.requested = false;
+    this.owed = false;
+    this.gesture = false;
     this.onRest();
-  }
-
-  private cancelWatch(): void {
-    if (this.frame !== 0) {
-      cancelAnimationFrame(this.frame);
-      this.frame = 0;
-    }
-  }
+  };
 
   /**
    * The scroller sits at a legal position — not past an edge. iOS WebKit lets scrollTop go negative past the top
    * (or past the bottom) inside a rubber band and pauses at the stretched offset before springing back; a write
-   * made there lands off by the stretch, so the band is waited out.
+   * made there lands off by the stretch, so the band is waited out (its spring-back's scroll events re-judge).
    */
   private inRange(): boolean {
     const scroller = this.scroller;
@@ -195,6 +219,19 @@ export class ScrollRest {
     }
     const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     return scroller.scrollTop >= -0.5 && scroller.scrollTop <= max + 0.5;
+  }
+
+  /** The touches an event reports as begun or ended, by identifier; an event that names none stands for one. */
+  private static touchIds(event: Event): number[] {
+    const changed = (event as TouchEvent).changedTouches;
+    if (!changed || changed.length === 0) {
+      return [ScrollRest.UNNAMED_TOUCH];
+    }
+    const ids: number[] = [];
+    for (let i = 0; i < changed.length; i++) {
+      ids.push(changed[i].identifier);
+    }
+    return ids;
   }
 
   /**

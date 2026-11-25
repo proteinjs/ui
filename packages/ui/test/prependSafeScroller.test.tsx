@@ -12,8 +12,8 @@
  *     reservoir shrinks by exactly the landed height in the rows' own commit; the reader's row keeps its offset.
  *     Under a held finger the same, and the rows land at once (no hold).
  *  2. A landing taller than the reservoir is still height-neutral (the shortfall is a debt — a negative margin);
- *     the debt is paid at the engine's REST only (QUIET_FRAMES quiet frames, no finger), with ONE write, the row
- *     holding — never while a finger is down.
+ *     the debt is paid at the engine's REST only (no finger, QUIET_MS of clock time since the last scroll event),
+ *     with ONE write, the row holding — never while a finger is down.
  *  3. When nothing remains above, the whole gap — a leftover reservoir or a debt — goes at the rest only, in ONE
  *     step with ONE write, the reader's row holding its identity and offset while a write can hold it (the first
  *     row arrives at the edge in that same step when none can); nothing while scroll events keep arriving. While
@@ -27,7 +27,10 @@
  *  it. THE SCROLLER'S OWN BOX: rows that landed while the scroller had no geometry (a pane mounted hidden, laid out
  *  later) were judged against no viewport — the box gaining height re-judges the lead, by the same rule, once.
  *  The loading row renders at the reservoir's foot only while loading with rows remaining, height-neutrally.
- *  `onRest` fires at the rest and not before; `scrollend` short-circuits it. `apiRef` reads the geometry.
+ *  `onRest` fires at the rest and not before — the four conditions of ScrollRest, each with its case: no touch the
+ *  page was told of (counted, its end heard on its own target), the engine's `scrollend` inside a gesture a finger
+ *  began, QUIET_MS of clock time since the last scroll event, the scroller inside its range. `apiRef` reads the
+ *  geometry.
  */
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -38,7 +41,20 @@ import { ScrollRest } from '../src/list/ScrollRest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-// ── Frames: requestAnimationFrame as a manual pump, so the rest is counted in frames the test advances. ──
+// ── The clock: the rest is CLOCK time (ScrollRest.QUIET_MS), so the suite runs on jest's clock and advances it;
+//    animation frames stay the manual pump below. ──
+jest.useFakeTimers({
+  doNotFake: [
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'nextTick',
+    'queueMicrotask',
+    'setImmediate',
+    'clearImmediate',
+  ],
+});
+
+// ── Frames: requestAnimationFrame as a manual pump — what the scroller asks of a frame (its opening ask). ──
 const frameQueue: Array<{ id: number; cb: FrameRequestCallback }> = [];
 let frameSeq = 0;
 window.requestAnimationFrame = (cb: FrameRequestCallback) => {
@@ -56,6 +72,24 @@ const pumpFrames = (count: number) => {
   for (let k = 0; k < count; k++) {
     const batch = frameQueue.splice(0);
     batch.forEach((frame) => frame.cb(performance.now()));
+  }
+};
+/** A 60 Hz screen's frame. */
+const FRAME_MS = 16;
+/** Time passes: the clock, and the frames a 60 Hz screen paints in it. */
+const elapse = (ms: number) => {
+  for (let left = ms; left > 0; left -= FRAME_MS) {
+    jest.advanceTimersByTime(Math.min(FRAME_MS, left));
+    if (left >= FRAME_MS) {
+      pumpFrames(1);
+    }
+  }
+};
+/** A screen paints `count` frames, `frameMs` apart. */
+const framesPass = (count: number, frameMs: number) => {
+  for (let k = 0; k < count; k++) {
+    jest.advanceTimersByTime(frameMs);
+    pumpFrames(1);
   }
 };
 
@@ -177,6 +211,16 @@ const readerScrollsTo = (scroller: HTMLElement, top: number) => {
 };
 const fingerDown = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('touchstart'));
 const fingerUp = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('touchend'));
+/** A touch event as an engine sends it: on the element the touch began on, naming the touches that began or ended. */
+const touch = (type: 'touchstart' | 'touchend' | 'touchcancel', target: EventTarget, ...identifiers: number[]) => {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperty(event, 'changedTouches', { value: identifiers.map((identifier) => ({ identifier })) });
+  target.dispatchEvent(event);
+};
+/** An engine that fires `scrollend`: ScrollRest chooses its source of "the scroll has ended" once, when it is made. */
+const engineFiresScrollEnd = () => {
+  Object.defineProperty(window, 'onscrollend', { value: null, configurable: true, writable: true });
+};
 const rowBox = (scroller: HTMLElement, id: number) =>
   scroller.querySelector(`[data-prepend-row="${id}"] > [data-h]`) as HTMLElement;
 const offsetOf = (scroller: HTMLElement, id: number) => rowBox(scroller, id).getBoundingClientRect().top;
@@ -272,6 +316,7 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  delete (window as unknown as { onscrollend?: unknown }).onscrollend;
 });
 
 describe('law 1 — the landing is height-neutral and writes nothing', () => {
@@ -307,10 +352,10 @@ describe('law 1 — the landing is height-neutral and writes nothing', () => {
     expect(writes.length).toBe(0);
     expect(offsetOf(scroller, 4)).toBe(-50);
     expect(reservoirOf(scroller).style.height).toBe('1700px');
-    pumpFrames(10);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0); // the reservoir sits on its target: nothing owed, nothing written, finger or no finger
     fingerUp(scroller);
-    pumpFrames(10);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
   });
 
@@ -349,20 +394,20 @@ describe('law 2 — a landing taller than the reservoir: neutral at the landing,
     expect(scroller.scrollHeight).toBe(1300);
     expect(offsetOf(scroller, 3)).toBe(0);
     expect(writes.length).toBe(0);
-    // The finger stays down: no rest, no write, however many frames pass.
-    pumpFrames(12);
+    // The finger stays down: no rest, no write, however long it rests.
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
-    // The lift, then the rest: QUIET_FRAMES quiet frames, and the one write that pays the debt.
+    // The lift on a list long still is the rest — judged after the lift's own task, never inside it — and the one
+    // write that pays the debt.
     fingerUp(scroller);
-    pumpFrames(ScrollRest.QUIET_FRAMES - 1);
     expect(writes.length).toBe(0);
-    pumpFrames(1);
+    elapse(1);
     expect(writes.length).toBe(1);
     expect(reservoir.style.marginBottom).toBe('0px');
     expect(scroller.scrollTop).toBe(800);
     expect(offsetOf(scroller, 3)).toBe(0); // the write was neutral: the row is where it was
     expect(scroller.scrollHeight).toBe(1600);
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(1); // nothing more owed
   });
 });
@@ -375,21 +420,21 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     act(() => {
       harness.setRemaining(0);
     });
-    // The reader keeps moving: a scroll event each frame holds the rest off.
-    for (let k = 0; k < 6; k++) {
+    // The reader keeps moving, for longer than the window: a scroll event each frame holds the rest off.
+    for (let k = 0; k < 14; k++) {
       readerScrollsTo(scroller, 3900);
-      pumpFrames(1);
+      elapse(FRAME_MS);
     }
     expect(writes.length).toBe(0);
     // At rest: the whole 2500 px in ONE step — one write, row 15 where it was — never a viewport per rest.
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(ScrollRest.QUIET_MS);
     expect(writes.length).toBe(1);
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 15)).toBe(0);
     expect(scroller.scrollTop).toBe(1400);
     expect(scroller.scrollHeight).toBe(2000);
-    pumpFrames(12);
-    expect(writes.length).toBe(1); // nothing more owed: no further rest, no further write
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(writes.length).toBe(1); // nothing more owed: no further write at any later rest
   });
 
   test('a reader NEAR the loaded start (100 px below it): the same ONE step, the row holding — never a step per rest of that distance', () => {
@@ -399,12 +444,12 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     act(() => {
       harness.setRemaining(0);
     });
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(ScrollRest.QUIET_MS);
     expect(writes.length).toBe(1);
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 2)).toBe(0);
     expect(scroller.scrollTop).toBe(100);
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(1);
   });
 
@@ -414,13 +459,13 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     act(() => {
       harness.setRemaining(0);
     });
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(ScrollRest.QUIET_MS);
     expect(writes.length).toBe(1);
     expect(writes[0]).toBe(0); // the one write: the offset no write can hold is the edge
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 1)).toBe(0);
     expect(scroller.scrollTop).toBe(0);
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(1);
   });
 
@@ -430,12 +475,12 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     act(() => {
       harness.setRemaining(0);
     });
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(ScrollRest.QUIET_MS);
     expect(reservoirOf(scroller).style.height).toBe('0px');
     expect(offsetOf(scroller, 1)).toBe(0);
     expect(scroller.scrollTop).toBe(0);
     expect(writes.length).toBe(0);
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
   });
 
@@ -452,13 +497,13 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     expect(scroller.scrollHeight).toBe(1300);
     expect(offsetOf(scroller, 3)).toBe(0);
     expect(writes.length).toBe(0);
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(ScrollRest.QUIET_MS);
     expect(writes.length).toBe(1);
     expect(reservoir.style.marginBottom).toBe('0px');
     expect(scroller.scrollTop).toBe(1200);
     expect(offsetOf(scroller, 3)).toBe(0);
     expect(scroller.scrollHeight).toBe(2000);
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(1);
   });
 
@@ -471,12 +516,12 @@ describe('law 3 — the end: the whole gap at the rest only, in one step with on
     });
     // Viewport-sized steps, one per rest, until the reservoir is within the refill band of its target.
     [1900, 1300, 700].forEach((expected, index) => {
-      pumpFrames(ScrollRest.QUIET_FRAMES);
+      elapse(ScrollRest.QUIET_MS);
       expect(writes.length).toBe(index + 1);
       expect(reservoirOf(scroller).style.height).toBe(`${expected}px`);
       expect(offsetOf(scroller, 15)).toBe(0);
     });
-    pumpFrames(12);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(3); // 700 is within a viewport of 500: nothing more owed
     expect(scroller.scrollTop).toBe(2100);
   });
@@ -513,7 +558,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(writes.length).toBe(0);
     readerScrollsTo(scroller, 4400); // the consumer parks at the end
     // Rest after rest, nothing is owed: no step, no write, the room as sized.
-    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('4000px');
     expect(scroller.scrollTop).toBe(4400);
@@ -530,7 +575,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(reservoirOf(scroller).style.height).toBe('2100px');
     expect(writes.length).toBe(0);
     readerScrollsTo(scroller, 2600); // the consumer parks at the end
-    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('2100px');
     // THE FIRST LANDING of ten rows of 150 shrinks the room by exactly what landed: 600 left for the 4 remaining, the
@@ -541,7 +586,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(reservoirOf(scroller).style.height).toBe('600px');
     expect(reservoirOf(scroller).style.marginBottom).toBe('0px');
     expect(scroller.scrollHeight).toBe(3600); // 600 + 20 × 150: the same total as before the landing (2100 + 10 × 150)
-    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('600px');
   });
@@ -556,7 +601,7 @@ describe('law 5 — the open: a list filled from empty takes the count in the ro
     expect(reservoirOf(scroller).style.height).toBe('2000px');
     expect(writes.length).toBe(0);
     readerScrollsTo(scroller, 2400);
-    pumpFrames(ScrollRest.QUIET_FRAMES * 4);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(writes.length).toBe(0);
     expect(reservoirOf(scroller).style.height).toBe('2000px');
   });
@@ -799,52 +844,189 @@ describe('the loading row', () => {
 });
 
 describe('onRest — the one rest definition', () => {
-  test('fires QUIET_FRAMES quiet frames after the last scroll event, not before, not under a finger; scrollend short-circuits', () => {
+  const watches: ScrollRest[] = [];
+  /** A bare scroller inside its range, and the rests a ScrollRest on it declares. */
+  const watched = () => {
+    const scroller = document.createElement('div');
+    container.appendChild(scroller);
+    const box = { height: 600, offset: 0 };
+    Object.defineProperty(scroller, 'clientWidth', { get: () => 390 });
+    Object.defineProperty(scroller, 'clientHeight', { get: () => box.height });
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => (box.height > 0 ? 2000 : 0) });
+    Object.defineProperty(scroller, 'scrollTop', { get: () => box.offset });
+    const rests: number[] = [];
+    const rest = new ScrollRest(() => rests.push(1));
+    rest.attach(scroller);
+    watches.push(rest);
+    return { scroller, rest, rests, box };
+  };
+  const scrolls = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('scroll'));
+  const scrollEnds = (scroller: HTMLElement) => scroller.dispatchEvent(new Event('scrollend'));
+
+  afterEach(() => {
+    watches.splice(0).forEach((rest) => rest.detach());
+  });
+
+  test('fires QUIET_MS after the last scroll event, not before, and not under a finger', () => {
     const rests: number[] = [];
     const { scroller } = mount({ initial: rows(1, 10, 100), remaining: 0, onRest: () => rests.push(1) });
     readerScrollsTo(scroller, 100);
-    pumpFrames(ScrollRest.QUIET_FRAMES - 1);
+    elapse(ScrollRest.QUIET_MS - 1);
     expect(rests.length).toBe(0);
-    pumpFrames(1);
+    elapse(1);
     expect(rests.length).toBe(1);
     fingerDown(scroller);
     readerScrollsTo(scroller, 200);
-    pumpFrames(10);
+    elapse(ScrollRest.QUIET_MS * 4);
     expect(rests.length).toBe(1);
     fingerUp(scroller);
-    pumpFrames(ScrollRest.QUIET_FRAMES);
+    elapse(1);
     expect(rests.length).toBe(2);
-    readerScrollsTo(scroller, 300);
-    scroller.dispatchEvent(new Event('scrollend'));
-    expect(rests.length).toBe(3);
   });
 
-  test('ScrollRest: a scrollbar press is an arm; request() lands QUIET_FRAMES frames later, never in the asking task', () => {
-    const scroller = document.createElement('div');
-    Object.defineProperty(scroller, 'clientWidth', { get: () => 390 });
-    Object.defineProperty(scroller, 'clientHeight', { get: () => 600 });
-    Object.defineProperty(scroller, 'scrollHeight', { get: () => 2000 });
-    let rests = 0;
-    const rest = new ScrollRest(() => rests++);
-    rest.attach(scroller);
+  test('three 8 ms frames are not a rest, nor are the gaps measured inside a motion: the window is clock time and longer than a glide’s tail (116 ms) and a bounce (134 ms)', () => {
+    const { scroller, rests } = watched();
+    scrolls(scroller);
+    framesPass(3, 8); // a 120 Hz screen
+    expect(rests.length).toBe(0);
+    scrolls(scroller);
+    elapse(116);
+    scrolls(scroller);
+    elapse(134);
+    scrolls(scroller);
+    expect(rests.length).toBe(0);
+    elapse(ScrollRest.QUIET_MS);
+    expect(rests.length).toBe(1);
+  });
+
+  test('stretched past an edge is not a rest; the band’s return is', () => {
+    const { scroller, rests, box } = watched();
+    box.offset = -40; // the rubber band at the top, the list pausing there
+    scrolls(scroller);
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(rests.length).toBe(0);
+    box.offset = 0;
+    scrolls(scroller); // the spring-back's last scroll event
+    elapse(ScrollRest.QUIET_MS);
+    expect(rests.length).toBe(1);
+  });
+
+  test('a list stopped under a finger the page was never told of gives no rest until the scrollend', () => {
+    engineFiresScrollEnd();
+    const { scroller, rests } = watched();
+    // A flick: the finger drags the list — the gesture — and lifts; the glide goes on.
+    touch('touchstart', scroller, 1);
+    scrolls(scroller);
+    elapse(FRAME_MS);
+    touch('touchend', scroller, 1);
+    for (let k = 0; k < 5; k++) {
+      scrolls(scroller);
+      elapse(FRAME_MS);
+    }
+    // Another finger catches the glide and rests on the list: the page is told nothing, the scroll events simply stop.
+    elapse(ScrollRest.QUIET_MS * 8);
+    expect(rests.length).toBe(0);
+    // That finger lifts: the engine's `scrollend`, withheld until now — the rest, after the event's own task.
+    scrollEnds(scroller);
+    expect(rests.length).toBe(0);
+    elapse(1);
+    expect(rests.length).toBe(1);
+    // ONE rest for one motion: a later `scrollend` with nothing moved since declares nothing.
+    scrollEnds(scroller);
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(rests.length).toBe(1);
+    // The gesture closed at its rest: a write no finger began rests by the window alone again.
+    scrolls(scroller);
+    elapse(ScrollRest.QUIET_MS);
+    expect(rests.length).toBe(2);
+  });
+
+  test('a scrollend followed by scroll events in a gesture is not a rest', () => {
+    engineFiresScrollEnd();
+    const { scroller, rests } = watched();
+    touch('touchstart', scroller, 1);
+    scrolls(scroller);
+    touch('touchend', scroller, 1);
+    // Under the glide the engine sends a `scrollend` (its answer to a write or to an adjustment of its own) and the
+    // glide's scroll events go on, for longer than the window.
+    scrolls(scroller);
+    scrollEnds(scroller);
+    for (let k = 0; k < 14; k++) {
+      elapse(FRAME_MS);
+      scrolls(scroller);
+    }
+    expect(rests.length).toBe(0);
+    // The scroll events stop and no `scrollend` has come since the last of them: still not a rest.
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(rests.length).toBe(0);
+    scrollEnds(scroller);
+    elapse(1);
+    expect(rests.length).toBe(1);
+  });
+
+  test('a script write with no gesture rests by the window alone, hidden or not', () => {
+    engineFiresScrollEnd();
+    const { scroller, rests, box } = watched();
+    // A write no finger began; no `scrollend` follows it here.
+    scrolls(scroller);
+    elapse(ScrollRest.QUIET_MS - 1);
+    expect(rests.length).toBe(0);
+    elapse(1);
+    expect(rests.length).toBe(1);
+    box.height = 0; // the pane hidden
+    scrolls(scroller);
+    elapse(ScrollRest.QUIET_MS - 1);
+    expect(rests.length).toBe(1);
+    elapse(1);
+    expect(rests.length).toBe(2);
+  });
+
+  test('two fingers, one lifted, is not a rest', () => {
+    const { scroller, rests } = watched();
+    touch('touchstart', scroller, 1);
+    touch('touchstart', scroller, 2);
+    touch('touchend', scroller, 1);
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(rests.length).toBe(0);
+    touch('touchend', scroller, 2);
+    elapse(1);
+    expect(rests.length).toBe(1);
+  });
+
+  test('a touch whose target left the document still ends', () => {
+    const { scroller, rests, rest } = watched();
+    const word = document.createElement('span');
+    scroller.appendChild(word);
+    touch('touchstart', word, 1);
+    expect(rest.armDown).toBe(true);
+    // A streaming reply replaces the text under the finger; the engine sends the lift to the element the touch
+    // began on, which no longer has the scroller above it.
+    word.remove();
+    touch('touchend', word, 1);
+    expect(rest.armDown).toBe(false);
+    elapse(1);
+    expect(rests.length).toBe(1);
+  });
+
+  test('a scrollbar press is an arm; request() never lands in the asking task', () => {
+    const { scroller, rest, rests } = watched();
     expect(rest.atRest).toBe(true);
     rest.request();
-    expect(rests).toBe(0);
-    pumpFrames(ScrollRest.QUIET_FRAMES);
-    expect(rests).toBe(1);
+    expect(rests.length).toBe(0);
+    elapse(1);
+    expect(rests.length).toBe(1);
     const press = new MouseEvent('pointerdown');
     Object.defineProperty(press, 'offsetX', { get: () => 395 }); // on the vertical scrollbar, right of the client box
     Object.defineProperty(press, 'offsetY', { get: () => 100 });
     scroller.dispatchEvent(press);
     expect(rest.armDown).toBe(true);
     rest.request();
-    pumpFrames(10);
-    expect(rests).toBe(1);
+    elapse(ScrollRest.QUIET_MS * 4);
+    expect(rests.length).toBe(1);
     scroller.dispatchEvent(new MouseEvent('pointerup'));
     expect(rest.armDown).toBe(false);
-    pumpFrames(ScrollRest.QUIET_FRAMES);
-    expect(rests).toBe(2);
-    rest.detach();
+    elapse(1);
+    expect(rests.length).toBe(2);
   });
 });
 
