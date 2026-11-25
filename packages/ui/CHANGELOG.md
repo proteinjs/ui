@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.24.1](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.24.0...@proteinjs/ui@4.24.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **list:** the rest of a list is judged by the clock, its touches counted, and a scroll a finger began ended by the engine ([59f5521](https://github.com/proteinjs/ui/commit/59f552128a8987bf2097fef1d13da558c43e0625))
+
+
+
+
+
 # [4.24.0](https://github.com/proteinjs/ui/compare/@proteinjs/ui@4.23.1...@proteinjs/ui@4.24.0) (2026-11-23)
 
 
