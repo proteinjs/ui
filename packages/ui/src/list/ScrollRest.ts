@@ -12,8 +12,8 @@
  *      so one of two fingers lifting is not "no finger"), and no mouse button on the scroller's own scrollbar (a
  *      pointerdown whose offset lies outside the client box … pointerup / pointercancel). A touch's end is heard on
  *      the touch's OWN target, bound when it begins: the engine sends a touch's later events to the element it
- *      began on, and when that element has left the document (a streaming reply replaces its text under the
- *      finger) they no longer reach the scroller — a lift heard only there left the finger down for good.
+ *      began on, and when that element has left the document (its content replaced under the finger) they no
+ *      longer reach the scroller — a lift listened for only there would never be heard.
  *   R2 INSIDE A GESTURE A FINGER BEGAN, THE ENGINE HAS ENDED THE SCROLL — a `scrollend` has come since the last
  *      `scroll` event. A gesture opens at the first scroll event seen with a known touch down and closes at the
  *      rest that ends it, so the glide after the lift is inside it — and so is a finger that CATCHES that glide: a
