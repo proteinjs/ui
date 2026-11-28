@@ -1,59 +1,44 @@
 /**
- * THE RESERVOIR — the block above a list's loaded start that absorbs every height change above the reader, so that
- * nothing the reader sees moves and no scroll position is ever written at a landing.
+ * THE START EDGE — the block of no height at a list's start, where every height change above the reader is HELD out
+ * of the scroll range, and from where it is paid with one scroll write.
  *
- * A top-origin scroller keeps `scrollTop` when content is inserted above the viewport: the content moves down under
- * the reader by the inserted height. The usual compensation is a `scrollTop` write, and on iOS WebKit that write
- * is advisory — undone under a finger, raced by the page's own render, acknowledged a frame late. The reservoir
- * makes the compensation unnecessary: an empty block sized for the rows not yet loaded sits at the start edge, and
- * every landing of rows at the start SHRINKS it by exactly the height the landed rows added, in the same layout
- * pass, before paint. The scroller's `scrollHeight` is unchanged, `scrollTop` is unchanged, the reader's row is
- * where it was — while a finger is down, while a fling runs, while a band springs back.
+ * A top-origin scroller keeps `scrollTop` when content is added above the viewport: the content moves down under the
+ * reader by the added height. The usual answer is a `scrollTop` write, and a write made while the engine is moving
+ * the list is not kept on iOS WebKit (re-derived away under a finger, never shown in a glide or in the band). So the
+ * change is first HELD: the block takes a negative bottom margin of exactly the height that appeared above the
+ * reader's row, in the same layout pass, before paint. The scroller's `scrollHeight` is unchanged, `scrollTop` is
+ * unchanged, the reader's row is where it was — under a finger, in a glide, in the band — and the rows that were added
+ * sit above the scroll origin, where nothing can reach them yet. Height that goes away above the reader is held the
+ * other way, as the block's own height (a gap).
  *
- * The reservoir's size is a signed number of pixels, `reserve`:
- *   • reserve > 0 — the block's height: room for the rows still above, from the consumer's count × the measured
- *     mean row height (the consumer's `estimatedRowHeight` seeds it until rows are measured);
- *   • reserve < 0 — a DEBT: a landing taller than the room left. The block is at zero height with a negative bottom
- *     margin of the shortfall, so the landing was still height-neutral (the first rows sit above the scroll origin,
- *     unreachable until the debt is paid) and the reader did not move.
- * Rows above the first visible row that grow or shrink later (a picture, a late card, a font) are absorbed the same
- * way, in the resize observation, before paint.
+ * What is held is an exact, signed number of pixels, `held`, measured on the reader's own row and never estimated:
+ * nothing here knows how many rows a consumer has not loaded yet, or how tall they might be.
  *
- * The only scroll-position writes are the RECONCILE steps the owner runs at the engine's rest (`ScrollRest`): the
- * whole gap once the consumer says nothing remains above (the leftover collapsed, the debt paid — one step, one
- * write), a refill while rows remain and the estimate trails by more than a viewport. Each step writes the drift it
- * MEASURES on the first visible row after the change — an engine whose own scroll anchoring already compensated
- * reads a drift of zero and gets no write. While rows remain a step changes the block by at most one viewport — a
- * shrink by at most the reader's distance from the loaded start as well — so a step the engine drops is bounded by
- * a viewport, never a page, and a dropped shrink never pulls the loaded start past the reader's edge. At the end
- * that bound would only split the gap into a write per rest, each painted as a tick where the engine acknowledges
- * a write a frame late (iOS WebKit), so the end takes the gap at once.
+ * THE SETTLE pays what is held, whole, with ONE scroll write, in one task: the margin released and the reader's row
+ * put back by the drift measured on it (a gap the other way round: the write first, then the block, so the offset is
+ * never outside the range). Where a finger can move the list, THE STOP comes first: the scroller's overflow is
+ * hidden for one painted frame, so nothing is moving the list when the write is made — a write on a stopped list is
+ * kept in every state an engine can be in, and a finger the page was never told of loses its pan, never the reader's
+ * place. The stop is not taken where hiding the overflow would change the scroller's content box (a scrollbar that
+ * takes room), nor on a device with no touch input. WHEN the settle runs is the owner's to say: at the list's rest,
+ * or where the reader has run out of loaded rows.
  *
  * THE WINDOW TERM (`setWindowAbove`): a windowed list — `List` in its windowed mode — mounts only the rows near the
  * viewport and keeps the rows loaded ABOVE its window out of the document; their measured heights sum to the block's
- * second term, added to `reserve` in the applied size. The two terms keep their meanings: `reserve` is the room for
- * rows not yet loaded (and the signed drift the laws absorb — a debt is paid out of the window's room before it is a
- * negative margin), `windowAbove` the exact height of loaded rows the window left out. `distanceFromLoadedStart` reads
+ * own height. What is held comes off that height before it is a negative margin. `distanceFromLoadedStart` reads
  * from the LOADED start — the window's rows above are inside the loaded span. With no window term (the default, 0)
  * every number below is the one it was.
  */
 export class PrependReservoir {
-  /** A reconcile step moves the reservoir by at most this many client heights, one step per rest. */
-  static readonly STEP_VIEWPORTS = 1;
-  /** A refill is owed only when the reservoir trails its target by more than this many client heights. */
-  static readonly REFILL_BAND_VIEWPORTS = 1;
-  /** The reservoir's ceiling — far beyond any list, inside every engine's layout range. */
-  static readonly MAX_RESERVE_PX = 4_000_000;
-
-  private reserve = 0;
-  /** The measured height of the rows loaded above a windowed list's window — the block's second term (0 without a window). */
+  /**
+   * Height above the reader held out of the scroll range, px. Positive: rows above the scroll origin (the block's
+   * negative bottom margin). Negative: a gap, kept as the block's own height.
+   */
+  private held = 0;
+  /** The measured height of the rows loaded above a windowed list's window — the block's own height (0 without a window). */
   private windowAbove = 0;
-  private remaining = 0;
-  private seedEstimate = 0;
-  private measuredTotal = 0;
-  private measuredRows = 0;
-  /** The first row's box top relative to the reservoir's box top, as of the last layout this owner saw. */
-  private recordedFirstTop: number | null = null;
+  /** A stop under way: its pending animation frame, and what puts the scroller's overflow back. */
+  private stop: { frame: number; release: () => void } | null = null;
 
   constructor(
     private readonly scroller: HTMLElement,
@@ -62,16 +47,10 @@ export class PrependReservoir {
     private readonly rowBoxes: () => HTMLElement[]
   ) {}
 
-  /** The consumer's count of rows not yet loaded above, and the seed for the row-height estimate. */
-  setRemaining(remaining: number, estimatedRowHeight: number): void {
-    this.remaining = Math.max(0, Number.isFinite(remaining) ? remaining : 0);
-    this.seedEstimate = Math.max(0, Number.isFinite(estimatedRowHeight) ? estimatedRowHeight : 0);
-  }
-
   /**
    * A windowed list's rows loaded above its window, by their measured heights: the block grows by exactly that much in
    * the same layout pass (a window shifting down leaves rows above by their measured heights; shifting up takes them
-   * back) — the rest of the block's bookkeeping is untouched, so a drift absorbed into `reserve` stands until the rest.
+   * back) — what is held stands until the settle.
    */
   setWindowAbove(px: number): void {
     const next = Math.max(0, Number.isFinite(px) ? px : 0);
@@ -82,200 +61,192 @@ export class PrependReservoir {
     this.apply();
   }
 
-  /** A box's top relative to the reservoir's top, as the engine lays it out now — the one geometry the records use. */
+  /** A box's top relative to the block's top, as the engine lays it out now — the one geometry every measure uses. */
   topOf(box: HTMLElement): number {
     return box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top;
   }
 
-  /** The mounted rows measured for the estimate, the reservoir sized to the target, the first row recorded. */
-  initialize(): void {
-    this.measureMounted();
-    this.reserve = this.target();
-    this.apply();
-    this.record();
-  }
-
   /**
-   * The list was replaced, emptied or filled from empty: the rows now mounted ARE measured rows — the estimate is
-   * their mean from this commit (the seed stands only while no row is in the document), so a consumer's exact count
-   * sizes an exact room before the first paint and the first landing owes no refill, no debt and no collapse to
-   * a seed that was off. Sized to the target with nothing to hold the view against.
+   * Height appeared (`delta` > 0) or went away (`delta` < 0) above the reader's row: held out of the scroll range in
+   * this same layout pass, with no scroll write.
    */
-  reset(): void {
-    this.measureMounted();
-    this.reserve = this.target();
-    this.apply();
-    this.record();
-  }
-
-  /**
-   * THE LANDING: `landedCount` rows are now in the document before the row that was first; `previousFirstBox` is
-   * that row's box. Its displacement since the last record is exactly the height the landing added above it —
-   * margins, collapsed or not, included — and the reservoir shrinks by that much in this same layout pass.
-   * Returns the height absorbed.
-   */
-  land(previousFirstBox: HTMLElement | null, landedCount: number): number {
-    if (!previousFirstBox || this.recordedFirstTop === null) {
-      this.reset();
-      return 0;
-    }
-    const landed = this.topOf(previousFirstBox) - this.recordedFirstTop;
-    this.reserve -= landed;
-    this.measuredTotal += landed;
-    this.measuredRows += landedCount;
-    this.apply();
-    this.record();
-    return landed;
-  }
-
-  /** A row above the first visible row changed height by `delta`: absorbed height-neutrally. */
-  absorbGrowth(delta: number): void {
-    if (delta === 0) {
+  hold(delta: number): void {
+    if (!Number.isFinite(delta) || delta === 0) {
       return;
     }
-    this.reserve -= delta;
+    this.held += delta;
     this.apply();
-    this.record();
   }
 
-  /** Re-record the first row's place after a commit that kept the same first row. */
-  record(): void {
-    const boxes = this.rowBoxes();
-    this.recordedFirstTop = boxes.length > 0 ? this.topOf(boxes[0]) : null;
+  /** The list was replaced, emptied or filled from empty: there is no reader's row to hold anything against. */
+  reset(): void {
+    this.held = 0;
+    this.apply();
   }
 
-  /** Whether a reconcile step is wanted at the next rest. */
-  owed(clientHeight: number): boolean {
-    if (this.reserve < -0.5) {
-      return true;
-    }
-    if (this.remaining <= 0) {
-      return this.reserve > 0.5;
-    }
-    const band = Math.max(1, clientHeight * PrependReservoir.REFILL_BAND_VIEWPORTS);
-    return Math.abs(this.target() - this.reserve) > band;
+  /** Whether anything is held: a settle is wanted. */
+  get owes(): boolean {
+    return Math.abs(this.held) > 0.5;
+  }
+
+  /** Whether a stop is under way: its settle has begun and its write is a painted frame away. */
+  get settling(): boolean {
+    return this.stop !== null;
   }
 
   /**
-   * ONE RECONCILE STEP, at the engine's rest; the scroller is written by the drift measured on the first visible
-   * row — zero where the engine's own anchoring already held it.
-   *
-   * AT THE END (nothing remains above) the whole gap goes at once: the leftover collapsed or the debt paid with ONE
-   * write, the reader's row holding its offset while a write can hold it — with the room above the reader's edge
-   * wider than the offset none can, so the first row arrives at the edge in that same step (a write of 0; none
-   * where the scroller already sits at 0). A bounded step here would be a write per rest, each painted as a tick
-   * on an engine that acknowledges a write a frame late (iOS WebKit): the vibration at a transcript's top.
-   *
-   * WHILE ROWS REMAIN (a refill, an overestimate corrected) the reservoir moves toward its target by at most a
-   * viewport, and a SHRINK is bounded further, by the reader's distance from the loaded start: its write holds the
-   * reader's row, and a write the engine drops (a pan that begins in the write's frame; momentum that re-asserts
-   * its own offset) leaves the rows pulled up under the reader by the step — bounded by that distance, a dropped
-   * step can at worst bring the loaded start to the reader's edge, never the empty room past it. With the scroller
-   * at its very top no write can hold the first row at all, so the room the reader is looking at goes in one step.
-   * Returns the write made (0 for none).
+   * THE SETTLE: what is held is paid whole with one scroll write, the reader's row where it was — after the stop,
+   * where a finger can move the list. `done` runs in the write's own task. Returns false, having begun nothing, when
+   * nothing is held, a settle is already under way, or the scroller has no box (a pane not laid out measures every
+   * drift against nothing: what is held stands until the box is back).
    */
-  step(clientHeight: number): number {
-    const atEnd = this.remaining <= 0;
-    const want = atEnd ? 0 : this.target();
-    const gap = want - this.reserve;
-    if (Math.abs(gap) <= 0.5) {
-      return 0;
+  settle(done?: () => void): boolean {
+    if (this.stop !== null || !this.owes || this.scroller.clientHeight <= 0) {
+      return false;
     }
-    if (atEnd) {
-      return this.applyWithDrift(want);
+    const release = this.stopTheList();
+    if (!release) {
+      this.pay();
+      done?.();
+      return true;
     }
-    let limit = Math.max(1, clientHeight * PrependReservoir.STEP_VIEWPORTS);
-    if (gap < 0) {
-      const offset = this.scroller.scrollTop;
-      limit =
-        offset <= 0.5 ? Math.abs(gap) : Math.max(1, Math.min(limit, Math.abs(this.distanceFromLoadedStart()), offset));
+    // One painted frame with the list stopped: the first frame's callback runs ahead of that paint, the second after it.
+    const stop = {
+      release,
+      frame: requestAnimationFrame(() => {
+        stop.frame = requestAnimationFrame(() => {
+          this.stop = null;
+          this.pay();
+          release();
+          done?.();
+        });
+      }),
+    };
+    this.stop = stop;
+    return true;
+  }
+
+  /** A stop under way is given up — the owner is leaving: the overflow back, nothing written, what is held standing. */
+  cancel(): void {
+    const stop = this.stop;
+    if (!stop) {
+      return;
     }
-    const delta = Math.sign(gap) * Math.min(Math.abs(gap), limit);
-    return this.applyWithDrift(this.reserve + delta);
+    this.stop = null;
+    cancelAnimationFrame(stop.frame);
+    stop.release();
   }
 
   /** The reader's distance from the loaded start: the scroller's top edge below the first row's start, in px. */
   distanceFromLoadedStart(): number {
-    // The loaded start sits `reserve` below the block's top: the room, or (a debt) above it; a window's rows above
-    // are loaded rows, inside the span. With no window term this is the block's bottom plus its negative margin.
+    // The loaded start sits `held` above the block's top (rows above the scroll origin are loaded rows), or (a gap)
+    // below it; a window's rows above are loaded rows too, inside the span.
     const scrollerTop = this.scroller.getBoundingClientRect().top;
     const reservoirTop = this.reservoir.getBoundingClientRect().top;
-    return scrollerTop - reservoirTop - this.reserve;
+    return scrollerTop - reservoirTop + this.held;
   }
 
-  /** The reservoir's signed size in px (a negative value is the debt). */
+  /**
+   * What is held, as the block's signed size in px: negative while rows sit above the scroll origin, waiting for the
+   * settle; positive for a gap; 0 with nothing held.
+   */
   get reservePx(): number {
-    return this.reserve;
+    return this.held === 0 ? 0 : -this.held;
   }
 
-  /** The mean row height in use: the measured mean once rows were measured, the seed before. */
-  get estimate(): number {
-    const measured = this.measuredRows > 0 ? this.measuredTotal / this.measuredRows : 0;
-    return measured > 0 ? measured : this.seedEstimate;
-  }
-
-  private target(): number {
-    return Math.min(PrependReservoir.MAX_RESERVE_PX, this.remaining * this.estimate);
-  }
-
-  /** The mounted rows' span, as the measurement (replacing any earlier one: these rows are the list now); none without rows. */
-  private measureMounted(): void {
+  /**
+   * THE READER'S ROWS: the first row at least partly below the scroller's top edge — the reader's row — and the rows
+   * after it down to the scroller's bottom edge; the first row alone when none lies below the top edge. The rows a
+   * change above the reader is measured on: the reader's row, and (should a commit remove it) the first one after it
+   * that is still there.
+   */
+  readerRows(): HTMLElement[] {
     const boxes = this.rowBoxes();
     if (boxes.length === 0) {
-      this.measuredTotal = 0;
-      this.measuredRows = 0;
-      return;
+      return [];
     }
-    const first = boxes[0].getBoundingClientRect();
-    const last = boxes[boxes.length - 1].getBoundingClientRect();
-    const span = last.bottom - first.top;
-    if (span > 0) {
-      this.measuredTotal = span;
-      this.measuredRows = boxes.length;
+    const box = this.scroller.getBoundingClientRect();
+    // Rows stand in document order, so their bottoms only grow: the first one below the top edge by halving.
+    let low = 0;
+    let high = boxes.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (boxes[middle].getBoundingClientRect().bottom > box.top + 0.5) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
     }
+    if (low >= boxes.length) {
+      return [boxes[0]];
+    }
+    const rows = [boxes[low]];
+    for (let index = low + 1; index < boxes.length && boxes[index].getBoundingClientRect().top < box.bottom; index++) {
+      rows.push(boxes[index]);
+    }
+    return rows;
   }
 
-  /** The block's size from `reserve`: a positive reserve is its height, a negative one its bottom margin. */
+  /** The block's size from what is held: the window's rows above less the held height, a shortfall as a bottom margin. */
   private apply(): void {
-    // The two terms as one block: a debt is paid out of the window's room before it is a negative margin.
-    const total = this.reserve + this.windowAbove;
+    const total = this.windowAbove - this.held;
     this.reservoir.style.height = `${Math.max(0, total)}px`;
     this.reservoir.style.marginBottom = `${Math.min(0, total)}px`;
   }
 
   /**
-   * The reservoir resized with the first visible row held: its drift after the change is the one write, clamped
-   * at 0 where the engine would clamp it (no write holds a row above the scroller's top: the first row arrives at
-   * the edge instead) — and no write where the clamped offset is the one the scroller already has.
+   * THE STOP: the scroller's overflow hidden, so that nothing is moving the list when the write is made. Only on a
+   * device with touch input (nowhere else can a finger the page cannot see be on the list), and never where hiding the
+   * overflow changes the scroller's content box (a scrollbar that takes room would give its width to the rows, and
+   * every row would be laid out again for a frame). Returns what puts the overflow back; null where no stop is taken.
    */
-  private applyWithDrift(next: number): number {
-    const anchor = this.anchorBox();
-    const before = anchor ? anchor.getBoundingClientRect().top : null;
-    this.reserve = next;
+  private stopTheList(): (() => void) | null {
+    if (typeof navigator === 'undefined' || !(navigator.maxTouchPoints > 0)) {
+      return null;
+    }
+    const scroller = this.scroller;
+    const before = scroller.style.overflowY;
+    const width = scroller.clientWidth;
+    scroller.style.overflowY = 'hidden';
+    if (scroller.clientWidth !== width) {
+      scroller.style.overflowY = before;
+      return null;
+    }
+    return () => {
+      scroller.style.overflowY = before;
+    };
+  }
+
+  /**
+   * ONE TASK, ONE WRITE. Rows above the scroll origin: the margin is released first (the range grows by what was
+   * held, the rows come down under the reader), and the reader's row is put back by the drift measured on it — an
+   * absolute write from a read in this same task, clamped at 0 where the engine would clamp it, and none where an
+   * engine's own anchoring already held the row. A gap is the other way round: the write first, then the block —
+   * released first, the range would end above the reader's offset for the length of this task and the engine would
+   * move the reader to its end.
+   */
+  private pay(): void {
+    const held = this.held;
+    this.held = 0;
+    if (held < 0) {
+      const current = this.scroller.scrollTop;
+      const offset = Math.max(0, current + held);
+      if (Math.abs(offset - current) > 0.5) {
+        this.scroller.scrollTop = offset;
+      }
+      this.apply();
+      return;
+    }
+    const row = this.readerRows()[0] ?? null;
+    const before = row ? row.getBoundingClientRect().top : null;
     this.apply();
-    let written = 0;
-    if (anchor && before !== null) {
-      const drift = anchor.getBoundingClientRect().top - before;
+    if (row && before !== null) {
+      const drift = row.getBoundingClientRect().top - before;
       const current = this.scroller.scrollTop;
       const offset = Math.max(0, current + drift);
       if (Math.abs(drift) > 0.5 && Math.abs(offset - current) > 0.5) {
         this.scroller.scrollTop = offset;
-        written = offset - current;
       }
     }
-    this.record();
-    return written;
-  }
-
-  /** The first row at least partly below the scroller's top edge — the reader's row; the first row when none is. */
-  private anchorBox(): HTMLElement | null {
-    const boxes = this.rowBoxes();
-    const top = this.scroller.getBoundingClientRect().top;
-    for (const box of boxes) {
-      if (box.getBoundingClientRect().bottom > top + 0.5) {
-        return box;
-      }
-    }
-    return boxes.length > 0 ? boxes[0] : null;
   }
 }

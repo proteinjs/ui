@@ -115,7 +115,7 @@ export interface ListProps<T> {
    * THE WINDOWED MODE (opt-in; absent, the list mounts every loaded row as it always has): only the rows whose boxes
    * sit inside the viewport plus `windowScreens` client heights on each side are in the document; the rows above the
    * window stand as the reservoir (the library's `PrependReservoir` — the top spacer, sized by their measured heights,
-   * absorbing every height change above the reader with no scroll write), the rows below as a plain spacer. A row's
+   * holding every height change above the reader with no scroll write), the rows below as a plain spacer. A row's
    * height is seeded by `estimatedRowHeight` and measured once per mount by one ResizeObserver; the scroll path is one
    * passive listener that schedules one animation frame, which derives the window from the height map and commits one
    * update only when the window moves (a scroll shorter than half the margin commits nothing). The next window is
@@ -589,10 +589,10 @@ export function List<T>({
     }
   }, []);
 
-  /** A reconcile step is owed: at the next rest, never in this task (the reservoir's law). */
+  /** Something is held: its settle comes at the next rest, never in this task (the start edge's law). */
   const requestReconcile = useCallback(() => {
     const current = engine.current;
-    if (current && current.owed(clientHeight.current)) {
+    if (current && current.owes) {
       rest.current?.request();
     }
   }, []);
@@ -730,7 +730,7 @@ export function List<T>({
         }
       }
       if (absorb !== 0) {
-        current.absorbGrowth(absorb);
+        current.hold(absorb);
         requestReconcile();
       }
       if (changed) {
@@ -793,11 +793,10 @@ export function List<T>({
       const box = boxes.current.get(anchor.key) as HTMLElement;
       const drift = current.topOf(box) - anchor.top;
       if (Math.abs(drift) > 0.5) {
-        current.absorbGrowth(drift);
+        current.hold(drift);
         requestReconcile();
       }
     }
-    current.record();
     recordAnchors();
     syncObserved();
   }, [refreshBoxes, cellHeights, requestReconcile, recordAnchors, syncObserved]);
@@ -813,7 +812,6 @@ export function List<T>({
     }
     const current = new PrependReservoir(host, reservoir, mountedBoxes);
     engine.current = current;
-    current.setRemaining(0, latest.current.windowed?.estimatedRowHeight ?? 0);
     // The engine's watch: an ungrouped row that draws or replaces its own box on a commit that is NOT the list's — the
     // walk again, before the browser's next layout. It serves nothing else: every other child of the root is a box of
     // the list's own and carries the declaration from its render (the law at `ROWS_OUT_OF_ANCHORING`).
@@ -822,17 +820,14 @@ export function List<T>({
     // The engine's first re-read of the document: an ungrouped list's rows out of the browser's anchoring, then the
     // boxes — before the reservoir's first read of the layout.
     refreshBoxes();
-    current.initialize();
+    current.reset();
     const watch = new ScrollRest(() => {
-      // No step through the hidden interval: its drift is measured against a box of 0 — a debt silently zeroed, no
-      // write to hold the reader. The interval's end re-asks the rest for what is owed.
+      // No settle through the hidden interval: its drift is measured against a box of 0 — a debt silently zeroed, no
+      // write to hold the reader. The interval's end re-asks the rest for what is held.
       const hostNow = scrollHost;
-      if (hostNow && laidOut.current && current.owed(clientHeight.current)) {
-        current.step(clientHeight.current);
-        recordAnchors();
-        if (current.owed(clientHeight.current)) {
-          watch.request();
-        }
+      if (hostNow && laidOut.current) {
+        // The settle: the list stopped where a finger can move it, then ONE write; the anchors' tops moved with it.
+        current.settle(recordAnchors);
       }
     });
     rest.current = watch;
@@ -871,6 +866,7 @@ export function List<T>({
       observed.current.clear();
       boxObserver.current?.disconnect();
       boxObserver.current = null;
+      current.cancel();
       engine.current = null;
       anchors.current = [];
       watchOfRows.disconnect();

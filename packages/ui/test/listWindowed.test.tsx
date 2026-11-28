@@ -959,6 +959,58 @@ describe('List — the windowed mode over the reservoir', () => {
     expect(reservoirPx()).toBe((first - 2) * ROW_H + 2 * (ROW_H + 40));
   });
 
+  test('6b. where a finger can move the list (a device with touch input) the rest’s one write is made on a stopped scroller: its overflow hidden for one painted frame, ONE write, the overflow back as the host had it — and a list that leaves inside that frame puts it back and writes nothing', async () => {
+    Object.defineProperty(window.navigator, 'maxTouchPoints', { value: 5, configurable: true });
+    try {
+      const loader = new CorpusLoader(keys(), corpusOf(300));
+      await mountList(loader, 300);
+      await frame();
+      readerScrollsTo(scroller, 2_000);
+      await frame();
+      await rest(); // at rest, nothing held
+      expect(writes).toEqual([]);
+      scroller.style.overflowY = 'scroll'; // the host's own word, which the stop must put back
+      const anchor = readerRow();
+      const offset = topOf(anchor);
+
+      await grows(rowAbove(), 40);
+      expect(writes).toEqual([]);
+      await act(async () => {
+        jest.advanceTimersByTime(1); // the rest of a list long still: the settle begins with the stop
+      });
+      expect(scroller.style.overflowY).toBe('hidden');
+      expect(writes).toEqual([]);
+      await act(async () => {
+        pumpFrames(1); // the frame that is painted with the list stopped
+      });
+      expect(scroller.style.overflowY).toBe('hidden');
+      expect(writes).toEqual([]);
+      await act(async () => {
+        pumpFrames(1);
+      });
+      expect(writes.length).toBe(1);
+      expect(scroller.style.overflowY).toBe('scroll');
+      expect(Math.abs(topOf(anchor) - offset)).toBeLessThanOrEqual(0.5);
+      await rest();
+      expect(writes.length).toBe(1);
+
+      // The list leaves inside a stopped frame: the host's overflow is the host's again, and nothing is written.
+      await grows(rowAbove(), 40);
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(scroller.style.overflowY).toBe('hidden');
+      render(<div />);
+      expect(scroller.style.overflowY).toBe('scroll');
+      await act(async () => {
+        pumpFrames(4);
+      });
+      expect(writes.length).toBe(1);
+    } finally {
+      Object.defineProperty(window.navigator, 'maxTouchPoints', { value: undefined, configurable: true });
+    }
+  });
+
   test('7. group heads: a group’s head renders once per commit; a group cut by the window keeps its container and its mounted rows', async () => {
     const loader = new CorpusLoader(keys(), corpusOf(1000));
     const HEAD_H = 40;

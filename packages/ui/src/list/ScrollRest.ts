@@ -32,6 +32,9 @@
  * `onRest` fires once when the four first hold together after motion, an arm or a `request()`. The rest is judged
  * by ONE timer, armed for what is left of the window: an arm's lift, a `scrollend` and a `request()` only ask for
  * the judgment, so nothing fires inside the task that asked — from an idle list it fires in the next task.
+ *
+ * THE LIFT: `onLift`, for an owner that acts where the reader has run out of rows and cannot wait for the rest,
+ * fires in the task the last arm goes up (R1 turning true) — the lift itself, with the list perhaps still moving.
  */
 export class ScrollRest {
   /** Clock time with no `scroll` event that counts as the scroll's end (R3). */
@@ -58,7 +61,11 @@ export class ScrollRest {
   /** Whether this engine fires `scrollend` — the source of "the engine has ended the scroll", chosen once. */
   private readonly engineEndsScrolls = typeof window !== 'undefined' && 'onscrollend' in window;
 
-  constructor(private readonly onRest: () => void) {}
+  constructor(
+    private readonly onRest: () => void,
+    /** The last arm went up (see THE LIFT). */
+    private readonly onLift?: () => void
+  ) {}
 
   /** The arms' and the motion's listeners on the scroller; returns the detach (also `detach()`). */
   attach(scroller: HTMLElement): () => void {
@@ -75,6 +82,7 @@ export class ScrollRest {
       if (this.scrollbarPress) {
         this.scrollbarPress = false;
         this.judgeWhenQuiet();
+        this.lifted();
       }
     };
     const onScroll = () => {
@@ -169,8 +177,16 @@ export class ScrollRest {
     }
     if (this.touches.size === 0) {
       this.judgeWhenQuiet();
+      this.lifted();
     }
   };
+
+  /** An arm went up: with none left down, the owner is told. */
+  private lifted(): void {
+    if (!this.armDown) {
+      this.onLift?.();
+    }
+  }
 
   private unbindTouchEnd(target: EventTarget): void {
     target.removeEventListener('touchend', this.touchEnded);
