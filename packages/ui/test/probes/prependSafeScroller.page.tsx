@@ -1,13 +1,10 @@
 /**
  * THE PROBE PAGE for PrependSafeScroller — served and driven by prependSafeScroller.probe.js: a phone-shaped
  * scroller over a synthetic history read upward, in one of two shapes chosen by the URL —
- *   ?mode=reservoir   the primitive under proof;
+ *   ?mode=held        the primitive under proof;
  *   ?mode=write       the shape it replaces: a top-origin scroller that lands older rows and restores the reader's
  *                     row with a scrollTop write in the rows' own layout effect.
- * Other parameters: total (rows in the history, 80), latency (ms a page read takes, 350), count=low (the consumer
- * under-counts the rows above, so the reservoir runs short and the debt is paid at the rest), count=high (the
- * consumer over-counts by two pages while rows remain, so the history's end leaves a leftover room over two
- * viewports — the end collapse at the rest), lead (viewports).
+ * Other parameters: total (rows in the history, 80), latency (ms a page read takes, 350), lead (viewports).
  *
  * THE PAGE JUDGES ITSELF. From the first touch or scroll event an EPISODE records every animation frame of the
  * scroller — scrollTop, scrollHeight, the row count, the first visible row and its top, the previous frame's row
@@ -18,7 +15,10 @@
  *   • on a LANDING frame (the row count grew) the row's position in CONTENT coordinates — its viewport top plus
  *     the scroll offset, the layout above it — is unchanged within JUMP_PX (the height-neutral law: a pan or a
  *     fling moves the viewport, never the content above the row), scrollHeight is unchanged, and nothing was
- *     written; a write while a finger is down is a jump by the platform's law (the pan re-derives it away);
+ *     written; a write while a finger is down is a jump by the platform's law (the pan re-derives it away). (The
+ *     list itself writes in a landing's frame in one place only: a reader standing at the loaded start with no
+ *     finger down is settled as the rows land. This page reads that as a write at a landing; none of the driven
+ *     scenarios makes one.);
  *   • on a WRITE frame with no finger (the census grew — a reconcile at the rest) the row keeps its viewport top
  *     within JUMP_PX, judged over that frame and the next (an engine may acknowledge the offset a frame late).
  * The episode's summary is posted to /__log, kept in window.__probe.episodes and drawn in the overlay.
@@ -29,12 +29,10 @@ import { PrependSafeScroller, PrependSafeScrollerApi } from '../../src/list/Prep
 
 const params = new URLSearchParams(window.location.search);
 const param = (name: string, fallback: string) => params.get(name) ?? fallback;
-const MODE = param('mode', 'reservoir');
+const MODE = param('mode', 'held');
 const TOTAL = Number(param('total', '80'));
 const PAGE = 10;
 const LATENCY = Number(param('latency', '350'));
-const LOW_COUNT = param('count', 'honest') === 'low';
-const HIGH_COUNT = param('count', 'honest') === 'high';
 const LEAD = Number(param('lead', '2'));
 const SCROLLER_ID = 'list';
 
@@ -114,18 +112,15 @@ declare global {
   }
 }
 
-/** The primitive under proof: the consumer counts the rows above honestly (low with count=low, high with count=high). */
-const ReservoirList = () => {
+/** The primitive under proof: the consumer says how many rows remain above (only its being above zero is read). */
+const HeldList = () => {
   const [items, setItems] = useState<Row[]>(() => range(TOTAL - PAGE + 1, TOTAL).map(rowOf));
   const [loading, setLoading] = useState(false);
   const api = useRef<PrependSafeScrollerApi | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
   const firstId = useRef(items[0].id);
   firstId.current = items[0].id;
-  const remainingReal = items[0].id - 1;
-  // A high count over-counts by two pages only while rows remain: the history's end is still the consumer's 0.
-  const remainingCounted = HIGH_COUNT && remainingReal > 0 ? remainingReal + 2 * PAGE : remainingReal;
-  const remaining = LOW_COUNT ? Math.min(remainingReal, 5) : remainingCounted;
+  const remaining = items[0].id - 1;
   const onNeedMore = useCallback(async () => {
     askLog.push(firstId.current);
     setLoading(true);
@@ -159,7 +154,6 @@ const ReservoirList = () => {
       itemKey={(row) => row.id}
       renderItem={(row) => <RowView row={row} />}
       remainingAbove={remaining}
-      estimatedRowHeight={120}
       leadViewports={LEAD}
       onNeedMore={onNeedMore}
       loading={loading}
@@ -257,7 +251,7 @@ type Frame = {
   previousAnchorTop: number | null;
   writes: number;
   fingerY: number | null;
-  /** The reservoir's signed size as the consumer's door reports it (0 in the shape replaced). */
+  /** What the start edge holds, as the consumer's door reports it: negative while rows sit above the origin (0 in the shape replaced). */
   reserve: number;
 };
 type Summary = {
@@ -704,7 +698,7 @@ window.__probe = probe.door();
 const root = createRoot(document.getElementById('root')!);
 root.render(
   <>
-    {MODE === 'write' ? <WriteList /> : <ReservoirList />}
+    {MODE === 'write' ? <WriteList /> : <HeldList />}
     <Overlay probe={probe} />
   </>
 );

@@ -15,13 +15,12 @@
  *       (the measured iOS behaviour: the pan re-derives the offset from the touch's origin). Scenarios, per mode:
  *         the HELD DRAG  — six slow finger-down drags into the lead; pages land under the finger;
  *         the FLICK      — a touch fling (Chromium's own momentum) into the lead;
- *         the END        — drags until nothing remains above; the leftover reservoir collapses at the rest;
- *         the LOW COUNT  — the consumer under-counts: the reservoir runs short, the debt is paid at the rest.
- *       Exit 0 when the reservoir passes every law AND the write shape shows its red; 1 otherwise.
+ *         the END        — drags until nothing remains above; nothing is left held after the rest.
+ *       Exit 0 when the list that holds passes every law AND the write shape shows its red; 1 otherwise.
  *
  *   node test/probes/prependSafeScroller.probe.js serve --esbuild <bin> [--port 8460] [--log-dir <dir>]
  *       The page for a real WebKit — a simulator's Safari or a phone on the LAN: open
- *       http://<host>:<port>/?mode=reservoir (and ?mode=write), drive real pans, then:
+ *       http://<host>:<port>/?mode=held (and ?mode=write), drive real pans, then:
  *   node test/probes/prependSafeScroller.probe.js judge [--log-dir <dir>]
  *       Every episode the page posted, by mode, and the verdict per mode.
  *
@@ -101,7 +100,7 @@ class PrependSafeScrollerProbe {
       this.server = http.createServer((req, res) => this.handle(req, res));
       this.server.listen(this.port, () => {
         console.log(
-          `probe page: http://localhost:${this.port}/?mode=reservoir  (and ?mode=write); episodes: ${this.episodesFile}`
+          `probe page: http://localhost:${this.port}/?mode=held  (and ?mode=write); episodes: ${this.episodesFile}`
         );
         resolve();
       });
@@ -330,8 +329,8 @@ const runChromium = async (probe, playwrightPath) => {
     }));
 
   try {
-    for (const mode of ['reservoir', 'write']) {
-      const label = mode === 'reservoir' ? 'the reservoir' : 'the compensating write (the shape replaced)';
+    for (const mode of ['held', 'write']) {
+      const label = mode === 'held' ? 'the list that holds' : 'the compensating write (the shape replaced)';
       const t = await open(`mode=${mode}`);
       const opened = await app(t.page);
       console.log(
@@ -347,7 +346,7 @@ const runChromium = async (probe, playwrightPath) => {
       await shot(t.page, `${mode}-held`);
       const held = await since(t.page);
       const heldVerdict = PrependSafeScrollerProbe.verdict(mode, [held]);
-      if (mode === 'reservoir') {
+      if (mode === 'held') {
         check(
           'held drag: pages landed under the finger',
           held.landings >= 2 && held.landingsUnderFinger >= 1,
@@ -384,7 +383,7 @@ const runChromium = async (probe, playwrightPath) => {
       await settle(t.page, 3000);
       await shot(t.page, `${mode}-flick`);
       const flick = await since(t.page);
-      if (mode === 'reservoir') {
+      if (mode === 'held') {
         check(
           'flick: pages landed under momentum with no write at any landing and the row holding',
           flick.landings >= 1 &&
@@ -397,7 +396,7 @@ const runChromium = async (probe, playwrightPath) => {
         console.log(`info  flick (the shape replaced): ${PrependSafeScrollerProbe.describe(flick)}`);
       }
 
-      if (mode === 'reservoir') {
+      if (mode === 'held') {
         // THE END: drags until nothing remains above; the leftover collapses at the rest with neutral writes only.
         await mark(t.page);
         let drags = 0;
@@ -410,7 +409,7 @@ const runChromium = async (probe, playwrightPath) => {
         const end = await since(t.page);
         const atEnd = await app(t.page);
         check(
-          'end: nothing remains above and the reservoir collapsed to 0 at the rest',
+          'end: nothing remains above and nothing is held after the rest',
           atEnd.remaining === 0 && Math.abs(atEnd.reserve) <= 0.5,
           `after ${drags} drags: above ${atEnd.remaining}, reserve ${atEnd.reserve.toFixed(1)} px, st ${Math.round(atEnd.st)} / sh ${atEnd.sh}`
         );
@@ -425,32 +424,6 @@ const runChromium = async (probe, playwrightPath) => {
       }
       await t.page.close();
     }
-
-    // THE LOW COUNT: the consumer under-counts the rows above; landings exceed the room; the debt is paid at the rest.
-    const low = await open('mode=reservoir&count=low');
-    await mark(low.page);
-    for (let k = 0; k < 6; k++) {
-      await drag(low, 80, 8, 600);
-    }
-    await settle(low.page, 3000);
-    await shot(low.page, 'reservoir-low-count');
-    const debt = await since(low.page);
-    const lowState = await app(low.page);
-    check(
-      'low count: landings taller than the reservoir are still neutral — no write at a landing, no jump',
-      debt.landings >= 1 &&
-        debt.writesAtLandings === 0 &&
-        debt.maxLandingDrift <= TOLERANCE_PX &&
-        debt.maxShChangeAtLanding <= 1 &&
-        debt.jumps === 0,
-      PrependSafeScrollerProbe.describe(debt)
-    );
-    check(
-      `low count: the debt is paid at the rest — any write with no finger down, moving the row ≤ ${TOLERANCE_PX} px, the reservoir back at or above 0`,
-      debt.writesUnderFinger === 0 && debt.maxWriteDrift <= TOLERANCE_PX && lowState.reserve >= -0.5,
-      `reserve ${lowState.reserve.toFixed(1)} px after the rest; ${debt.writes} writes (an engine whose own anchoring compensates the step reads a drift of 0 and gets none)`
-    );
-    await low.page.close();
   } finally {
     await context.close();
     await browser.close();
