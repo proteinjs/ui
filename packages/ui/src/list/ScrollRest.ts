@@ -39,8 +39,6 @@
 export class ScrollRest {
   /** Clock time with no `scroll` event that counts as the scroll's end (R3). */
   static readonly QUIET_MS = 150;
-  /** Nothing in this library reads it any longer (see `QUIET_MS`); it stays for those who import it. */
-  static readonly QUIET_FRAMES = 3;
   /** The identifier a touch event that names no touch stands for (a synthetic event: one touch down, one lifted). */
   private static readonly UNNAMED_TOUCH = -1;
 

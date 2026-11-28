@@ -12,7 +12,7 @@ import { Box, BoxProps, Skeleton, SxProps, Theme, Typography } from '@mui/materi
 import { CursorLoader } from '../table/CursorLoader';
 import { useCursorWindows } from '../table/cursorWindows';
 import { ScrollTopButton, ScrollTopButtonStyleProps } from '../components/ScrollTopButton';
-import { PrependReservoir } from './PrependReservoir';
+import { ListStartEdge } from './ListStartEdge';
 import { PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS } from './PrependSafeScroller';
 import { ScrollRest } from './ScrollRest';
 import { RowGroup, RowGroups } from './RowGroups';
@@ -114,7 +114,7 @@ export interface ListProps<T> {
   /**
    * THE WINDOWED MODE (opt-in; absent, the list mounts every loaded row as it always has): only the rows whose boxes
    * sit inside the viewport plus `windowScreens` client heights on each side are in the document; the rows above the
-   * window stand as the reservoir (the library's `PrependReservoir` — the top spacer, sized by their measured heights,
+   * window stand as the reservoir (the library's `ListStartEdge` — the top spacer, sized by their measured heights,
    * holding every height change above the reader with no scroll write), the rows below as a plain spacer. A row's
    * height is seeded by `estimatedRowHeight` and measured once per mount by one ResizeObserver; the scroll path is one
    * passive listener that schedules one animation frame, which derives the window from the height map and commits one
@@ -454,7 +454,7 @@ export function List<T>({
   const boxOrder = useRef<string[]>([]);
   const keyOfBox = useRef(new WeakMap<Element, string>());
   const reservoirEl = useRef<HTMLDivElement | null>(null);
-  const engine = useRef<PrependReservoir | null>(null);
+  const engine = useRef<ListStartEdge | null>(null);
   /** The engine's watch of an ungrouped list's cells (`holdRowsAlone`); null while no engine is mounted. */
   const rowWatch = useRef<MutationObserver | null>(null);
   const rest = useRef<ScrollRest | null>(null);
@@ -810,7 +810,7 @@ export function List<T>({
     if (!isWindowed || !host || !root || !reservoir) {
       return;
     }
-    const current = new PrependReservoir(host, reservoir, mountedBoxes);
+    const current = new ListStartEdge(host, reservoir, mountedBoxes);
     engine.current = current;
     // The engine's watch: an ungrouped row that draws or replaces its own box on a commit that is NOT the list's — the
     // walk again, before the browser's next layout. It serves nothing else: every other child of the root is a box of

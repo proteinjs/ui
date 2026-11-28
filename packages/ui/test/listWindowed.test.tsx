@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * `List`'s WINDOWED MODE (src/list/List.tsx, `windowed`) over the reservoir (src/list/PrependReservoir.ts) under a
+ * `List`'s WINDOWED MODE (src/list/List.tsx, `windowed`) over the reservoir (src/list/ListStartEdge.ts) under a
  * MODELLED LAYOUT (the scroller suite's shape): jsdom lays nothing out, so the scroller's clientHeight, scrollHeight
  * and scrollTop and every box's rect are computed here from the document order, each row's declared height (`data-h`)
  * and the two spacers' inline styles. `scrollTop`'s setter is a spy — a write IS the outcome the laws forbid or allow —

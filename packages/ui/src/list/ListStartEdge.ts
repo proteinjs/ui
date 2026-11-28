@@ -29,7 +29,7 @@
  * from the LOADED start — the window's rows above are inside the loaded span. With no window term (the default, 0)
  * every number below is the one it was.
  */
-export class PrependReservoir {
+export class ListStartEdge {
   /**
    * Height above the reader held out of the scroll range, px. Positive: rows above the scroll origin (the block's
    * negative bottom margin). Negative: a gap, kept as the block's own height.
@@ -42,7 +42,7 @@ export class PrependReservoir {
 
   constructor(
     private readonly scroller: HTMLElement,
-    private readonly reservoir: HTMLElement,
+    private readonly edge: HTMLElement,
     /** The rows' boxes in document order — the elements whose rects are the rows' geometry. */
     private readonly rowBoxes: () => HTMLElement[]
   ) {}
@@ -63,7 +63,7 @@ export class PrependReservoir {
 
   /** A box's top relative to the block's top, as the engine lays it out now — the one geometry every measure uses. */
   topOf(box: HTMLElement): number {
-    return box.getBoundingClientRect().top - this.reservoir.getBoundingClientRect().top;
+    return box.getBoundingClientRect().top - this.edge.getBoundingClientRect().top;
   }
 
   /**
@@ -142,8 +142,8 @@ export class PrependReservoir {
     // The loaded start sits `held` above the block's top (rows above the scroll origin are loaded rows), or (a gap)
     // below it; a window's rows above are loaded rows too, inside the span.
     const scrollerTop = this.scroller.getBoundingClientRect().top;
-    const reservoirTop = this.reservoir.getBoundingClientRect().top;
-    return scrollerTop - reservoirTop + this.held;
+    const edgeTop = this.edge.getBoundingClientRect().top;
+    return scrollerTop - edgeTop + this.held;
   }
 
   /**
@@ -190,8 +190,8 @@ export class PrependReservoir {
   /** The block's size from what is held: the window's rows above less the held height, a shortfall as a bottom margin. */
   private apply(): void {
     const total = this.windowAbove - this.held;
-    this.reservoir.style.height = `${Math.max(0, total)}px`;
-    this.reservoir.style.marginBottom = `${Math.min(0, total)}px`;
+    this.edge.style.height = `${Math.max(0, total)}px`;
+    this.edge.style.marginBottom = `${Math.min(0, total)}px`;
   }
 
   /**

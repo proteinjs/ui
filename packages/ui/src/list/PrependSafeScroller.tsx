@@ -1,6 +1,6 @@
 import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Box, BoxProps, SxProps, Theme } from '@mui/material';
-import { PrependReservoir } from './PrependReservoir';
+import { ListStartEdge } from './ListStartEdge';
 import { ScrollRest } from './ScrollRest';
 
 /** The scroller's door for a consumer's own view math (`apiRef`). */
@@ -121,7 +121,7 @@ class RowsCommit extends React.Component<RowsCommitProps> {
  * A vertical scroller whose contract is that a height change ABOVE the reader never moves what the reader sees, on
  * every engine, with no scroll-position write while the list is moving. The list is a plain list of real rows: there
  * is no room for rows not yet loaded and nothing is sized from a guess. Older rows landing at the start, a row above
- * the reader growing later, a row above it leaving — each is HELD by the start edge (`PrependReservoir`): the height
+ * the reader growing later, a row above it leaving — each is HELD by the start edge (`ListStartEdge`): the height
  * that appeared above the reader's own row, measured on that row across the commit, is kept out of the scroll range
  * in the same layout pass, before paint. So `scrollHeight` and `scrollTop` are unchanged and rows land under a
  * finger, a glide or a rubber band with nothing for the engine to undo; rows that landed above the scroll origin are
@@ -159,8 +159,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     ...boxProps
   } = props;
   const scrollerEl = useRef<HTMLDivElement | null>(null);
-  const reservoirEl = useRef<HTMLDivElement | null>(null);
-  const engine = useRef<PrependReservoir | null>(null);
+  const edgeEl = useRef<HTMLDivElement | null>(null);
+  const engine = useRef<ListStartEdge | null>(null);
   const rest = useRef<ScrollRest | null>(null);
   const observer = useRef<ResizeObserver | null>(null);
   const observedHeights = useRef(new Map<Element, number>());
@@ -391,11 +391,11 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   // Mount: the start edge, the rest watch and the gate on the scroller.
   useLayoutEffect(() => {
     const scroller = scrollerEl.current;
-    const reservoir = reservoirEl.current;
-    if (!scroller || !reservoir) {
+    const edge = edgeEl.current;
+    if (!scroller || !edge) {
       return;
     }
-    const current = new PrependReservoir(scroller, reservoir, rowBoxes);
+    const current = new ListStartEdge(scroller, edge, rowBoxes);
     engine.current = current;
     current.reset();
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
@@ -507,7 +507,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (landed > 0) {
       landedSinceAsk.current = true;
       if (current.reservePx < -0.5) {
-        const origin = reservoirEl.current?.getBoundingClientRect().bottom ?? 0;
+        const origin = edgeEl.current?.getBoundingClientRect().bottom ?? 0;
         for (let index = 0; index < landed; index++) {
           const wrapper = wrappers.get(String(itemKey(items[index])));
           const box = wrapper?.firstElementChild;
@@ -589,11 +589,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   ];
   return (
     <Box ref={setScroller} {...boxProps} sx={scrollerSx}>
-      <div
-        ref={reservoirEl}
-        data-prepend-reservoir
-        style={{ position: 'relative', flexShrink: 0, overflowAnchor: 'none' }}
-      >
+      <div ref={edgeEl} data-prepend-start-edge style={{ position: 'relative', flexShrink: 0, overflowAnchor: 'none' }}>
         {loading && remainingAbove > 0 && loadingRow !== undefined && (
           <div
             data-prepend-loading

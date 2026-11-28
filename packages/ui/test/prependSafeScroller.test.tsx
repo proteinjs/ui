@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  *
- * PrependSafeScroller (src/list/PrependSafeScroller.tsx) with its start edge (PrependReservoir) and the one rest
+ * PrependSafeScroller (src/list/PrependSafeScroller.tsx) with its start edge (ListStartEdge) and the one rest
  * definition (ScrollRest), under a MODELLED LAYOUT: jsdom lays nothing out, so the scroller's clientHeight,
  * scrollHeight and scrollTop, and every box's rect, are computed here from the DOM order, each row's declared
  * height (`data-h`) and the start edge's own inline style — the geometry a real engine would give. `scrollTop`'s
@@ -159,7 +159,7 @@ const writes: number[] = [];
 const writtenWith: Array<{ overflowY: string; edgeHeight: string; edgeMargin: string }> = [];
 const heightOf = (el: Element) => Number(el.getAttribute('data-h') ?? 0);
 const layoutOf = (scroller: Element) => {
-  const edge = scroller.querySelector('[data-prepend-reservoir]') as HTMLElement;
+  const edge = scroller.querySelector('[data-prepend-start-edge]') as HTMLElement;
   // What the edge holds inside it is laid out as an engine would: out of the flow it adds nothing, in the flow its height.
   const within = Array.from(edge.children).reduce(
     (sum, child) =>
@@ -251,7 +251,7 @@ const rowWrapper = (scroller: HTMLElement, id: number) =>
   scroller.querySelector(`[data-prepend-row="${id}"]`) as HTMLElement;
 const offsetOf = (scroller: HTMLElement, id: number) => rowBox(scroller, id).getBoundingClientRect().top;
 function edgeOf(scroller: HTMLElement): HTMLElement {
-  return scroller.querySelector('[data-prepend-reservoir]') as HTMLElement;
+  return scroller.querySelector('[data-prepend-start-edge]') as HTMLElement;
 }
 
 // ── The harness: a consumer with its own items, count and loading state. ──
