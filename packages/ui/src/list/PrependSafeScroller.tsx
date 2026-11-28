@@ -11,7 +11,12 @@ export interface PrependSafeScrollerApi {
   distanceFromLoadedStart(): number;
   /** What the start edge holds, in px: negative while rows sit above the scroll origin until the settle, 0 with nothing held. */
   reservePx(): number;
-  /** `onRest` at the list's next rest — in the next task when it is at rest now. For a consumer whose own news arrived while the list was still. */
+  /**
+   * The consumer's own news arrived (rows it holds as data): `onRest` comes at the next of the scroller's two
+   * moments. Where the reader stands at the loaded start, at once with no known finger down and at that finger's
+   * lift with one — however often the reader pulls there, and with no rest; anywhere else at the list's next rest,
+   * in the next task when it is at rest now.
+   */
   requestRest(): void;
 }
 
@@ -27,7 +32,8 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
   renderItem: (item: T, index: number) => ReactNode;
   /**
    * Whether rows remain above the first item: only its being above zero is read (the consumer's count, or any
-   * positive number while more exist). 0 says the start is reached: nothing is asked for, and nothing shows there.
+   * positive number while more exist — rows the consumer holds as data and has not yet put in `items` are rows
+   * above the first item). 0 says the start is reached: nothing is asked for, and nothing shows there.
    */
   remainingAbove: number;
   /** Not read: nothing is sized from a guess of the rows not yet loaded. It stays for those who pass it. */
@@ -39,9 +45,9 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
    * never on the ask's own result (a promise settles before the rows' commit, and a scroll event in that gap would
    * ask for the same page again). A read that brings nothing reopens the gate only through `loading`; a consumer
    * that reaches the start sets `remainingAbove` to 0. The lead is judged at the opening frame, on scroll, after
-   * every commit of rows, after every settle and whenever the scroller's OWN box gains height — rows that landed
-   * while the scroller had no geometry (a pane mounted hidden and laid out later) are asked above once the box
-   * arrives, by this one rule.
+   * every commit of rows and whenever the scroller's OWN box gains height — rows that landed while the scroller
+   * had no geometry (a pane mounted hidden and laid out later) are asked above once the box arrives, by this one
+   * rule.
    */
   onNeedMore?: () => void | Promise<unknown>;
   /**
@@ -61,7 +67,8 @@ export interface PrependSafeScrollerProps<T> extends Omit<BoxProps, 'children' |
    * The moment for a consumer's own rest-dependent work, and for landing rows it holds as data. It comes at the
    * list's rest as `ScrollRest` judges it, and where the reader has run out of loaded rows (the scroller's top edge
    * at the loaded start, no known finger down, or at that finger's lift) — and once more after a settle that either
-   * moment began, when the rows above are reachable.
+   * moment began, when the rows above are reachable. It can come more than once around one landing: the work done
+   * in it must be safe to repeat. A consumer whose rows arrive later says so (`apiRef.requestRest()`).
    */
   onRest?: () => void;
   /** The scroll container element. */
@@ -77,9 +84,10 @@ export const PREPEND_SAFE_SCROLLER_LEAD_VIEWPORTS = 2;
 
 /**
  * ROWS REMAIN ABOVE THIS START: on the scroller's root while the consumer says rows remain above the first item, or
- * while the start edge holds rows above the scroll origin. One fact for whoever asks "can this list still go up?" of
- * a scroller whose offset reads 0 at its loaded start: a sheet that would otherwise take the pull, a fade that marks
- * content above.
+ * while the start edge holds anything until its write. One fact for whoever asks "can this list still go up?" of a
+ * scroller whose offset reads 0 at its loaded start, or "is this a list that scrolls?" in the one painted frame it
+ * is stopped for its write (its overflow reads hidden then): a sheet that would otherwise take the pull, a fade that
+ * marks content above.
  */
 export const PREPEND_ROWS_ABOVE_ATTR = 'data-prepend-rows-above';
 
@@ -89,8 +97,8 @@ type ReaderRows = Array<{ key: string; top: number }>;
 interface RowsCommitProps {
   /** The rows' list: a commit that changes it is a commit of rows. */
   items: unknown;
-  /** Called immediately before a commit of rows changes the document. */
-  before: () => void;
+  /** Called immediately before a commit of rows changes the document, with the list it replaces. */
+  before: (previous: unknown) => void;
 }
 
 /**
@@ -104,8 +112,8 @@ class RowsCommit extends React.Component<RowsCommitProps> {
     return next.items !== this.props.items;
   }
 
-  getSnapshotBeforeUpdate(): null {
-    this.props.before();
+  getSnapshotBeforeUpdate(previous: RowsCommitProps): null {
+    this.props.before(previous.items);
     return null;
   }
 
@@ -125,16 +133,24 @@ class RowsCommit extends React.Component<RowsCommitProps> {
  * that appeared above the reader's own row, measured on that row across the commit, is kept out of the scroll range
  * in the same layout pass, before paint. So `scrollHeight` and `scrollTop` are unchanged and rows land under a
  * finger, a glide or a rubber band with nothing for the engine to undo; rows that landed above the scroll origin are
- * not painted until they can be reached.
+ * not painted while they stand there.
+ *
+ * ONE COUNT OF EVERY CHANGE. A commit of rows is measured on the reader's own row, and that measure already holds
+ * whatever the commit changed above it. The sizes an engine reports next are that commit's own — the rows it added,
+ * the rows it changed — so the first reports after a commit are judged on the reader's row again, against the place
+ * the commit left it: they hold only what moved it since (a row that fills itself in a second pass, or in its own
+ * effect), and never what the commit counted. Reports that come later are each judged by the row they name.
  *
  * What is held is paid by THE SETTLE — the list stopped for one painted frame where a finger can move it, then one
  * exact write — at two moments only: at the list's REST (`ScrollRest`), where nothing is seen; and WHERE THE READER
  * HAS RUN OUT of loaded rows (the scroller's top edge at the loaded start), where the list has stopped anyway: at
  * once with no known finger down, at the lift with one. `onRest` tells the consumer of both moments, so rows it holds
- * as data land there too.
+ * as data land there too. A settle never begins while a commit's rows are still being set up, and a commit that
+ * lands rows ends a stop under way before it changes the document: no row's own effect, layout or passive, finds the
+ * scroller stopped.
  *
- * The scroller owns the loader's gate (the `onNeedMore` ask, one in flight, re-asked after every landing, every
- * settle and whenever its own box gains height, until the lead is filled or nothing remains), the place of the
+ * The scroller owns the loader's gate (the `onNeedMore` ask, one in flight, re-asked after every landing and
+ * whenever its own box gains height, until the lead is filled or nothing remains), the place of the
  * consumer's loading face, and the fact `PREPEND_ROWS_ABOVE_ATTR`. It turns the engine's own scroll anchoring off on
  * its root: a height change above the reader has one keeper. It never reorders, virtualizes or styles rows, and never
  * writes for the consumer's own deliberate moves. With `remainingAbove` 0 and nothing held it is a plain scroller.
@@ -177,14 +193,24 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   const loadingForAsk = useRef(-1);
   const mounted = useRef(false);
   const firstKey = useRef<string | number | undefined>(undefined);
-  /** The rows that landed above the scroll origin: not painted until the settle that makes them reachable. */
+  /** The rows that landed above the scroll origin: not painted while they stand there. */
   const unpainted = useRef(new Set<HTMLElement>());
   /** The consumer was told that the reader ran out of loaded rows, at this arrival at the loaded start. */
   const toldRanOut = useRef(false);
-  /** The reader's rows as the commit under way found them (null: no box to measure in); undefined between commits. */
-  const rowsBefore = useRef<{ rows: ReaderRows | null } | undefined>(undefined);
-  const latest = useRef({ onNeedMore, onRest, remainingAbove, leadViewports });
-  latest.current = { onNeedMore, onRest, remainingAbove, leadViewports };
+  /** The consumer said its own news arrived (`requestRest`) and has not been told since. */
+  const consumerWaits = useRef(false);
+  /** The reader's rows as the commit under way found them; undefined between commits. */
+  const rowsBefore = useRef<{ rows: ReaderRows } | undefined>(undefined);
+  /**
+   * The reader's row where the last commit of rows left it, until that commit's own size reports have come: its box
+   * and its place against the loaded start (a number a hold or a payment in between does not move). Given up two
+   * frames on, should no report come (a commit that changed no size).
+   */
+  const commitPlace = useRef<{ box: HTMLElement; place: number; frame: number } | null>(null);
+  /** A commit of rows is between its layout pass and its passive effects: its rows are still being set up. */
+  const settingUp = useRef(false);
+  const latest = useRef({ onNeedMore, onRest, remainingAbove, leadViewports, items, itemKey });
+  latest.current = { onNeedMore, onRest, remainingAbove, leadViewports, items, itemKey };
 
   /** The rows' boxes in document order: each item wrapper's first element. */
   const rowBoxes = useCallback((): HTMLElement[] => {
@@ -243,36 +269,57 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (!scroller) {
       return;
     }
-    const above = latest.current.remainingAbove > 0 || (engine.current?.reservePx ?? 0) < -0.5;
+    const above = latest.current.remainingAbove > 0 || (engine.current?.owes ?? false);
     if (above !== scroller.hasAttribute(PREPEND_ROWS_ABOVE_ATTR)) {
       scroller.toggleAttribute(PREPEND_ROWS_ABOVE_ATTR, above);
     }
   }, []);
 
-  /** The rows that waited above the scroll origin are painted: in the task of the write that made them reachable, or with nothing held any more. */
-  const paintHeldRows = useCallback(() => {
+  /**
+   * THE ROWS THAT WAIT UNPAINTED ARE THOSE ABOVE THE SCROLL ORIGIN, AND NO OTHERS — judged again whenever what is
+   * held changes, by the one test that made them wait: a row comes into reach by the write that pays what is held,
+   * and just as well by height that leaves above the reader, or by a list replaced under it.
+   */
+  const paintReachableRows = useCallback(() => {
+    if (unpainted.current.size === 0) {
+      return;
+    }
+    const rowsAbove = (engine.current?.reservePx ?? 0) < -0.5;
+    const origin = rowsAbove ? edgeEl.current?.getBoundingClientRect().bottom ?? 0 : 0;
     unpainted.current.forEach((wrapper) => {
+      const box = wrapper.firstElementChild;
+      if (rowsAbove && wrapper.isConnected && box && box.getBoundingClientRect().bottom <= origin + 0.5) {
+        return; // still above the origin: it waits
+      }
       wrapper.style.visibility = '';
+      unpainted.current.delete(wrapper); // in reach, or gone from the document
     });
-    unpainted.current.clear();
   }, []);
 
-  /** THE SETTLE, asked for: when one begins, the rows it frees are painted in its write's task, and the consumer hears of the rest that follows. */
+  /**
+   * THE SETTLE, asked for: when one begins, the rows it frees are painted in its write's task, and the consumer hears
+   * of the rest that follows. None begins while a commit's rows are still being set up: the commit's own passive
+   * effects ask again.
+   */
   const settle = useCallback(() => {
+    if (settingUp.current) {
+      return;
+    }
     engine.current?.settle(() => {
-      paintHeldRows();
+      paintReachableRows();
       stampRowsAbove();
       latest.current.onRest?.();
-      askIfNeeded();
     });
-  }, [paintHeldRows, stampRowsAbove, askIfNeeded]);
+  }, [paintReachableRows, stampRowsAbove]);
 
   /**
    * WHERE THE READER HAS RUN OUT OF LOADED ROWS: the scroller's top edge at the loaded start (offset zero, or past
    * it in the band) with rows remaining above or held. The list has stopped there by itself, so the consumer is told
    * now — rows it holds as data land here, not at a rest a reader who keeps swiping never gives — and what is held is
    * settled now. With a known finger down nothing is done: its lift comes back here. The consumer is told once per
-   * arrival; a landing that arrives while the reader stands there is settled when it lands.
+   * arrival, and again whenever it says its own news arrived (`requestRest`): rows that reach it after the reader
+   * did are landed here too, at once or at the lift, with no rest. A landing that arrives while the reader stands
+   * there is settled once its rows are set up.
    */
   const ranOut = useCallback(() => {
     const current = engine.current;
@@ -288,24 +335,48 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (watch.armDown || current.settling || scroller.clientHeight <= 0) {
       return;
     }
-    if (!current.owes && (toldRanOut.current || latest.current.remainingAbove <= 0)) {
+    const news = consumerWaits.current || (!toldRanOut.current && latest.current.remainingAbove > 0);
+    if (!current.owes && !news) {
       return;
     }
     toldRanOut.current = true;
+    consumerWaits.current = false;
     latest.current.onRest?.();
     settle();
   }, [settle]);
 
-  /** Something is held: a rest is asked for (an idle list declares none by itself), and a reader standing at the loaded start is settled now. */
+  /**
+   * What is held changed: the fact and the waiting rows follow it; while something is held a rest is asked for (an
+   * idle list declares none by itself), and a reader standing at the loaded start is settled now.
+   */
   const held = useCallback(() => {
     stampRowsAbove();
+    paintReachableRows();
     if (engine.current?.owes) {
       rest.current?.request();
       ranOut();
     }
-  }, [stampRowsAbove, ranOut]);
+  }, [stampRowsAbove, paintReachableRows, ranOut]);
 
-  /** The rows above the first visible row that changed height: held before paint. */
+  /** The last commit's place is given up: its reports came, or none will. */
+  const forgetCommitPlace = useCallback(() => {
+    const place = commitPlace.current;
+    if (place) {
+      cancelAnimationFrame(place.frame);
+      commitPlace.current = null;
+    }
+  }, []);
+
+  /**
+   * THE SIZES AN ENGINE REPORTS, after layout and before paint: height that appeared above the reader is held.
+   *
+   * The first reports after a commit of rows are that commit's own, and the commit's measure on the reader's row has
+   * already held what it changed. So they are judged on that row once more, against the place the commit left it:
+   * what moved it since is held — a landed row that filled itself in a second pass, or in its own effect before it
+   * was first reported — and what each report says is only remembered. Every later report is judged by the row it
+   * names, against the height remembered for it. A pane with no box reports zeros that say nothing: they are neither
+   * judged nor remembered, so a pane shown again is not rows growing.
+   */
   const onResize = useCallback(
     (entries: ResizeObserverEntry[]) => {
       const current = engine.current;
@@ -313,8 +384,13 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       if (!current || !scroller) {
         return;
       }
+      const place = commitPlace.current;
+      forgetCommitPlace();
+      if (scroller.clientHeight <= 0) {
+        return;
+      }
       const scrollerTop = scroller.getBoundingClientRect().top;
-      let above = 0;
+      let byRow = 0;
       for (const entry of entries) {
         const box = entry.target;
         const size = Array.isArray(entry.borderBoxSize) ? entry.borderBoxSize[0] : entry.borderBoxSize;
@@ -330,15 +406,17 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
         }
         // The row's bottom BEFORE the change above the scroller's top edge: the whole change pushed the reader.
         if (box.getBoundingClientRect().bottom - delta <= scrollerTop + 0.5) {
-          above += delta;
+          byRow += delta;
         }
       }
-      if (above !== 0) {
+      // A commit's own reports: what moved the reader's row since the commit, never the rows it already counted.
+      const above = place && place.box.isConnected ? current.placeOf(place.box) - place.place : byRow;
+      if (Math.abs(above) > 0.01) {
         current.hold(above);
         held();
       }
     },
-    [held]
+    [held, forgetCommitPlace]
   );
 
   /**
@@ -349,7 +427,8 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
    * judged here by the same rule and the same gate (`askIfNeeded`: inside the lead, rows remaining, no ask in
    * flight). The height is read from the box itself, after layout, never from the entry (a consumer's own observer
    * may deliver the same moment). A shrink asks nothing — the lead shrinks with it; growth while an ask is out is
-   * judged again at that ask's landing. What was held while there was no box (a settle needs one) is asked for again.
+   * judged again at that ask's landing. What was held while there was no box (a settle needs one, in the frame it
+   * begins and in the frame it writes) is asked for again.
    */
   const onBoxResize = useCallback(() => {
     const scroller = scrollerEl.current;
@@ -403,6 +482,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     // already is — then one settle for all of it.
     const watch = new ScrollRest(
       () => {
+        consumerWaits.current = false;
         latest.current.onRest?.();
         settle();
       },
@@ -439,6 +519,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       boxObserver.current?.disconnect();
       boxObserver.current = null;
       current.cancel();
+      forgetCommitPlace();
       heldRows.clear();
       engine.current = null;
     };
@@ -446,19 +527,27 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
 
   /**
    * Immediately before a commit of rows changes the document: the reader's rows, each by its key and its top against
-   * the start edge. With no box there is no place to read: a pane not laid out holds nothing.
+   * the start edge. And a stop under way ends here when the commit lands rows — the overflow back, nothing written,
+   * what is held standing: the rows it adds are set up on a scroller that reads as it is, and the settle begins
+   * again once they are (the commit's passive effects).
    */
-  const beforeRowsCommit = useCallback(() => {
+  const beforeRowsCommit = useCallback((previous: unknown) => {
     const current = engine.current;
-    const scroller = scrollerEl.current;
-    const measurable = current && scroller && scroller.clientHeight > 0;
+    if (!current) {
+      return;
+    }
+    if (current.settling) {
+      const { items: next, itemKey: keyOf } = latest.current;
+      const known = new Set((previous as T[]).map((item) => String(keyOf(item))));
+      if (next.some((item) => !known.has(String(keyOf(item))))) {
+        current.cancel();
+      }
+    }
     rowsBefore.current = {
-      rows: measurable
-        ? current.readerRows().map((box) => ({
-            key: box.parentElement?.getAttribute('data-prepend-row') ?? '',
-            top: current.topOf(box),
-          }))
-        : null,
+      rows: current.readerRows().map((box) => ({
+        key: box.parentElement?.getAttribute('data-prepend-row') ?? '',
+        top: current.topOf(box),
+      })),
     };
   }, []);
 
@@ -478,6 +567,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
     if (!current || !scroller || !before) {
       return; // the mount: no document came before this one
     }
+    settingUp.current = true;
     const wrappers = new Map<string, HTMLElement>();
     for (let i = 0; i < scroller.children.length; i++) {
       const child = scroller.children[i];
@@ -486,46 +576,51 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
         wrappers.set(key, child);
       }
     }
-    if (before.rows) {
-      const place = before.rows.find((row) => wrappers.has(row.key));
-      const box = place ? wrappers.get(place.key)?.firstElementChild : null;
-      if (place && box instanceof HTMLElement) {
-        const moved = current.topOf(box) - place.top;
-        if (Math.abs(moved) > 0.01) {
-          current.hold(moved);
-        }
-      } else {
-        current.reset();
-        paintHeldRows();
+    forgetCommitPlace();
+    const place = before.rows.find((row) => wrappers.has(row.key));
+    const box = place ? wrappers.get(place.key)?.firstElementChild : null;
+    if (place && box instanceof HTMLElement) {
+      const moved = current.topOf(box) - place.top;
+      if (Math.abs(moved) > 0.01) {
+        current.hold(moved);
       }
+      // The reader's row is back where it was: this commit's own size reports are judged against that place.
+      const record = {
+        box,
+        place: current.placeOf(box),
+        frame: requestAnimationFrame(() => {
+          record.frame = requestAnimationFrame(() => {
+            if (commitPlace.current === record) {
+              commitPlace.current = null;
+            }
+          });
+        }),
+      };
+      commitPlace.current = record;
+    } else {
+      current.reset();
     }
-    // Rows that landed at the start reopen the gate; those above the scroll origin are not painted until the settle
-    // that makes them reachable (their last lines would show in a scroller's own top padding).
+    // Rows that landed at the start reopen the gate, and wait unpainted while they stand above the scroll origin
+    // (their last lines would show in a scroller's own top padding): each is put among the waiting rows here, and
+    // the one judgment of who waits (`paintReachableRows`, in `held` below) paints those already in reach.
     const previousFirst = firstKey.current;
     firstKey.current = items.length > 0 ? itemKey(items[0]) : undefined;
     const landed = previousFirst === undefined ? -1 : items.findIndex((item) => itemKey(item) === previousFirst);
     if (landed > 0) {
       landedSinceAsk.current = true;
       if (current.reservePx < -0.5) {
-        const origin = edgeEl.current?.getBoundingClientRect().bottom ?? 0;
         for (let index = 0; index < landed; index++) {
           const wrapper = wrappers.get(String(itemKey(items[index])));
-          const box = wrapper?.firstElementChild;
-          if (wrapper && box && box.getBoundingClientRect().bottom <= origin + 0.5) {
+          if (wrapper) {
             wrapper.style.visibility = 'hidden';
             unpainted.current.add(wrapper);
           }
         }
       }
     }
-    unpainted.current.forEach((wrapper) => {
-      if (!wrapper.isConnected) {
-        unpainted.current.delete(wrapper);
-      }
-    });
     syncObserved();
     held();
-  }, [items, itemKey, paintHeldRows, syncObserved, held]);
+  }, [items, itemKey, forgetCommitPlace, syncObserved, held]);
 
   // ONE judgment per commit, after it: the gate reopens at most once — for rows that landed at the start, or for
   // a `loading` that turned false and belongs to the ask in flight (a turn that lands with the chain's next ask
@@ -534,6 +629,12 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
   useEffect(() => {
     const previous = previousCommit.current;
     previousCommit.current = { loading };
+    if (settingUp.current) {
+      // The commit's rows are set up — their own effects have run: a settle may begin again, and what waited for
+      // that (a landing at the loaded start, a rest that came in between) is judged now.
+      settingUp.current = false;
+      held();
+    }
     if (!engine.current || !mounted.current) {
       return;
     }
@@ -552,7 +653,7 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       askInFlight.current = false;
     }
     askIfNeeded();
-  }, [items, loading, remainingAbove, askIfNeeded]);
+  }, [items, loading, remainingAbove, askIfNeeded, held]);
 
   // Whether rows remain above is the consumer's word: the fact on the root follows it before paint.
   useLayoutEffect(() => {
@@ -576,12 +677,16 @@ export function PrependSafeScroller<T>(props: PrependSafeScrollerProps<T>): Reac
       },
       distanceFromLoadedStart: () => engine.current?.distanceFromLoadedStart() ?? 0,
       reservePx: () => engine.current?.reservePx ?? 0,
-      requestRest: () => rest.current?.request(),
+      requestRest: () => {
+        consumerWaits.current = true;
+        rest.current?.request();
+        ranOut();
+      },
     };
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef]);
+  }, [apiRef, ranOut]);
 
   const scrollerSx: SxProps<Theme> = [
     { overflowY: 'auto', overflowAnchor: 'none' },

@@ -67,6 +67,15 @@ export class ListStartEdge {
   }
 
   /**
+   * A box's top against the LOADED START: its top against the block, with what is held counted back in. Only a
+   * change of height above the box changes this number — a hold and its payment leave it as it was — so a place
+   * read at one moment can be compared with the place read at a later one, whatever was held or paid in between.
+   */
+  placeOf(box: HTMLElement): number {
+    return this.topOf(box) + this.held;
+  }
+
+  /**
    * Height appeared (`delta` > 0) or went away (`delta` < 0) above the reader's row: held out of the scroll range in
    * this same layout pass, with no scroll write.
    */
@@ -98,7 +107,9 @@ export class ListStartEdge {
    * THE SETTLE: what is held is paid whole with one scroll write, the reader's row where it was — after the stop,
    * where a finger can move the list. `done` runs in the write's own task. Returns false, having begun nothing, when
    * nothing is held, a settle is already under way, or the scroller has no box (a pane not laid out measures every
-   * drift against nothing: what is held stands until the box is back).
+   * drift against nothing: what is held stands until the box is back). The box is looked for again in the write's
+   * own frame: a pane put away inside the stopped frame is not written against, its stop ends, and what is held
+   * stands (`done` does not run).
    */
   settle(done?: () => void): boolean {
     if (this.stop !== null || !this.owes || this.scroller.clientHeight <= 0) {
@@ -116,6 +127,10 @@ export class ListStartEdge {
       frame: requestAnimationFrame(() => {
         stop.frame = requestAnimationFrame(() => {
           this.stop = null;
+          if (this.scroller.clientHeight <= 0) {
+            release();
+            return;
+          }
           this.pay();
           release();
           done?.();
