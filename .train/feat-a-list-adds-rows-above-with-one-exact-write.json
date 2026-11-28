@@ -1,0 +1,21 @@
+{
+  "branch": "feat/a-list-adds-rows-above-with-one-exact-write",
+  "packages": ["ui"],
+  "suites": [
+    "packages/ui/test/list.test.tsx",
+    "packages/ui/test/listFoot.test.tsx",
+    "packages/ui/test/listRowMemo.test.tsx",
+    "packages/ui/test/listWindowed.test.tsx",
+    "packages/ui/test/prependSafeScroller.test.tsx",
+    "packages/ui/test/scrollTopButton.test.tsx"
+  ],
+  "removes": ["PrependReservoir", "ScrollRest.QUIET_FRAMES"],
+  "section": {
+    "heading": "## Lists (proteinjs ui) — a list that loads earlier rows adds them above you without moving what you read",
+    "text": "- A list that loads earlier rows as you scroll up keeps no empty room above its first loaded row, and adds the rows above you without moving the row you are reading.",
+    "smoke": [
+      "- In a long list that loads earlier rows as you scroll up, flick up several times: the row you stop on stays where it is while earlier rows load, and there is never empty space above the first loaded row.",
+      "- Flick up without pausing until the list stops at its first loaded row: your next flick goes on into the rows above it."
+    ]
+  }
+}
